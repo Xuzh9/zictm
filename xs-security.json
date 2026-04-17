@@ -1,0 +1,35 @@
+{
+  "xsappname": "zictm",
+  "tenant-mode": "dedicated",
+  "scopes": [
+    {
+      "name": "$XSAPPNAME.Administrators",
+      "description": "Administrators"
+    }
+  ],
+  "attributes": [],
+  "role-templates": [
+    {
+      "name": "Administrators",
+      "description": "generated",
+      "scope-references": [
+        "$XSAPPNAME.Administrators"
+      ],
+      "attribute-references": []
+    }
+  ],
+  "role-collections": [
+    {
+      "name": "zictm_Administrators",
+      "description": "zictm Administrators",
+      "role-template-references": [
+        "$XSAPPNAME.Administrators"
+      ]
+    }
+  ],
+  "oauth2-configuration": {
+    "redirect-uris": [
+      "https://*.cfapps.cn40.platform.sapcloud.cn/**"
+    ]
+  }
+}
