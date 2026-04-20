@@ -94,3 +94,41 @@ entity MPTStepConfig {
         PRICE_REVERSE @title: '销售价格逆向' = 'B';
     };     
 }
+
+//调拨单
+entity TransferOrder {
+    key TransferOrder            : String(10);         // 调拨单
+    key TransferOrderItem        : String(6);          // 调拨单行项目
+    PostingDate                  : Date;               // 过账日期
+    GoodsMovementCode            : String(3);          // 移动类型代码
+    Customer                     : String(10);         // 客户
+    Material                     : String(40);         // 物料编号
+    Plant                        : String(4);          // 发出工厂
+    StorageLocation              : String(4);          // 库存地点
+    GoodsMovementType            : String(3) ;         // 移动类型
+    QuantityInBaseUnit           : Decimal(13,3);      // 数量
+    IssuingOrReceivingStorageLoc : String(4);          // 收货/发货库存地点
+    zrfcid                       : String(10);         // 业务流程ID
+}
+
+//销售出库单
+entity OutboundDelivery{
+    key SalesOrder           : String(10);         // 销售出库单号
+    key SalesOrderItem       : String(6);          // 销售出库单行号
+    SalesOrganization        : String(4);          // 销售组织
+    SalesOrderType           : String(4);          // 销售订单类型
+    SalesOrderDate           : Date;               // 订单日期
+    Customer                 : String(10);         // 客户
+    SalesOffice              : String(2);          // 销售部门
+    TransactionCurrency      : String(3);          // 币别
+    Country                  : String(3);          // 国家
+    Product                  : String(40);         // 物料编码
+    SalesOrderItemType       : String(5);          // 行项目类别
+    NetAmount                : Decimal(13,3);      // 总金额
+    RequestedQuantity        : Decimal(13,3);      // 总数量
+    ItemTransactionCurrency  : String(3);          // 币别
+    ReceivingPlant           : String(4);          // 库存组织
+    ReceivingStorageLocation : String(4);          // 库存地点
+    DeliveryDate             : Date;               // 发货日期
+    zrfcid                   : String(10);         // 业务流程ID
+}
