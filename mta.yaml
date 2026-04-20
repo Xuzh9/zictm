@@ -17,6 +17,8 @@ modules:
     parameters:
       instances: 1
       buildpack: nodejs_buildpack
+      disk-quota: 512M
+      memory: 512M
     build-parameters:
       builder: npm-ci
     provides:
@@ -26,6 +28,7 @@ modules:
     requires:
       - name: zictm-auth
       - name: zictm-db
+      - name: zictm-destination
 
   - name: zictm-db-deployer
     type: hdb
@@ -63,7 +66,7 @@ resources:
       service-plan: application
       path: ./xs-security.json
       config:
-        xsappname: zictm-${org}-${space}
+        xsappname: zictm
         tenant-mode: dedicated
         oauth2-configuration:
           credential-types:
@@ -78,3 +81,8 @@ resources:
     parameters:
       service: hana
       service-plan: hdi-shared
+  - name: zictm-destination
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: destination
+      service-plan: lite

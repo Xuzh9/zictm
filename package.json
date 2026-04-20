@@ -8,15 +8,15 @@
     "@sap-cloud-sdk/resilience": "^3.26.4",
     "@sap-cloud-sdk/util": "^3.26.4",
     "@sap/cds": "^9",
+    "@sap/cds-dk": "^9", 
     "@sap/xssec": "^4",
     "axios": "^1.15.0"
   },
   "devDependencies": {
-    "@cap-js/sqlite": "^2",
-    "@sap/cds-dk": "^9"
+    "@cap-js/sqlite": "^2"  
   },
   "scripts": {
-    "start": "cds-serve"
+    "start": "cds run"
   },
   "private": true,
   "cds": {
@@ -30,6 +30,9 @@
         "url": "https://my201417.s4hana.sapcloud.cn/sap/opu/odata/sap/API_PRODUCT_SRV",
         "csrf": false
       }
+    },
+    "server": {
+      "welcome": true
     }
   }
 }
