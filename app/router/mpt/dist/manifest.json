@@ -1,0 +1,183 @@
+{
+	"_version": "1.83.0",
+	"sap.app": {
+		"id": "mpt",
+		"type": "application",
+		"i18n": {
+			"bundleUrl": "i18n/i18n.properties",
+			"supportedLocales": [
+				""
+			]
+		},
+		"applicationVersion": {
+			"version": "0.0.1"
+		},
+		"title": "{{appTitle}}",
+		"description": "{{appDescription}}",
+		"resources": "resources.json",
+		"sourceTemplate": {
+			"id": "@sap/generator-fiori:lrop",
+			"version": "1.22.0",
+			"toolsId": "16b7cdc0-be7e-4156-8d44-00552875838d"
+		},
+		"dataSources": {
+			"mainService": {
+				"uri": "/odata/v4/config/",
+				"type": "OData",
+				"settings": {
+					"annotations": [],
+					"odataVersion": "4.01"
+				}
+			}
+		}
+	},
+	"sap.ui": {
+		"technology": "UI5",
+		"icons": {
+			"icon": "",
+			"favIcon": "",
+			"phone": "",
+			"phone@2": "",
+			"tablet": "",
+			"tablet@2": ""
+		},
+		"deviceTypes": {
+			"desktop": true,
+			"tablet": true,
+			"phone": true
+		}
+	},
+	"sap.ui5": {
+		"flexEnabled": true,
+		"dependencies": {
+			"minUI5Version": "1.147.1",
+			"libs": {
+				"sap.m": {},
+				"sap.ui.core": {},
+				"sap.fe.templates": {}
+			}
+		},
+		"contentDensities": {
+			"compact": true,
+			"cozy": true
+		},
+		"models": {
+			"i18n": {
+				"type": "sap.ui.model.resource.ResourceModel",
+				"settings": {
+					"bundleName": "mpt.i18n.i18n",
+					"supportedLocales": [
+						""
+					]
+				}
+			},
+			"": {
+				"dataSource": "mainService",
+				"preload": true,
+				"settings": {
+					"operationMode": "Server",
+					"autoExpandSelect": true,
+					"earlyRequests": true
+				}
+			},
+			"@i18n": {
+				"type": "sap.ui.model.resource.ResourceModel",
+				"uri": "i18n/i18n.properties",
+				"settings": {
+					"supportedLocales": [
+						""
+					]
+				}
+			}
+		},
+		"resources": {
+			"css": []
+		},
+		"routing": {
+			"config": {},
+			"routes": [
+				{
+					"pattern": ":?query:",
+					"name": "MPTTypeConfigList",
+					"target": "MPTTypeConfigList"
+				},
+				{
+					"pattern": "MPTTypeConfig({key}):?query:",
+					"name": "MPTTypeConfigObjectPage",
+					"target": "MPTTypeConfigObjectPage"
+				},
+				{
+					"pattern": "MPTTypeConfig({key})/steps({key2}):?query:",
+					"name": "MPTStepConfigObjectPage",
+					"target": "MPTStepConfigObjectPage"
+				}
+			],
+			"targets": {
+				"MPTTypeConfigList": {
+					"type": "Component",
+					"id": "MPTTypeConfigList",
+					"name": "sap.fe.templates.ListReport",
+					"options": {
+						"settings": {
+							"contextPath": "/MPTTypeConfig",
+							"variantManagement": "Page",
+							"navigation": {
+								"MPTTypeConfig": {
+									"detail": {
+										"route": "MPTTypeConfigObjectPage"
+									}
+								}
+							},
+							"controlConfiguration": {
+								"@com.sap.vocabularies.UI.v1.LineItem": {
+									"tableSettings": {
+										"type": "ResponsiveTable"
+									}
+								}
+							}
+						}
+					}
+				},
+				"MPTTypeConfigObjectPage": {
+					"type": "Component",
+					"id": "MPTTypeConfigObjectPage",
+					"name": "sap.fe.templates.ObjectPage",
+					"options": {
+						"settings": {
+							"editableHeaderContent": false,
+							"contextPath": "/MPTTypeConfig",
+							"navigation": {
+								"steps": {
+									"detail": {
+										"route": "MPTStepConfigObjectPage"
+									}
+								}
+							}
+						}
+					}
+				},
+				"MPTStepConfigObjectPage": {
+					"type": "Component",
+					"id": "MPTStepConfigObjectPage",
+					"name": "sap.fe.templates.ObjectPage",
+					"options": {
+						"settings": {
+							"editableHeaderContent": false,
+							"contextPath": "/MPTTypeConfig/steps"
+						}
+					}
+				}
+			}
+		},
+		"flexBundle": false
+	},
+	"sap.fiori": {
+		"registrationIds": [],
+		"archeType": "transactional"
+	},
+	"sap.fe": {
+		"app": {
+			"enableLazyLoading": true
+		}
+	}
+}

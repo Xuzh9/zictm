@@ -4,13 +4,15 @@ namespace com.sap.zictm;
 entity ProcessConfig {
     key zrfcid     : String(10);      // 业务流程ID
     description    : String(50);      // 业务流程描述
+    businessTable1 : String(50);      // 业务表名1
+    businessTable2 : String(50);      // 业务表名2
+    businessTable3 : String(50);      // 业务表名3
     isAsync        : Boolean;         // 是否异步
     
     // 与 StepConfig 的组合关系（一对多，行表）
     steps : Composition of many StepConfig 
         on steps.process.zrfcid = $self.zrfcid;
 }
-
 // 步骤配置表（ProcessConfig的行表）
 entity StepConfig {
     // 关联到父实体
@@ -22,17 +24,16 @@ entity StepConfig {
     
     // 业务字段
     description    : String(50);      // 步骤描述
-    method         : String(100);     // 方法配置
+    serviceName    : String(100);     // 服务文件名
     readsteps      : String(10);      // 读取步骤编号（如10、20、30）
 }
 
 // 接口入参日志表
 entity ApiInputLog {
-    key zrfc_logid : UUID;           // 多步ID
+    key id         : UUID;           // ID
     inputData      : LargeString;    // 入参数据，JSON格式
     code           : String(2);      // 消息状态(S成功/E失败)
     message        : String(255);    // 消息文本
-    // createdAt 和 createdBy 已从 managed 注解继承
 }
 
 // 多步执行日志表
@@ -109,6 +110,7 @@ entity TransferOrder {
     QuantityInBaseUnit           : Decimal(13,3);      // 数量
     IssuingOrReceivingStorageLoc : String(4);          // 收货/发货库存地点
     zrfcid                       : String(10);         // 业务流程ID
+    zrfc_logid                   : UUID;               // 多步ID
 }
 
 //销售出库单
@@ -131,4 +133,5 @@ entity OutboundDelivery{
     ReceivingStorageLocation : String(4);          // 库存地点
     DeliveryDate             : Date;               // 发货日期
     zrfcid                   : String(10);         // 业务流程ID
+    zrfc_logid               : UUID;               // 多步ID
 }

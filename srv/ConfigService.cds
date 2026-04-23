@@ -1,8 +1,5 @@
 using { com.sap.zictm as db } from '../db/schema';  
-/**
- * 配置维护服务
- * 用于前台展示和维护配置表
- */
+
 service ConfigService {
     /**
      * 业务流程配置表
@@ -24,3 +21,6 @@ service ConfigService {
      */
     entity MPTStepConfig as projection on db.MPTStepConfig;
 }
+
+annotate ConfigService.ProcessConfig with @odata.draft.enabled; 
+annotate ConfigService.MPTTypeConfig with @odata.draft.enabled; 

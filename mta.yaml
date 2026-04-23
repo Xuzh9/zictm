@@ -1,15 +1,15 @@
 _schema-version: 3.3.0
 ID: zictm
 version: 1.0.0
-description: "A simple CAP project."
+description: "zictm"
 parameters:
   enable-parallel-deployments: true
 build-parameters:
-  before-all:
-    - builder: custom
-      commands:
-        - npm ci
-        - npx cds build --production
+  # before-all:
+  #   - builder: custom
+  #     commands:
+  #       - npm install
+  #       - npm run build
 modules:
   - name: zictm-srv
     type: nodejs
@@ -17,14 +17,19 @@ modules:
     parameters:
       instances: 1
       buildpack: nodejs_buildpack
-      disk-quota: 512M
+      command: node node_modules/@sap/cds-dk/bin/cds.js run
+      disk-quota: 1024M
       memory: 512M
-    build-parameters:
-      builder: npm-ci
+      routes:
+      - route: "zictm-srv.btp.sunlu3d.cn"
+      idle-routes:
+      - idle-route: "zictm-srv-idle.btp.sunlu3d.cn"
+    # build-parameters:
+    #   builder: npm install
     provides:
-      - name: srv-api # required by consumers of CAP services (e.g. approuter)
+      - name: srv-api
         properties:
-          srv-url: ${default-url}
+          srv-url: https://zictm-srv.btp.sunlu3d.cn
     requires:
       - name: zictm-auth
       - name: zictm-db
@@ -37,20 +42,27 @@ modules:
       buildpack: nodejs_buildpack
     requires:
       - name: zictm-db
+      
   - name: zictm
     type: approuter.nodejs
     path: app/router
     parameters:
+      buildpack: nodejs_buildpack
       keep-existing-routes: true
-      disk-quota: 256M
+      disk-quota: 1024M
       memory: 256M
+      routes:
+      - route: "zictm.btp.sunlu3d.cn"
+      idle-routes:
+      - idle-route: "zictm-idle.btp.sunlu3d.cn"
     requires:
       - name: srv-api
         group: destinations
         properties:
-          name: srv-api # must be used in xs-app.json as well
+          name: srv-api
           url: ~{srv-url}
           forwardAuthToken: true
+          strictSSL: false
       - name: zictm-auth
     provides:
       - name: app-api
@@ -65,22 +77,13 @@ resources:
       service: xsuaa
       service-plan: application
       path: ./xs-security.json
-      config:
-        xsappname: zictm
-        tenant-mode: dedicated
-        oauth2-configuration:
-          credential-types:
-            - "binding-secret"
-            - "x509"
-          redirect-uris:
-            - https://*~{app-api/app-uri}/**
-    requires:
-      - name: app-api
+      
   - name: zictm-db
     type: com.sap.xs.hdi-container
     parameters:
       service: hana
       service-plan: hdi-shared
+      
   - name: zictm-destination
     type: org.cloudfoundry.managed-service
     parameters:
