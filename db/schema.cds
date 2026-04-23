@@ -1,5 +1,10 @@
 namespace com.sap.zictm;
 
+type PriceDirection : String(1) enum {
+    COST_FORWARD  @title: '成本正向' = 'A';
+    PRICE_REVERSE @title: '销售价格逆向' = 'B';
+};
+
 // 业务流程配置表
 entity ProcessConfig {
     key zrfcid     : String(10);      // 业务流程ID
@@ -46,7 +51,6 @@ entity MultistepLog {
     message        : String(255);    // 消息文本
     objkey         : String(20);     //对象号
     executionTime  : Decimal(10,2);  // 执行时间（秒）
-    // createdAt, createdBy, modifiedAt, modifiedBy 已从 managed 注解继承
 }
 
 // 多方交易类型配置表
@@ -90,10 +94,7 @@ entity MPTStepConfig {
     zsl            : Decimal(10,2);  // 税率
     
     // 枚举类型：价格方向
-    zjgfx          : String(1) enum {      // 价格方向：成本正向/销售价格逆向
-        COST_FORWARD @title: '成本正向' = 'A';
-        PRICE_REVERSE @title: '销售价格逆向' = 'B';
-    };     
+    zjgfx          : PriceDirection;
 }
 
 //调拨单
@@ -134,4 +135,35 @@ entity OutboundDelivery{
     DeliveryDate             : Date;               // 发货日期
     zrfcid                   : String(10);         // 业务流程ID
     zrfc_logid               : UUID;               // 多步ID
+}
+
+//收付款单
+entity PaymentReceipt {
+    key paymentReceiptNo        : String(20);     // 单据编号  
+    key paymentReceiptNoItem    : String(6);      // 单据行号    
+    settlementOrganization      : String(4);      // 结算组织
+    salesOrganization           : String(4);      // 销售组织
+    procurementOrganization     : String(4);      // 采购组织
+    paymentOrganization         : String(4);      // 付款组织
+    receivingOrganization       : String(32);     // 收款组织
+    procurementDepartment       : String(32);     // 采购部门
+    salesDepartment             : String(32);     // 销售部门
+    expenseResponsibleDepartment: String(32);     // 费用承担部门
+    currency                    : String(3) ;     // 币别        
+    businessDate                : Date;           // 业务日期
+    documentType                : String(20);     // 单据类型
+    businessType                : String(20);     // 业务类型
+    settlementMethod            : String(20);     // 结算方式
+    paymentPurpose              : String(50);     // 收付款用途
+    receivingUnitType           : String(10);     // 收款单位类型
+    receivingUnit               : String(32);     // 收款单位
+    payingUnitType              : String(10);     // 付款单位类型
+    payingUnit                  : String(32);     // 付款单位
+    receivableAmount            : Decimal(15,2);  // 应收金额  
+    taxRate                     : Decimal(5,2);   // 税率      
+    ourBankAccount              : String(50);     // 我方银行账号
+    generalLedgerAccountCash    : String(20);     // 总账科目（资金科目）
+    generalLedgerAccountNonCash : String(20) ;    // 总账科目（非资金科目）
+    expenseItem                 : String(32);     // 费用项目     
+    itemRemark                  : String(50);     // 明细备注   
 }
