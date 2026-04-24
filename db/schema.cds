@@ -98,7 +98,7 @@ entity MPTStepConfig {
 }
 
 //调拨单
-entity TransferOrder {
+entity Transfer {
     key TransferOrder            : String(10);         // 调拨单
     key TransferOrderItem        : String(6);          // 调拨单行项目
     PostingDate                  : Date;               // 过账日期
@@ -166,4 +166,121 @@ entity PaymentReceipt {
     generalLedgerAccountNonCash : String(20) ;    // 总账科目（非资金科目）
     expenseItem                 : String(32);     // 费用项目     
     itemRemark                  : String(50);     // 明细备注   
+    zrfcid                      : String(10);     // 业务流程ID
+    zrfc_logid                  : UUID;           // 多步ID
+}
+
+//销售订单创建表
+entity SalesOrderCreate {
+    key PISalesOrder              : String(10);    // PI销售订单号
+    key PISalesOrderItem          : String(6);     // PI销售订单项目号
+    SalesOrderType                : String(4);     // 销售订单类型
+    SalesOrganization             : String(4);     // 销售组织
+    DistributionChannel           : String(2);     // 分销渠道
+    OrganizationDivision          : String(2);     // 产品组
+    SalesOffice                   : String(10);    // 销售办事处
+    SalesGroup                    : String(10);    // 销售组
+    SalesDistrict                 : String(20);    // 售达方
+    PurchaseOrderByCustomer       : String(50);    // 客户参考编号
+    CustomerPurchaseOrderDate     : Date;          // 客户参考日期
+    TransactionCurrency           : String(3);     // 凭证币别
+    SDDocumentReason              : String(4);     // 订单原因
+    RequestedDeliveryDate         : Date;          // 请求交货日期
+    CustomerAccountAssignmentGroup: String(4);     // 客户账户分配组
+    IncotermsClassification       : String(10);    // 国际贸易条款
+    IncotermsLocation1            : String(40);    // 国贸条款位置1
+    CustomerTaxClassification1    : String(4);     // 客户税分类
+    CustomerPaymentTerms          : String(8);     // 付款条件
+    Remark                        : LargeString;   // 销售订单抬头文本备注
+    YY1_FD_XMYQ                   : LargeString;   // 箱唛要求
+    YY1_FD_DBFS                   : String(20);    // 打包方式
+    YY1_FD_FHYQ                   : LargeString;   // 发货要求
+    YY1_FD_FKG                    : String(20);    // 付款国
+    YY1_FD_JSFS                   : String(20);    // 结算方式
+    YY1_FD_PT                     : String(20);    // 平台
+    YY1_FD_SFBG                   : Boolean;       // 是否报关
+    YY1_FD_SFHD                   : Boolean;       // 是否回单
+    YY1_FD_TMBQ                   : String(50);    // 条码标签
+    YY1_FD_YDG                    : String(20);    // 运抵国
+    YY1_FD_YSFS                   : String(20);    // 运输方式
+    YY1_FD_ZTMWZ                  : Boolean;       // 粘贴美文纸
+    YY1_FD_ZH                     : String(50);    // 账户(下单店铺)
+    YY1_FD_ZDFJY                  : String(10);    // 多方交易类型
+    SalesOrderItemCategory        : String(8);     // 销售订单项目类别
+    Material                      : String(40);    // 物料号
+    MaterialByCustomer            : String(50);    // 客户物料编号
+    RequestedQuantity             : Decimal(15,3); // 数量
+    RequestedQuantityUnit         : String(3);     // 单位
+    ProductionPlant               : String(4);     // 工厂
+    ItemRemark                    : LargeString;   // 销售订单行项目文本备注
+    PurchaseOrderByShipToParty    : String(50);    // 客户采购订单行项目
+    ProductTaxClassification1     : String(4);     // 产品税分类
+    SalesDocumentRjcnReason       : String(4);     // 销售订单拒绝原因
+    YY1_FD_FNSKU                  : String(50);    // FNSKU/快递袋编码
+    YY1_FD_SKU                    : String(50);    // 客户SKU
+    ZB01_Value                    : Decimal(15,2); // ZB01价格
+    ZB01_CurrencyCode             : Integer;       // ZB01价格单位
+    ZB01_UnitOfMeasure            : Integer;       // ZB01数量单位
+    ZB02_Value                    : Decimal(15,2); // ZB02价格
+    ZB02_CurrencyCode             : Integer;       // ZB02价格单位
+    ZB02_UnitOfMeasure            : Integer;       // ZB02数量单位
+    ZB03_Value                    : Decimal(15,2); // ZB03价格
+    ZB03_CurrencyCode             : Integer;       // ZB03价格单位
+    ZB03_UnitOfMeasure            : Integer;       // ZB03数量单位
+    ZB04_Value                    : Decimal(15,2); // ZB04价格
+    ZB04_CurrencyCode             : Integer;       // ZB04价格单位
+    ZB04_UnitOfMeasure            : Integer;       // ZB04数量单位
+    ZC01_Value                    : Decimal(15,2); // ZC01价格
+    ZC01_CurrencyCode             : Integer;       // ZC01价格单位
+    ZC01_UnitOfMeasure            : Integer;       // ZC01数量单位
+    ZC02_Value                    : Decimal(15,2); // ZC02价格
+    ZC02_CurrencyCode             : Integer;       // ZC02价格单位
+    ZC02_UnitOfMeasure            : Integer;       // ZC02数量单位
+    ZP00_Value                    : Decimal(15,2); // ZP00价格
+    ZP00_CurrencyCode             : Integer;       // ZP00价格单位
+    ZP00_UnitOfMeasure            : Integer;       // ZP00数量单位
+    PartnerFunction               : String(8);     // 合作伙伴功能
+    Customer                      : String(20);    // 合作伙伴编号
+    ConfirmedDeliveryDate         : Date;          // 交货日期
+    ScheduleLineOrderQuantity     : Decimal(15,3); // 订单确认数量
+    zrfcid                        : String(10);     // 业务流程ID
+    zrfc_logid                    : UUID;           // 多步ID
+}
+
+// 销售订单行项目表
+entity SalesOrderChange {
+    key SalesOrder                : String(10);     // 销售订单号
+    key SalesOrderItem            : String(6);      // 销售订单项目号
+    SalesOrderItemCategory        : String(8);      // 销售订单项目类别
+    Material                      : String(40);     // 物料号
+    MaterialByCustomer            : String(50);     // 客户物料编号
+    RequestedQuantity             : Decimal(15,3);  // 数量
+    RequestedQuantityUnit         : String(3);      // 单位
+    ProductionPlant               : String(4);      // 工厂
+    ZB01_Value                    : Decimal(15,2);  // ZB01价格
+    ZB01_CurrencyCode             : Integer;        // ZB01价格单位
+    ZB01_UnitOfMeasure            : Integer;        // ZB01数量单位
+    ZB02_Value                    : Decimal(15,2);  // ZB02价格
+    ZB02_CurrencyCode             : Integer;        // ZB02价格单位
+    ZB02_UnitOfMeasure            : Integer;        // ZB02数量单位
+    ZB03_Value                    : Decimal(15,2);  // ZB03价格
+    ZB03_CurrencyCode             : Integer;        // ZB03价格单位
+    ZB03_UnitOfMeasure            : Integer;        // ZB03数量单位
+    ZB04_Value                    : Decimal(15,2);  // ZB04价格
+    ZB04_CurrencyCode             : Integer;        // ZB04价格单位
+    ZB04_UnitOfMeasure            : Integer;        // ZB04数量单位
+    ZC01_Value                    : Decimal(15,2);  // ZC01价格
+    ZC01_CurrencyCode             : Integer;        // ZC01价格单位
+    ZC01_UnitOfMeasure            : Integer;        // ZC01数量单位
+    ZC02_Value                    : Decimal(15,2);  // ZC02价格
+    ZC02_CurrencyCode             : Integer;        // ZC02价格单位
+    ZC02_UnitOfMeasure            : Integer;        // ZC02数量单位
+    ZP00_Value                    : Decimal(15,2);  // ZP00价格
+    ZP00_CurrencyCode             : Integer;        // ZP00价格单位
+    ZP00_UnitOfMeasure            : Integer;        // ZP00数量单位
+    YY1_FD_FNSKU                  : String(50);     // FNSKU/快递袋编码
+    YY1_FD_SKU                    : String(50);     // 客户SKU
+    ConfirmedDeliveryDate         : Date;           // 交货日期
+    ScheduleLineOrderQuantity     : Decimal(15,3);  // 订单确认数量
+    SalesDocumentRjcnReason       : String(4);      // 销售订单拒绝原因
 }

@@ -1,5 +1,5 @@
 module.exports = cds.service.impl(async function () {
-  const { Transfer } = this.entities;
+  const { PaymentReceipt } = this.entities;
   //创建
   this.on('Create', async (req) => {
     const { data } = req.data;
@@ -10,11 +10,11 @@ module.exports = cds.service.impl(async function () {
     // --------------------------
     data.forEach((item, index) => {
       const rowNum = index + 1;
-      if (!item.TransferOrder) {
-        req.error(400, `第 ${rowNum} 条数据缺少必填字段：TransferOrder`);
+      if (!item.paymentReceiptNo) {
+        req.error(400, `第 ${rowNum} 条数据缺少必填字段：paymentReceiptNo`);
       }
-      if (!item.TransferOrderItem) {
-        req.error(400, `第 ${rowNum} 条数据缺少必填字段：TransferOrderItem`);
+      if (!item.paymentReceiptNoItem) {
+        req.error(400, `第 ${rowNum} 条数据缺少必填字段：paymentReceiptNoItem`);
       }
     });
 
@@ -24,7 +24,7 @@ module.exports = cds.service.impl(async function () {
     const keyMap = new Map();
     data.forEach((item, index) => {
       const rowNum = index + 1;
-      const key = `${item.TransferOrder}-${item.TransferOrderItem}`;
+      const key = `${item.paymentReceiptNo}-${item.paymentReceiptNoItem}`;
       if (keyMap.has(key)) {
         req.error(400, `第 ${rowNum} 条数据与第 ${keyMap.get(key)} 条数据重复：主键 [${key}] 已存在`);
       } else {
@@ -35,14 +35,14 @@ module.exports = cds.service.impl(async function () {
     // --------------------------
     // 数据库已存在校验
     // --------------------------
-    const existingKeys = await SELECT.from(Transfer)
-      .columns(['TransferOrder', 'TransferOrderItem'])
+    const existingKeys = await SELECT.from(PaymentReceipt)
+      .columns(['paymentReceiptNo', 'paymentReceiptNoItem'])
       .where({
-        TransferOrder: { in: data.map(p => p.TransferOrder) }
+        paymentReceiptNo: { in: data.map(p => p.paymentReceiptNo) }
       });
 
     existingKeys.forEach(existing => {
-      const key = `${existing.TransferOrder}-${existing.TransferOrderItem}`;
+      const key = `${existing.paymentReceiptNo}-${existing.paymentReceiptNoItem}`;
       if (keyMap.has(key)) {
         req.error(409, `主键 [${key}] 已在数据库中存在，无法重复创建`);
       }
@@ -58,7 +58,7 @@ module.exports = cds.service.impl(async function () {
     // --------------------------
     // 校验通过，执行批量插入
     // --------------------------
-    await INSERT.into(Transfer).entries(data);
+    await INSERT.into(PaymentReceipt).entries(data);
 
     // --------------------------
     // 返回创建成功的数据

@@ -1,7 +1,23 @@
 {
-  "xsappname": "zictm-v2",
+  "xsappname": "zictm",
   "tenant-mode": "dedicated",
   "scopes": [
+    {
+      "name": "$XSAPPNAME.Read",
+      "description": "Read access"
+    },
+    {
+      "name": "$XSAPPNAME.Create",
+      "description": "Create access"
+    },
+    {
+      "name": "$XSAPPNAME.Update",
+      "description": "Update access"
+    },
+    {
+      "name": "$XSAPPNAME.Delete",
+      "description": "Delete access"
+    },
     {
       "name": "$XSAPPNAME.Administrators",
       "description": "Administrators"
@@ -11,9 +27,13 @@
   "role-templates": [
     {
       "name": "Administrators",
-      "description": "generated",
+      "description": "Administrator with full access",
       "scope-references": [
-        "$XSAPPNAME.Administrators"
+        "$XSAPPNAME.Administrators",  
+        "$XSAPPNAME.Read",           
+        "$XSAPPNAME.Create",          
+        "$XSAPPNAME.Update",          
+        "$XSAPPNAME.Delete"           
       ],
       "attribute-references": []
     }

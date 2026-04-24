@@ -4,5 +4,7 @@ service StockTransferService {
     /**
      * 调拨单
      */
-    entity TransferOrder as projection on db.TransferOrder;
+    entity Transfer as projection on db.Transfer;
+
+    action Create(data: array of Transfer) returns array of Transfer;
 }

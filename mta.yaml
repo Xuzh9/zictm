@@ -42,6 +42,8 @@ modules:
       buildpack: nodejs_buildpack
     requires:
       - name: zictm-db
+    properties:
+      HDI_DEPLOY_OPTIONS: '{"auto_undeploy": false}'
       
   - name: zictm
     type: approuter.nodejs

@@ -16,11 +16,6 @@
     "@sap/xssec": "^4",
     "axios": "^1.15.0"
   },
-  "devDependencies": {
-    "cds-plugin-ui5": "^0.13.0",
-    "mbt": "^1.2.29",
-    "rimraf": "^5.0.5"
-  },
   "scripts": {
     "start": "node node_modules/@sap/cds-dk/bin/cds.js run",
     "undeploy": "cf undeploy zictm --delete-services --delete-service-keys --delete-service-brokers",
@@ -32,9 +27,9 @@
   },
   "cds": {
     "requires": {
-      "[production]": {
-        "auth": "xsuaa",
-        "db": "hana"
+      "db": "hana",
+      "auth": {
+        "kind": "xsuaa"
       },
       "API_PRODUCT_SRV": {
         "kind": "odata-v2",
