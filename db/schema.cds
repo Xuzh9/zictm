@@ -13,7 +13,6 @@ entity ProcessConfig {
     businessTable2 : String(50);      // 业务表名2
     businessTable3 : String(50);      // 业务表名3
     isAsync        : Boolean;         // 是否异步
-    
     // 与 StepConfig 的组合关系（一对多，行表）
     steps : Composition of many StepConfig 
         on steps.process.zrfcid = $self.zrfcid;
@@ -22,11 +21,9 @@ entity ProcessConfig {
 entity StepConfig {
     // 关联到父实体
     process        : Association to ProcessConfig;
-    
     // 组合主键
     key zrfcid     : String(10);      // 业务流程ID（外键引用）
     key canum      : Integer;         // 步骤编号（如10、20、30）
-    
     // 业务字段
     description    : String(50);      // 步骤描述
     serviceName    : String(100);     // 服务文件名
@@ -60,10 +57,8 @@ entity MPTTypeConfig {
     zrfcid         : String(10);     // 业务流程ID
     zxsf           : String(4);      // 销售方(公司代码)
     zfcf           : String(4);      // 发出方(公司代码)
-    
     // 关联到 ProcessConfig
     process        : Association to ProcessConfig;
-    
     // 与 MPTStepConfig 的组合关系（一对多，行表）
     steps : Composition of many MPTStepConfig
         on steps.mptType.zdfjy = $self.zdfjy;
@@ -75,7 +70,6 @@ entity MPTStepConfig {
     mptType        : Association to MPTTypeConfig;  // 父实体关联
     key zdfjy      : String(10);     // 多方交易类型ID
     key canum      : Integer;        // 步骤编号（如10、20、30）
-    
     // 配置参数
     vkorg          : String(4);      // 销售组织
     vtweg          : String(2);      // 分销渠道
@@ -87,12 +81,10 @@ entity MPTStepConfig {
     ekgrp          : String(4);      // 采购组
     umwrk          : String(4);      // 收货工厂
     umlgo          : String(4);      // 收货库存地点
-    
     // 价格和税务信息
     zjgbl          : Decimal(10,2);  // 价格比例
     mwskz          : String(3);      // 税码
     zsl            : Decimal(10,2);  // 税率
-    
     // 枚举类型：价格方向
     zjgfx          : PriceDirection;
 }
@@ -164,7 +156,7 @@ entity PaymentReceipt {
     ourBankAccount              : String(50);     // 我方银行账号
     generalLedgerAccountCash    : String(20);     // 总账科目（资金科目）
     generalLedgerAccountNonCash : String(20) ;    // 总账科目（非资金科目）
-    expenseItem                 : String(32);     // 费用项目     
+    expenseItem                 : String(40);     // 费用项目     
     itemRemark                  : String(50);     // 明细备注   
     zrfcid                      : String(10);     // 业务流程ID
     zrfc_logid                  : UUID;           // 多步ID
@@ -172,16 +164,16 @@ entity PaymentReceipt {
 
 //销售订单创建表
 entity SalesOrderCreate {
-    key PISalesOrder              : String(10);    // PI销售订单号
-    key PISalesOrderItem          : String(6);     // PI销售订单项目号
+    key PIOrder                   : String(10);    // PI单号
+    key PIOrderItem               : String(6);     // PI项目号
     SalesOrderType                : String(4);     // 销售订单类型
     SalesOrganization             : String(4);     // 销售组织
     DistributionChannel           : String(2);     // 分销渠道
     OrganizationDivision          : String(2);     // 产品组
     SalesOffice                   : String(10);    // 销售办事处
     SalesGroup                    : String(10);    // 销售组
-    SalesDistrict                 : String(20);    // 售达方
-    PurchaseOrderByCustomer       : String(50);    // 客户参考编号
+    SalesDistrict                 : String(10);    // 售达方
+    PurchaseOrderByCustomer       : String(40);    // 客户参考编号
     CustomerPurchaseOrderDate     : Date;          // 客户参考日期
     TransactionCurrency           : String(3);     // 凭证币别
     SDDocumentReason              : String(4);     // 订单原因
@@ -192,32 +184,32 @@ entity SalesOrderCreate {
     CustomerTaxClassification1    : String(4);     // 客户税分类
     CustomerPaymentTerms          : String(8);     // 付款条件
     Remark                        : LargeString;   // 销售订单抬头文本备注
-    YY1_FD_XMYQ                   : LargeString;   // 箱唛要求
-    YY1_FD_DBFS                   : String(20);    // 打包方式
-    YY1_FD_FHYQ                   : LargeString;   // 发货要求
-    YY1_FD_FKG                    : String(20);    // 付款国
-    YY1_FD_JSFS                   : String(20);    // 结算方式
+    YY1_FD_XMYQ                   : String(2);     // 箱唛要求
+    YY1_FD_DBFS                   : String(2);     // 打包方式
+    YY1_FD_FHYQ                   : String(2);     // 发货要求
+    YY1_FD_FKG                    : String(3);     // 付款国
+    YY1_FD_JSFS                   : String(4);     // 结算方式
     YY1_FD_PT                     : String(20);    // 平台
-    YY1_FD_SFBG                   : Boolean;       // 是否报关
-    YY1_FD_SFHD                   : Boolean;       // 是否回单
-    YY1_FD_TMBQ                   : String(50);    // 条码标签
-    YY1_FD_YDG                    : String(20);    // 运抵国
-    YY1_FD_YSFS                   : String(20);    // 运输方式
-    YY1_FD_ZTMWZ                  : Boolean;       // 粘贴美文纸
-    YY1_FD_ZH                     : String(50);    // 账户(下单店铺)
-    YY1_FD_ZDFJY                  : String(10);    // 多方交易类型
-    SalesOrderItemCategory        : String(8);     // 销售订单项目类别
+    YY1_FD_SFBG                   : String(2);     // 是否报关
+    YY1_FD_SFHD                   : String(2);     // 是否回单
+    YY1_FD_TMBQ                   : String(2) ;    // 条码标签
+    YY1_FD_YDG                    : String(3);     // 运抵国
+    YY1_FD_YSFS                   : String(2);     // 运输方式
+    YY1_FD_ZTMWZ                  : String(2);     // 粘贴美文纸
+    YY1_FD_ZH                     : String(20);    // 账户(下单店铺)
+    YY1_FD_ZDFJY                  : String(10);    // 多方交易ID
+    SalesOrderItemCategory        : String(4);     // 销售订单项目类别
     Material                      : String(40);    // 物料号
-    MaterialByCustomer            : String(50);    // 客户物料编号
-    RequestedQuantity             : Decimal(15,3); // 数量
+    MaterialByCustomer            : String(40);    // 客户物料编号
+    RequestedQuantity             : Decimal(13,3); // 数量
     RequestedQuantityUnit         : String(3);     // 单位
     ProductionPlant               : String(4);     // 工厂
     ItemRemark                    : LargeString;   // 销售订单行项目文本备注
-    PurchaseOrderByShipToParty    : String(50);    // 客户采购订单行项目
+    PurchaseOrderByShipToParty    : String(6);     // 客户采购订单行项目
     ProductTaxClassification1     : String(4);     // 产品税分类
     SalesDocumentRjcnReason       : String(4);     // 销售订单拒绝原因
-    YY1_FD_FNSKU                  : String(50);    // FNSKU/快递袋编码
-    YY1_FD_SKU                    : String(50);    // 客户SKU
+    YY1_FD_FNSKU                  : String(20);    // FNSKU/快递袋编码
+    YY1_FD_SKU                    : String(30);    // 客户SKU
     ZB01_Value                    : Decimal(15,2); // ZB01价格
     ZB01_CurrencyCode             : Integer;       // ZB01价格单位
     ZB01_UnitOfMeasure            : Integer;       // ZB01数量单位
@@ -239,21 +231,21 @@ entity SalesOrderCreate {
     ZP00_Value                    : Decimal(15,2); // ZP00价格
     ZP00_CurrencyCode             : Integer;       // ZP00价格单位
     ZP00_UnitOfMeasure            : Integer;       // ZP00数量单位
-    PartnerFunction               : String(8);     // 合作伙伴功能
+    PartnerFunction               : String(5);     // 合作伙伴功能
     Customer                      : String(20);    // 合作伙伴编号
     ConfirmedDeliveryDate         : Date;          // 交货日期
     ScheduleLineOrderQuantity     : Decimal(15,3); // 订单确认数量
-    zrfcid                        : String(10);     // 业务流程ID
-    zrfc_logid                    : UUID;           // 多步ID
+    zrfcid                        : String(10);    // 业务流程ID
+    zrfc_logid                    : UUID;          // 多步ID
 }
 
-// 销售订单行项目表
+// 销售订单修改表
 entity SalesOrderChange {
     key SalesOrder                : String(10);     // 销售订单号
     key SalesOrderItem            : String(6);      // 销售订单项目号
-    SalesOrderItemCategory        : String(8);      // 销售订单项目类别
+    SalesOrderItemCategory        : String(4);      // 销售订单项目类别
     Material                      : String(40);     // 物料号
-    MaterialByCustomer            : String(50);     // 客户物料编号
+    MaterialByCustomer            : String(40);     // 客户物料编号
     RequestedQuantity             : Decimal(15,3);  // 数量
     RequestedQuantityUnit         : String(3);      // 单位
     ProductionPlant               : String(4);      // 工厂
@@ -278,9 +270,60 @@ entity SalesOrderChange {
     ZP00_Value                    : Decimal(15,2);  // ZP00价格
     ZP00_CurrencyCode             : Integer;        // ZP00价格单位
     ZP00_UnitOfMeasure            : Integer;        // ZP00数量单位
-    YY1_FD_FNSKU                  : String(50);     // FNSKU/快递袋编码
-    YY1_FD_SKU                    : String(50);     // 客户SKU
+    YY1_FD_FNSKU                  : String(20);     // FNSKU/快递袋编码
+    YY1_FD_SKU                    : String(30);     // 客户SKU
     ConfirmedDeliveryDate         : Date;           // 交货日期
-    ScheduleLineOrderQuantity     : Decimal(15,3);  // 订单确认数量
+    ScheduleLineOrderQuantity     : Decimal(13,3);  // 订单确认数量
     SalesDocumentRjcnReason       : String(4);      // 销售订单拒绝原因
+    zrfcid                        : String(10);     // 业务流程ID
+    zrfc_logid                    : UUID;           // 多步ID
+}
+
+//交货单表
+entity DeliveryActualInfo {
+    key DeliveryDocument      : String(10);      // 交货单
+    key DeliveryDocumentItem  : String(6);       // 交货行项目
+    ActualGoodsMovementDate   : Date;            // 实际发货日期
+    YY1_FD_SPZT               : String(2);       // 财务审批状态
+    Material                  : String(40);      // 物料编码
+    ActualDeliveryQuantity    : Decimal(13,3);   // 实际发货数量
+    StorageLocation           : String(4);       // 实际发货库位
+    Batch                     : String(10);      // 实际批次
+    ParentItem                : String(6);       // 上层行项目号
+    RefDocNo                  : String(10);      // 参考单号
+    RefDocItem                : String(6);       // 参考行项目号
+    zrfcid                    : String(10);      // 业务流程ID
+    zrfc_logid                : UUID;            // 多步ID
+}
+
+//PI销售订单关系表
+entity PISalesOrderRel {
+  key PIOrder                   : String(10);    // PI单号
+  key PIOrderItem               : String(6);     // PI项目号
+      SalesOrder                : String(10);    // 销售订单号
+      SalesOrderItem            : String(6);     // 销售订单项目号
+      PurchaseOrder1            : String(10);    // 采购订单号1
+      PurchaseOrderItem1        : String(6);     // 采购订单项目号1
+      SalesOrder1               : String(10);    // 销售订单号1
+      SalesOrderItem1           : String(6);     // 销售订单项目号1
+      PurchaseOrder2            : String(10);    // 采购订单号2
+      PurchaseOrderItem2        : String(6);     // 采购订单项目号2
+      SalesOrder2               : String(10);    // 销售订单号2
+      SalesOrderItem2           : String(6);     // 销售订单项目号2
+}
+
+//PI交货单关系表
+entity PIDeliveryRel {
+  key PIOrder                   : String(10);    // PI单号
+  key PIOrderItem               : String(6);     // PI项目号
+      DeliveryNo1               : String(10);    // 交货单号1
+      DeliveryNoItem1           : String(6);     // 交货单项目号1
+      InboundDeliveryNo1        : String(10);    // 内向交货单号1
+      InboundDeliveryNoItem1    : String(6);     // 内向交货项目号1
+      DeliveryNo2               : String(10);    // 交货单号2
+      DeliveryNoItem2           : String(6);     // 交货单项目号2
+      InboundDeliveryNo2        : String(10);    // 内向交货号2
+      InboundDeliveryNoItem2    : String(6);     // 内向交货项目号2
+      DeliveryNo                : String(10);    // 销售订单号
+      DeliveryNoItem            : String(6);     // 销售订单项目号
 }

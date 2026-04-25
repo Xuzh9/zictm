@@ -1,6 +1,6 @@
 using { com.sap.zictm as db } from '../db/schema';  
 
-service PISalesService {
+service PIService {
     /**
      * 销售订单创建表
      */
@@ -11,6 +11,7 @@ service PISalesService {
      */
     entity SalesOrderChange as projection on db.SalesOrderChange;
 
-    action Create(data: array of SalesOrderCreate) returns array of SalesOrderCreate;
-    action Change(data: array of SalesOrderChange) returns array of SalesOrderChange;
+
+    action SOCreate(data: array of SalesOrderCreate) returns array of SalesOrderCreate;
+    action SOChange(data: array of SalesOrderChange) returns array of SalesOrderChange;
 }

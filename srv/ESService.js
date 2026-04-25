@@ -1,7 +1,7 @@
-module.exports = cds.service.impl(async function () {
-  const { PaymentReceipt } = this.entities;
-  //创建
-  this.on('Create', async (req) => {
+  module.exports = cds.service.impl(async function () {
+  const { DeliveryActualInfo } = this.entities;
+  //交货
+  this.on('DN', async (req) => {
     const { data } = req.data;
     if (!data || data.length === 0) req.error(400, "数据不能为空");
 
@@ -10,11 +10,11 @@ module.exports = cds.service.impl(async function () {
     // --------------------------
     data.forEach((item, index) => {
       const rowNum = index + 1;
-      if (!item.paymentReceiptNo) {
-        req.error(400, `第 ${rowNum} 条数据缺少必填字段：paymentReceiptNo`);
+      if (!item.DeliveryDocument) {
+        req.error(400, `第 ${rowNum} 条数据缺少必填字段：DeliveryDocument`);
       }
-      if (!item.paymentReceiptNoItem) {
-        req.error(400, `第 ${rowNum} 条数据缺少必填字段：paymentReceiptNoItem`);
+      if (!item.DeliveryDocumentItem) {
+        req.error(400, `第 ${rowNum} 条数据缺少必填字段：DeliveryDocumentItem`);
       }
     });
 
@@ -24,7 +24,7 @@ module.exports = cds.service.impl(async function () {
     const keyMap = new Map();
     data.forEach((item, index) => {
       const rowNum = index + 1;
-      const key = `${item.paymentReceiptNo}-${item.paymentReceiptNoItem}`;
+      const key = `${item.DeliveryDocument}-${item.DeliveryDocumentItem}`;
       if (keyMap.has(key)) {
         req.error(400, `第 ${rowNum} 条数据与第 ${keyMap.get(key)} 条数据重复：主键 [${key}] 已存在`);
       } else {
@@ -35,14 +35,14 @@ module.exports = cds.service.impl(async function () {
     // --------------------------
     // 数据库已存在校验
     // --------------------------
-    const existingKeys = await SELECT.from(PaymentReceipt)
-      .columns(['paymentReceiptNo', 'paymentReceiptNoItem'])
+    const existingKeys = await SELECT.from(DeliveryActualInfo)
+      .columns(['DeliveryDocument', 'DeliveryDocumentItem'])
       .where({
-        paymentReceiptNo: { in: data.map(p => p.paymentReceiptNo) }
+        DeliveryDocument: { in: data.map(p => p.DeliveryDocument) }
       });
 
     existingKeys.forEach(existing => {
-      const key = `${existing.paymentReceiptNo}-${existing.paymentReceiptNoItem}`;
+      const key = `${existing.DeliveryDocument}-${existing.DeliveryDocumentItem}`;
       if (keyMap.has(key)) {
         req.error(409, `主键 [${key}] 已在数据库中存在，无法重复创建`);
       }
@@ -58,14 +58,14 @@ module.exports = cds.service.impl(async function () {
     // --------------------------
     // 校验通过，执行批量插入
     // --------------------------
-    await INSERT.into(PaymentReceipt).entries(data);
+    await INSERT.into(DeliveryActualInfo).entries(data);
 
     // --------------------------
-    // 返回创建成功的数据
+    // 返回成功
     // --------------------------
     return {
       code: 200,
-      message: "批量创建成功",
+      message: "推送成功",
     };
   });
 });

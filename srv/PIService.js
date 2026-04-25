@@ -1,7 +1,7 @@
 module.exports = cds.service.impl(async function () {
-  const { SalesOrderCreate, SalesOrderChange } = this.entities;
+  const { SalesOrderCreate,SalesOrderChange } = this.entities;
   //创建
-  this.on('Create', async (req) => {
+  this.on('SOCreate', async (req) => {
     const { data } = req.data;
     if (!data || data.length === 0) req.error(400, "数据不能为空");
 
@@ -10,11 +10,11 @@ module.exports = cds.service.impl(async function () {
     // --------------------------
     data.forEach((item, index) => {
       const rowNum = index + 1;
-      if (!item.PISalesOrder) {
-        req.error(400, `第 ${rowNum} 条数据缺少必填字段：PISalesOrdero`);
+      if (!item.PIOrder) {
+        req.error(400, `第 ${rowNum} 条数据缺少必填字段：PIOrdero`);
       }
-      if (!item.PISalesOrderItem) {
-        req.error(400, `第 ${rowNum} 条数据缺少必填字段：PISalesOrderItem`);
+      if (!item.PIOrderItem) {
+        req.error(400, `第 ${rowNum} 条数据缺少必填字段：PIOrderItem`);
       }
     });
 
@@ -24,7 +24,7 @@ module.exports = cds.service.impl(async function () {
     const keyMap = new Map();
     data.forEach((item, index) => {
       const rowNum = index + 1;
-      const key = `${item.PISalesOrder}-${item.PISalesOrderItem}`;
+      const key = `${item.PIOrder}-${item.PIOrderItem}`;
       if (keyMap.has(key)) {
         req.error(400, `第 ${rowNum} 条数据与第 ${keyMap.get(key)} 条数据重复：主键 [${key}] 已存在`);
       } else {
@@ -36,13 +36,13 @@ module.exports = cds.service.impl(async function () {
     // 数据库已存在校验
     // --------------------------
     const existingKeys = await SELECT.from(SalesOrderCreate)
-      .columns(['PISalesOrder', 'PISalesOrderItem'])
+      .columns(['PIOrder', 'PIOrderItem'])
       .where({
-        PISalesOrder: { in: data.map(p => p.PISalesOrder) }
+        PIOrder: { in: data.map(p => p.PIOrder) }
       });
 
     existingKeys.forEach(existing => {
-      const key = `${existing.PISalesOrder}-${existing.PISalesOrderItem}`;
+      const key = `${existing.PIOrder}-${existing.PIOrderItem}`;
       if (keyMap.has(key)) {
         req.error(409, `主键 [${key}] 已在数据库中存在，无法重复创建`);
       }
@@ -61,15 +61,15 @@ module.exports = cds.service.impl(async function () {
     await INSERT.into(SalesOrderCreate).entries(data);
 
     // --------------------------
-    // 返回创建成功的数据
+    // 返回成功
     // --------------------------
     return {
       code: 200,
-      message: "批量创建成功",
+      message: "推送成功",
     };
   });
   //修改
-  this.on('Create', async (req) => {
+  this.on('SOChange', async (req) => {
     const { data } = req.data;
     if (!data || data.length === 0) req.error(400, "数据不能为空");
 
@@ -129,11 +129,11 @@ module.exports = cds.service.impl(async function () {
     await INSERT.into(SalesOrderChange).entries(data);
 
     // --------------------------
-    // 返回创建成功的数据
+    // 返回成功
     // --------------------------
     return {
       code: 200,
-      message: "批量修改成功",
+      message: "推送成功",
     };
   });
 });
