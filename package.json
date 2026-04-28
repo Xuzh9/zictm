@@ -9,12 +9,14 @@
     "@cap-js/hana": "^2",
     "@sap-cloud-sdk/connectivity": "^3.26.4",
     "@sap-cloud-sdk/http-client": "^3.26.4",
+    "@sap-cloud-sdk/odata-v2": "^4.6.0",
     "@sap-cloud-sdk/resilience": "^3.26.4",
     "@sap-cloud-sdk/util": "^3.26.4",
     "@sap/cds": "^9",
     "@sap/cds-dk": "^9.8.4",
     "@sap/xssec": "^4",
-    "axios": "^1.15.0"
+    "axios": "^1.15.0",
+    "lodash": "^4.18.1"
   },
   "scripts": {
     "start": "node node_modules/@sap/cds-dk/bin/cds.js run",
@@ -34,14 +36,18 @@
       "API_PRODUCT_SRV": {
         "kind": "odata-v2",
         "model": "srv/external/API_PRODUCT_SRV",
-        "url": "https://my201417.s4hana.sapcloud.cn/sap/opu/odata/sap/API_PRODUCT_SRV",
-        "csrf": false
+        "credentials": {
+          "destination": "ES_API",
+          "requestTimeout": 30000
+        }
       },
       "API_MATERIAL_DOCUMENT_SRV": {
         "kind": "odata-v2",
         "model": "srv/external/API_MATERIAL_DOCUMENT_SRV",
-        "url": "https://my201417.s4hana.sapcloud.cn/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV",
-        "csrf": false
+        "credentials": {
+          "destination": "ES_API",
+          "requestTimeout": 30000
+        }
       }
     },
     "server": {

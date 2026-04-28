@@ -10,210 +10,118 @@ class MultiStepInvoker {
     /**
      * 处理外围系统传输的json报文数据
      * 统一生成zrfcid并保存到ApiInputLog
-     * @param {string} businessId - 业务ID（如调拨单ID、出库单ID等）
+     * @param {string} businessType - 业务类型
+     * @param {Array} data - 接口传入的完整数据
      * @returns {Promise<Object>} 执行结果，包含zrfcid用于后续记录对账
      */
-    async process(businessId) {
+    async process(businessType, data) {
+        // 生成 zrfcLogid
         const zrfcLogid = this.generateZrfcLogid();
-        const errorMessages = [];
         let result = {
             code: 'S',
             message: '处理成功',
             zrfcLogid
         };
+        let hasSavedLog = false;
         
         try {
-            // 保存初始日志
-            await this.saveApiInputLog(zrfcLogid, { businessId });
+            // 根据业务类型查找对应的业务流程ID
+            let zrfcid = null;
+            let processConfig = null;
             
-            // 查找对应的业务流程ID（从多方交易配置表获取）
-            const businessProcessId = await this.findBusinessProcessId(businessId);
-            if (!businessProcessId) {
-                errorMessages.push('未找到对应的业务流程ID');
+            // 如果业务类型为 Transfer，直接返回 MM01
+            if (businessType === 'Transfer') {
+                zrfcid = 'MM01';
             } else {
-                // 获取业务流程配置
-                const processConfig = await this.getProcessConfig(businessProcessId);
-                if (!processConfig) {
-                    errorMessages.push(`业务流程配置不存在: ${businessProcessId}`);
-                } else {
-                    // 读取对应业务表的数据
-                    const businessData = await this.readBusinessData(processConfig, businessId);
-                    if (!businessData) {
-                        errorMessages.push(`未找到业务数据: ${businessId}`);
-                    } else {
-                        // 更新业务表的 zrfcid 和 zrfc_logid 字段
-                        // zrfcid: 从多方交易配置表获取，每次都更新
-                        // zrfc_logid: 生成的UUID，仅在为空时更新（不覆盖已有值）
-                        await this.updateBusinessData(processConfig, businessId, businessProcessId, zrfcLogid);
-                        
-                        // 构建输入数据
-                        const inputData = {
-                            zrfcLogid,
-                            businessId,
-                            businessData
-                        };
-                        
-                        // 保存更新后的输入数据到接口入参日志表
-                        await this.saveApiInputLog(zrfcLogid, inputData);
-                        
-                        // 根据业务数据中的zrfcid获取业务流程配置
-                        const actualBusinessProcessId = businessData.zrfcid || businessProcessId;
-                        
-                        // 转换输入数据为字符串
-                        const inputDataStr = JSON.stringify(inputData);
-                        
-                        // 根据isAsync字段判断同步还是异步调用
-                        if (processConfig.isAsync) {
-                            // 异步调用
-                            this.executeAsync(actualBusinessProcessId, zrfcLogid, inputDataStr);
-                            result.message = '异步调用成功，正在处理中';
-                        } else {
-                            // 同步调用
-                            const processorResult = await this.processor.processWithLogId(zrfcLogid, actualBusinessProcessId, inputDataStr);
-                            result.code = processorResult.code;
-                            result.message = processorResult.message;
-                        }
-                    }
-                }
+                // 调用 findBusinessProcessId 获取业务流程ID
+                zrfcid = await this.findBusinessProcessId(businessType);
             }
             
-            // 处理错误信息
-            if (errorMessages.length > 0) {
-                const errorMessage = errorMessages.join('; ');
+            if (!zrfcid) {
                 result.code = 'E';
-                result.message = errorMessage;
-                // 保存错误日志
-                await this.saveApiInputLog(zrfcLogid, { businessId }, errorMessage);
+                result.message = '未找到对应的业务流程ID';
+                // 只保存一条错误记录
+                await this.saveApiInputLog(zrfcLogid, data, result.message);
+                hasSavedLog = true;
+                return result;
             }
-        } catch (error) {
-            // 捕获未预期的错误
-            const errorMessage = `系统错误: ${error.message}`;
-            result.code = 'E';
-            result.message = errorMessage;
-            // 保存错误日志
-            await this.saveApiInputLog(zrfcLogid, { businessId }, errorMessage);
-        } finally {
-            // 关闭数据库事务
-            await this.db.commit();
+            
+            // 获取业务流程配置
+            processConfig = await this.getProcessConfig(zrfcid);
+            if (!processConfig) {
+                result.code = 'E';
+                result.message = `业务流程配置不存在: ${zrfcid}`;
+                // 只保存一条错误记录
+                await this.saveApiInputLog(zrfcLogid, data, result.message);
+                hasSavedLog = true;
+                return result;
+            }
+            
+            // 构建输入数据
+            const inputData = {
+                zrfcLogid,
+                businessType,
+                data
+            };
+            
+            // 根据isAsync字段判断同步还是异步调用
+            if (processConfig.isAsync) {
+                // 异步调用
+                this.executeAsync(zrfcid, zrfcLogid);
+                result.message = '异步调用成功，正在处理中';
+            } else {
+                // 同步调用
+                const processorResult = await this.processor.processWithLogId(zrfcLogid, zrfcid);
+                result.code = processorResult.code;
+                // 限制消息长度，避免超过系统限制
+                result.message = processorResult.message ? processorResult.message.substring(0, 500) : '执行成功';
+                result.objkey = processorResult.objkey || '';
+            }
+        
+        // 只保存一条记录
+        await this.saveApiInputLog(zrfcLogid, inputData, result.code === 'E' ? result.message : null);
+        hasSavedLog = true;
+    } catch (error) {
+        // 捕获未预期的错误
+        result.code = 'E';
+        // 限制错误消息长度，避免超过系统限制
+        const errorMessage = error.message ? error.message.substring(0, 500) : '未知错误';
+        result.message = `系统错误: ${errorMessage}`;
+        // 只保存一条错误记录
+        if (!hasSavedLog) {
+            await this.saveApiInputLog(zrfcLogid, data, result.message);
+            hasSavedLog = true;
         }
+    } finally {
+        // 关闭数据库事务
+        await this.db.commit();
+    }
+    
+    // 限制返回消息长度，避免超过系统限制
+    result.message = result.message ? result.message.substring(0, 500) : '处理成功';
         
         return result;
     }
 
     /**
      * 查找对应的业务流程ID
-     * @param {string} businessId - 业务ID
+     * @param {string} businessType - 业务类型
      * @returns {Promise<string>} 业务流程ID
      */
-    async findBusinessProcessId(businessId) {
-        // 这里简化处理，实际应根据业务逻辑查询
-        // 例如：从业务表中查询zrfcid字段
-        return 'ZRFC001'; // 示例返回
-    }
-
-    /**
-     * 读取对应业务表的数据
-     * @param {Object} processConfig - 业务流程配置
-     * @param {string} businessId - 业务ID
-     * @returns {Promise<Object>} 业务数据
-     */
-    async readBusinessData(processConfig, businessId) {
-        try {
-            // 尝试从三个业务表中读取数据
-            const businessTables = [
-                processConfig.businessTable1,
-                processConfig.businessTable2,
-                processConfig.businessTable3
-            ].filter(Boolean); // 过滤空值
-            
-            for (const businessTable of businessTables) {
-                // 根据业务表名动态获取实体
-                const Entity = cds.entities[`com.sap.zictm.${businessTable}`];
-                if (!Entity) {
-                    console.warn(`业务表不存在: ${businessTable}`);
-                    continue;
-                }
-                
-                // 查询业务数据
-                // 假设主键字段名为${businessTable}（如TransferOrder表的主键为TransferOrder）
-                const result = await this.db.run(
-                    SELECT.one.from(Entity)
-                        .where({ [businessTable]: businessId })
-                );
-                
-                if (result) {
-                    return {
-                        ...result,
-                        _businessTable: businessTable // 添加业务表名到返回数据中
-                    };
-                }
-            }
-            
-            return null; // 所有表都未找到数据
-        } catch (error) {
-            console.error(`读取业务数据失败: ${error.message}`);
-            return null;
+    async findBusinessProcessId(businessType) {
+        // 如果业务类型为 Transfer，则业务流程ID为 MM01
+        if (businessType === 'Transfer') {
+            return 'MM01';
         }
-    }
-
-    /**
-     * 更新业务表的 zrfcid 和 zrfc_logid 字段（仅在为空时更新，不覆盖已有值）
-     * @param {Object} processConfig - 业务流程配置
-     * @param {string} businessId - 业务ID
-     * @param {string} zrfcid - 业务流程ID（从多方交易配置表获取）
-     * @param {string} zrfcLogid - 日志ID（生成的UUID）
-     */
-    async updateBusinessData(processConfig, businessId, zrfcid, zrfcLogid) {
-        try {
-            const businessTables = [
-                processConfig.businessTable1,
-                processConfig.businessTable2,
-                processConfig.businessTable3
-            ].filter(Boolean);
-
-            for (const businessTable of businessTables) {
-                const Entity = cds.entities[`com.sap.zictm.${businessTable}`];
-                if (!Entity) {
-                    continue;
-                }
-
-                // 查询业务数据
-                const result = await this.db.run(
-                    SELECT.one.from(Entity)
-                        .where({ [businessTable]: businessId })
-                );
-
-                if (result) {
-                    const updateData = {};
-                    let hasUpdate = false;
-
-                    // 仅在 zrfcid 为空时才更新
-                    if (!result.zrfcid) {
-                        updateData.zrfcid = zrfcid;
-                        hasUpdate = true;
-                    }
-                    // 仅在 zrfc_logid 为空时才更新
-                    if (!result.zrfc_logid) {
-                        updateData.zrfc_logid = zrfcLogid;
-                        hasUpdate = true;
-                    }
-
-                    if (hasUpdate) {
-                        await this.db.run(
-                            UPDATE(Entity)
-                                .set(updateData)
-                                .where({ [businessTable]: businessId })
-                        );
-                        console.log(`更新业务表 ${businessTable}: zrfcid=${zrfcid}, zrfc_logid=${zrfcLogid}`);
-                    } else {
-                        console.log(`业务表 ${businessTable} 已有 zrfcid 和 zrfc_logid，不再更新`);
-                    }
-                    break;
-                }
-            }
-        } catch (error) {
-            console.error(`更新业务表字段失败: ${error.message}`);
-        }
+        
+        // 从多方交易配置表获取
+        const MPTTypeConfig = cds.entities['com.sap.zictm.MPTTypeConfig'];
+        
+        // 根据 zdfjy 查找
+        const result = await this.db.run(
+            SELECT.one.from(MPTTypeConfig).where({ zdfjy: businessType })
+        );
+        return result ? result.zrfcid : null;
     }
 
     /**
@@ -232,10 +140,17 @@ class MultiStepInvoker {
      */
     async saveApiInputLog(zrfcLogid, inputData, errorMessage = null) {
         const ApiInputLog = cds.entities['com.sap.zictm.ApiInputLog'];
+        
+        // 限制输入数据的 JSON 字符串长度，避免超过系统限制
+        let inputDataStr = JSON.stringify(inputData);
+        if (inputDataStr.length > 1000) {
+            inputDataStr = inputDataStr.substring(0, 1000) + '...';
+        }
+        
         await this.db.run(
             INSERT.into(ApiInputLog).entries({
                 zrfc_logid: zrfcLogid,
-                inputData: JSON.stringify(inputData),
+                inputData: inputDataStr,
                 code: errorMessage ? 'E' : 'S',
                 message: errorMessage || '处理成功'
             })
@@ -257,15 +172,14 @@ class MultiStepInvoker {
 
     /**
      * 异步执行多步处理
-     * @param {string} businessProcessId - 业务流程ID
+     * @param {string} zrfcid - 业务流程ID
      * @param {string} zrfcLogid - 日志ID
-     * @param {string} inputData - 输入数据
      */
-    executeAsync(businessProcessId, zrfcLogid, inputData) {
+    executeAsync(zrfcid, zrfcLogid) {
         // 使用setTimeout模拟异步执行
         setTimeout(async () => {
             try {
-                await this.processor.processWithLogId(zrfcLogid, businessProcessId, inputData);
+                await this.processor.processWithLogId(zrfcLogid, zrfcid);
             } catch (error) {
                 console.error('Async processing error:', error);
             }

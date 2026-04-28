@@ -4,31 +4,18 @@ const path = require('path');
 
 class MultiStepProcessor {
     constructor() {
-        this.db = cds.transaction();
-        this.servicesDir = path.join(__dirname, '../services');
         this.serviceCache = new Map();
+        this.servicesDir = path.join(__dirname, '../services');
+        this.db = cds.transaction();
     }
 
     /**
-     * 处理多步业务流程
+     * 处理多步流程（带日志ID）
+     * @param {string} zrfcLogid - 多步执行日志ID
      * @param {string} zrfcid - 业务流程ID
-     * @param {string} inputData - 输入数据
-     * @returns {Promise<Object>} 执行结果
+     * @returns {Promise<Object>} 处理结果
      */
-    async process(zrfcid, inputData) {
-        // 生成多步ID
-        const zrfcLogid = cds.utils.uuid();
-        return this.processWithLogId(zrfcLogid, zrfcid, inputData);
-    }
-
-    /**
-     * 使用指定的多步ID处理业务流程
-     * @param {string} zrfcLogid - 多步ID
-     * @param {string} zrfcid - 业务流程ID
-     * @param {string} inputData - 输入数据
-     * @returns {Promise<Object>} 执行结果
-     */
-    async processWithLogId(zrfcLogid, zrfcid, inputData) {
+    async processWithLogId(zrfcLogid, zrfcid) {
         try {
             // 查询业务流程配置
             const processConfig = await this.getProcessConfig(zrfcid);
@@ -47,6 +34,8 @@ class MultiStepProcessor {
 
             // 执行每一步
             let lastObjKey = null;
+            let lastMessage = '执行成功';
+            let lastCode = 'S';
             for (const step of steps) {
                 // 读取入参数据
                 const stepInputData = await this.readInputData(zrfcLogid, zrfcid, step);
@@ -57,9 +46,11 @@ class MultiStepProcessor {
                 try {
                     executionResult = await this.invokeMethod(step.serviceName, stepInputData);
                 } catch (error) {
+                    // 限制错误消息长度，避免超过系统限制
+                    const errorMessage = error.message ? error.message.substring(0, 500) : '未知错误';
                     executionResult = {
                         code: 'E',
-                        message: error.message,
+                        message: errorMessage,
                         objkey: lastObjKey
                     };
                 }
@@ -67,43 +58,45 @@ class MultiStepProcessor {
                 const executionTime = (endTime - startTime) / 1000;
 
                 // 保存日志
-                await this.saveLog(zrfcLogid, zrfcid, step.canum, stepInputData, executionResult, executionTime);
+                // 限制消息长度，避免超过系统限制
+                const logMessage = executionResult.message ? executionResult.message.substring(0, 500) : '';
+                await this.saveLog(zrfcLogid, zrfcid, step.canum, {
+                    ...executionResult,
+                    message: logMessage
+                }, executionTime);
 
-                // 更新上一步对象号
+                // 更新上一步对象号、消息和代码
                 lastObjKey = executionResult.objkey || lastObjKey;
-
-                // 如果执行失败，抛出异常
+                lastMessage = executionResult.message || lastMessage;
+                lastCode = executionResult.code || lastCode;
+                
+                // 如果当前步骤失败，停止执行后续步骤
                 if (executionResult.code === 'E') {
-                    throw new Error(executionResult.message);
+                    break;
                 }
-            }
-
-            // 如果是异步调用，直接返回成功
-            if (processConfig.isAsync) {
-                return {
-                    code: 'S',
-                    message: '调用成功',
-                    zrfcLogid
-                };
             }
 
             // 同步调用返回最终结果
             return {
-                code: 'S',
-                message: '执行成功',
-                zrfcLogid
+                code: lastCode,
+                message: lastMessage,
+                zrfcLogid,
+                objkey: lastObjKey
             };
         } catch (error) {
             // 保存错误日志
-            await this.saveLog(zrfcLogid, zrfcid, '0', inputData, {
+            // 限制错误消息长度，避免超过系统限制
+            const errorMessage = error.message ? error.message.substring(0, 500) : '未知错误';
+            await this.saveLog(zrfcLogid, zrfcid, '0', {
                 code: 'E',
-                message: error.message
+                message: errorMessage
             }, 0);
 
             return {
                 code: 'E',
-                message: error.message,
-                zrfcLogid
+                message: errorMessage,
+                zrfcLogid,
+                objkey: lastObjKey
             };
         } finally {
             // 关闭数据库事务
@@ -146,6 +139,8 @@ class MultiStepProcessor {
      */
     async readInputData(zrfcLogid, zrfcid, step) {
         let readSteps = step.readsteps;
+        let objkey = null;
+        
         if (!readSteps) {
             // 如果读取步骤编号为空，默认读取上一步骤的对象号
             const prevStepNum = step.canum - 10;
@@ -160,11 +155,19 @@ class MultiStepProcessor {
                     .where({ zrfc_logid: zrfcLogid, zrfcid, canum: readSteps })
             );
             if (log) {
-                return JSON.parse(log.inputData || '{}');
+                objkey = log.objkey;
             }
         }
 
-        return {};
+        // 构建标准入参格式
+        return {
+            zrfcid,
+            canum: step.canum,
+            description: step.description,
+            serviceName: step.serviceName,
+            readsteps: step.readsteps,
+            objkey
+        };
     }
 
     /**
@@ -182,7 +185,11 @@ class MultiStepProcessor {
             return await service.execute(inputData);
         } catch (error) {
             console.error('调用方法失败:', error);
-            throw error;
+            return {
+                code: 'E',
+                message: error.message,
+                objkey: inputData.objkey || ''
+            };
         }
     }
 
@@ -211,11 +218,11 @@ class MultiStepProcessor {
         // 实例化服务
         const service = new ServiceClass();
         
-        // 检查是否有execute方法
-        if (typeof service.execute !== 'function') {
-            throw new Error(`服务文件 ${serviceName}.js 缺少execute方法`);
+        // 检查服务是否有execute方法
+        if (!service.execute || typeof service.execute !== 'function') {
+            throw new Error(`服务文件必须包含execute方法: ${serviceFile}`);
         }
-        
+
         // 缓存服务实例
         this.serviceCache.set(serviceName, service);
         
@@ -226,12 +233,12 @@ class MultiStepProcessor {
      * 保存日志
      * @param {string} zrfcLogid - 多步ID
      * @param {string} zrfcid - 业务流程ID
-     * @param {number} canum - 步骤编号
+     * @param {string} canum - 步骤编号
      * @param {Object} inputData - 输入数据
      * @param {Object} executionResult - 执行结果
      * @param {number} executionTime - 执行时间
      */
-    async saveLog(zrfcLogid, zrfcid, canum, inputData, executionResult, executionTime) {
+    async saveLog(zrfcLogid, zrfcid, canum, executionResult, executionTime) {
         const MultistepLog = cds.entities['com.sap.zictm.MultistepLog'];
         
         // 检查日志是否已存在
@@ -241,17 +248,12 @@ class MultiStepProcessor {
         );
 
         if (existingLog) {
-            // 如果日志已存在，更新消息（拼接）
-            const updatedMessage = existingLog.message ? 
-                `${existingLog.message}; ${executionResult.message}` : 
-                executionResult.message;
-            
+            // 如果日志已存在，更新记录
             await this.db.run(
                 UPDATE(MultistepLog)
                     .set({
-                        inputData: JSON.stringify(inputData),
                         code: executionResult.code,
-                        message: updatedMessage,
+                        message: executionResult.message,
                         objkey: executionResult.objkey,
                         executionTime,
                         modifiedAt: new Date(),
@@ -266,7 +268,6 @@ class MultiStepProcessor {
                     zrfc_logid: zrfcLogid,
                     zrfcid,
                     canum: canum.toString(),
-                    inputData: JSON.stringify(inputData),
                     code: executionResult.code,
                     message: executionResult.message,
                     objkey: executionResult.objkey,

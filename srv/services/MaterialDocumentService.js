@@ -1,284 +1,260 @@
 const cds = require('@sap/cds');
-const fs = require('fs');
-const path = require('path');
+const { executeHttpRequest } = require('@sap-cloud-sdk/http-client');
 
-class MultiStepProcessor {
+class MaterialDocumentService {
     constructor() {
-        this.db = cds.transaction();
-        this.servicesDir = path.join(__dirname, '../services');
-        this.serviceCache = new Map();
+        this.materialDocSrv = null;
     }
 
-    /**
-     * 处理多步业务流程
-     * @param {string} zrfcid - 业务流程ID
-     * @param {string} inputData - 输入数据
-     * @returns {Promise<Object>} 执行结果
-     */
-    async process(zrfcid, inputData) {
-        // 生成多步ID
-        const zrfcLogid = cds.utils.uuid();
-        return this.processWithLogId(zrfcLogid, zrfcid, inputData);
+    async initService() {
+        if (!this.materialDocSrv) {
+            this.materialDocSrv = await cds.connect.to('API_MATERIAL_DOCUMENT_SRV');
+        }
     }
 
-    /**
-     * 使用指定的多步ID处理业务流程
-     * @param {string} zrfcLogid - 多步ID
-     * @param {string} zrfcid - 业务流程ID
-     * @param {string} inputData - 输入数据
-     * @returns {Promise<Object>} 执行结果
-     */
-    async processWithLogId(zrfcLogid, zrfcid, inputData) {
+    async execute(inputData) {
         try {
-            // 查询业务流程配置
-            const processConfig = await this.getProcessConfig(zrfcid);
-            if (!processConfig) {
-                throw new Error(`业务流程配置不存在: ${zrfcid}`);
-            }
+            // 入参只包含指定字段
+            const { zrfcid, canum, serviceName, readsteps, objkey } = inputData;
 
-            // 查询步骤配置
-            const steps = await this.getSteps(zrfcid);
-            if (steps.length === 0) {
-                throw new Error(`业务流程无步骤配置: ${zrfcid}`);
-            }
-
-            // 按步骤编号排序
-            steps.sort((a, b) => a.canum - b.canum);
-
-            // 执行每一步
-            let lastObjKey = null;
-            for (const step of steps) {
-                // 读取入参数据
-                const stepInputData = await this.readInputData(zrfcLogid, zrfcid, step);
-                
-                // 调用方法
-                const startTime = Date.now();
-                let executionResult;
-                try {
-                    executionResult = await this.invokeMethod(step.serviceName, stepInputData);
-                } catch (error) {
-                    executionResult = {
-                        code: 'E',
-                        message: error.message,
-                        objkey: lastObjKey
-                    };
-                }
-                const endTime = Date.now();
-                const executionTime = (endTime - startTime) / 1000;
-
-                // 保存日志
-                await this.saveLog(zrfcLogid, zrfcid, step.canum, stepInputData, executionResult, executionTime);
-
-                // 更新上一步对象号
-                lastObjKey = executionResult.objkey || lastObjKey;
-
-                // 如果执行失败，抛出异常
-                if (executionResult.code === 'E') {
-                    throw new Error(executionResult.message);
-                }
-            }
-
-            // 如果是异步调用，直接返回成功
-            if (processConfig.isAsync) {
+            // 读取 ProcessConfig 表获取业务表名
+            const businessTable = await this.getBusinessTable(zrfcid);
+            if (!businessTable) {
                 return {
-                    code: 'S',
-                    message: '调用成功',
-                    zrfcLogid
+                    code: 'E',
+                    message: `未找到业务流程配置: ${zrfcid}`,
+                    objkey: ''
                 };
             }
 
-            // 同步调用返回最终结果
+            // 读取业务表数据
+            const businessDataResult = await this.getBusinessData(businessTable, objkey);
+            if (businessDataResult.code === 'E') {
+                return {
+                    code: 'E',
+                    message: businessDataResult.message,
+                    objkey: ''
+                };
+            }
+            const businessDataList = businessDataResult.businessData;
+
+            // 构建物料凭证数据
+            const materialDocData = this.buildMaterialDocumentData(businessDataList);
+ 
+            // 使用 SAP Cloud SDK 的 executeHttpRequest 方法
+            console.log('开始获取 CSRF token...');
+            const csrfResult = await executeHttpRequest(
+                {
+                    destinationName: 'ES_API'
+                },
+                {
+                    method: 'GET',
+                    url: '/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader',
+                    headers: {
+                        'X-CSRF-Token': 'Fetch',
+                        'Accept': 'application/json'
+                    }
+                }
+            );
+            console.log('CSRF token 获取成功:', csrfResult.headers['x-csrf-token']);
+            console.log('CSRF 响应头:', csrfResult.headers);
+
+            // 提取 cookie
+            const cookies = csrfResult.headers['set-cookie'] || [];
+            console.log('获取到的 cookie:', cookies);
+
+            // 然后使用 token 发送 POST 请求
+            console.log('开始发送 POST 请求...');
+            console.log('请求数据:', JSON.stringify(materialDocData, null, 2));
+            
+            // 构建 cookie 字符串
+            const cookieString = cookies.map(cookie => cookie.split(';')[0]).join('; ');
+            console.log('发送的 cookie:', cookieString);
+            
+            const result = await executeHttpRequest(
+                {
+                    destinationName: 'ES_API'
+                },
+                {
+                    method: 'POST',
+                    url: '/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader',
+                    data: materialDocData,
+                    headers: {
+                        'X-CSRF-Token': csrfResult.headers['x-csrf-token'],
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'Cookie': cookieString,
+                        'sap-language': 'ZH'
+                    },
+                    validateStatus: function (status) {
+                        return true; // 接受所有状态码，以便查看详细的错误信息
+                    }
+                }
+            );
+            console.log('POST 请求状态码:', result.status);
+            console.log('POST 响应头:', result.headers);
+            // 只输出响应数据的前 500 个字符，避免日志过长
+            const responseDataStr = JSON.stringify(result.data);
+            console.log('POST 响应数据:', responseDataStr.length > 500 ? responseDataStr.substring(0, 500) + '...' : responseDataStr);
+
+            if (result.status >= 200 && result.status < 300) {
+                // 从响应数据中提取物料凭证号和年度
+                const docData = result.data.d || result.data;
+                const materialDocument = docData.MaterialDocument || '';
+                const materialDocumentYear = docData.MaterialDocumentYear || '';
+                // 拼接物料凭证号+年度
+                const objkey = materialDocument && materialDocumentYear ? `${materialDocument}${materialDocumentYear}` : '';
+                
+                return {
+                    code: 'S',
+                    message: '物料凭证创建成功',
+                    objkey: objkey
+                };
+            } else {
+                // 提取详细的错误信息
+                let errorMessage = `API 调用失败: ${result.status}`;
+                if (result.data && result.data.error) {
+                    const error = result.data.error;
+                    if (error.message && error.message.value) {
+                        errorMessage = error.message.value;
+                    } else if (error.message) {
+                        errorMessage = error.message;
+                    }
+                    if (error.code) {
+                        errorMessage = `${errorMessage} (${error.code})`;
+                    }
+                }
+                // 限制错误消息长度，避免超过系统限制
+                errorMessage = errorMessage.substring(0, 500);
+                return {
+                    code: 'E',
+                    message: errorMessage,
+                    objkey: ''
+                };
+            }
+        } catch (error) {
+            console.error('MaterialDocumentService 执行失败:', error);
+            console.error('错误响应状态码:', error.response ? error.response.status : 'No status');
+            // 只输出错误响应数据的前 500 个字符，避免日志过长
+            if (error.response && error.response.data) {
+                const errorDataStr = JSON.stringify(error.response.data);
+                console.error('错误响应数据:', errorDataStr.length > 500 ? errorDataStr.substring(0, 500) + '...' : errorDataStr);
+            }
+            // 提取详细的错误信息
+            let errorMessage = error.message ? error.message.substring(0, 500) : '未知错误';
+            if (error.response && error.response.data && error.response.data.error) {
+                const errorData = error.response.data.error;
+                if (errorData.message && errorData.message.value) {
+                    errorMessage = errorData.message.value;
+                } else if (errorData.message) {
+                    errorMessage = errorData.message;
+                }
+                if (errorData.code) {
+                    errorMessage = `${errorMessage} (${errorData.code})`;
+                }
+                // 限制错误消息长度，避免超过系统限制
+                errorMessage = errorMessage.substring(0, 500);
+            }
+            return {
+                code: 'E',
+                message: errorMessage,
+                objkey: ''
+            };
+        }
+    }
+
+    async getBusinessTable(zrfcid) {
+        const ProcessConfig = cds.entities['com.sap.zictm.ProcessConfig'];
+        const config = await cds.run(SELECT.one.from(ProcessConfig).where({ zrfcid }));
+        return config ? config.businessTable1 : null;
+    }
+
+    async getBusinessData(businessTable, objkey) {
+        try {
+            // 动态获取业务表实体
+            const BusinessEntity = cds.entities[businessTable];
+            if (!BusinessEntity) {
+                return {
+                    code: 'E',
+                    message: `业务表不存在: ${businessTable}`,
+                    businessData: []
+                };
+            }
+
+            // 统一使用 zrfc_logid 字段查询业务数据，返回所有记录
+            const businessData = await cds.run(SELECT.from(BusinessEntity).where({ zrfc_logid: objkey }));
+
+            if (!businessData || businessData.length === 0) {
+                return {
+                    code: 'E',
+                    message: `未找到业务数据: ${objkey}`,
+                    businessData: []
+                };
+            }
+
             return {
                 code: 'S',
-                message: '执行成功',
-                zrfcLogid
+                message: '获取业务数据成功',
+                businessData
             };
         } catch (error) {
-            // 保存错误日志
-            await this.saveLog(zrfcLogid, zrfcid, '0', inputData, {
-                code: 'E',
-                message: error.message
-            }, 0);
-
+            console.error('获取业务数据失败:', error);
             return {
                 code: 'E',
-                message: error.message,
-                zrfcLogid
+                message: error.message || '获取业务数据失败',
+                businessData: []
             };
-        } finally {
-            // 关闭数据库事务
-            await this.db.commit();
         }
     }
 
-    /**
-     * 获取业务流程配置
-     * @param {string} zrfcid - 业务流程ID
-     * @returns {Promise<Object>} 业务流程配置
-     */
-    async getProcessConfig(zrfcid) {
-        const ProcessConfig = cds.entities['com.sap.zictm.ProcessConfig'];
-        const result = await this.db.run(
-            SELECT.one.from(ProcessConfig).where({ zrfcid })
-        );
-        return result;
-    }
-
-    /**
-     * 获取步骤配置
-     * @param {string} zrfcid - 业务流程ID
-     * @returns {Promise<Array>} 步骤配置列表
-     */
-    async getSteps(zrfcid) {
-        const StepConfig = cds.entities['com.sap.zictm.StepConfig'];
-        const result = await this.db.run(
-            SELECT.from(StepConfig).where({ zrfcid })
-        );
-        return result;
-    }
-
-    /**
-     * 读取入参数据
-     * @param {string} zrfcLogid - 多步ID
-     * @param {string} zrfcid - 业务流程ID
-     * @param {Object} step - 步骤配置
-     * @returns {Promise<Object>} 入参数据
-     */
-    async readInputData(zrfcLogid, zrfcid, step) {
-        let readSteps = step.readsteps;
-        if (!readSteps) {
-            // 如果读取步骤编号为空，默认读取上一步骤的对象号
-            const prevStepNum = step.canum - 10;
-            readSteps = prevStepNum > 0 ? prevStepNum.toString() : null;
+    buildMaterialDocumentData(businessDataList) {
+        // 构建物料凭证头部数据（使用第一条记录的数据）
+        const firstBusinessData = businessDataList[0];
+        
+        let formattedPostingDate;
+        if (firstBusinessData.PostingDate) {
+            const dateObj = new Date(firstBusinessData.PostingDate);
+            // 格式：/Date(1234567890123)/
+            formattedPostingDate = `/Date(${dateObj.getTime()})/`;
+        } else {
+            formattedPostingDate = `/Date(${new Date().getTime()})/`;
         }
+        
+        const header = {
+            PostingDate: formattedPostingDate,
+            MaterialDocumentHeaderText: firstBusinessData.Customer || '',
+            ReferenceDocument: firstBusinessData.TransferOrder || '',
+            GoodsMovementCode: firstBusinessData.GoodsMovementCode || ''
+        };
 
-        if (readSteps) {
-            // 查询多步执行日志表，获取指定步骤的对象号
-            const MultistepLog = cds.entities['com.sap.zictm.MultistepLog'];
-            const log = await this.db.run(
-                SELECT.one.from(MultistepLog)
-                    .where({ zrfc_logid: zrfcLogid, zrfcid, canum: readSteps })
-            );
-            if (log) {
-                return JSON.parse(log.inputData || '{}');
+        // 构建物料凭证行项目（循环处理每条记录）
+        const items = [];
+        for (const businessData of businessDataList) {
+            if (businessData.Material || businessData.Product) {
+                const item = {
+                    Material: businessData.Material || '',
+                    Plant: businessData.Plant || '',
+                    StorageLocation: businessData.StorageLocation || '',
+                    IssuingOrReceivingStorageLoc: businessData.IssuingOrReceivingStorageLoc || '',
+                    GoodsMovementType: businessData.GoodsMovementType || '',
+                    QuantityInEntryUnit: businessData.QuantityInBaseUnit || 0,
+                    EntryUnit: 'PCS',
+                    Batch: '0000000017',
+                    MaterialDocumentItemText: businessData.TransferOrder && businessData.TransferOrderItem ? `${businessData.TransferOrder}-${businessData.TransferOrderItem}` : ''
+                };
+
+                items.push(item);
             }
         }
 
-        return {};
-    }
-
-    /**
-     * 调用服务
-     * @param {string} serviceName - 服务文件名
-     * @param {Object} inputData - 输入数据
-     * @returns {Promise<Object>} 调用结果
-     */
-    async invokeMethod(serviceName, inputData) {
-        try {
-            // 加载服务实例
-            const service = await this.loadService(serviceName);
-            
-            // 执行服务的主要方法
-            return await service.execute(inputData);
-        } catch (error) {
-            console.error('调用方法失败:', error);
-            throw error;
-        }
-    }
-
-    /**
-     * 加载服务实例
-     * @param {string} serviceName - 服务名称（文件名）
-     * @returns {Promise<Object>} 服务实例
-     */
-    async loadService(serviceName) {
-        // 检查缓存
-        if (this.serviceCache.has(serviceName)) {
-            return this.serviceCache.get(serviceName);
+        if (items.length > 0) {
+            header.to_MaterialDocumentItem = {
+                results: items
+            };
         }
 
-        // 构建服务文件路径
-        const serviceFile = path.join(this.servicesDir, `${serviceName}.js`);
-        
-        // 检查文件是否存在
-        if (!fs.existsSync(serviceFile)) {
-            throw new Error(`服务文件不存在: ${serviceFile}`);
-        }
-
-        // 加载服务模块
-        const ServiceClass = require(serviceFile);
-        
-        // 实例化服务
-        const service = new ServiceClass();
-        
-        // 检查是否有execute方法
-        if (typeof service.execute !== 'function') {
-            throw new Error(`服务文件 ${serviceName}.js 缺少execute方法`);
-        }
-        
-        // 缓存服务实例
-        this.serviceCache.set(serviceName, service);
-        
-        return service;
-    }
-
-    /**
-     * 保存日志
-     * @param {string} zrfcLogid - 多步ID
-     * @param {string} zrfcid - 业务流程ID
-     * @param {number} canum - 步骤编号
-     * @param {Object} inputData - 输入数据
-     * @param {Object} executionResult - 执行结果
-     * @param {number} executionTime - 执行时间
-     */
-    async saveLog(zrfcLogid, zrfcid, canum, inputData, executionResult, executionTime) {
-        const MultistepLog = cds.entities['com.sap.zictm.MultistepLog'];
-        
-        // 检查日志是否已存在
-        const existingLog = await this.db.run(
-            SELECT.one.from(MultistepLog)
-                .where({ zrfc_logid: zrfcLogid, zrfcid, canum: canum.toString() })
-        );
-
-        if (existingLog) {
-            // 如果日志已存在，更新消息（拼接）
-            const updatedMessage = existingLog.message ? 
-                `${existingLog.message}; ${executionResult.message}` : 
-                executionResult.message;
-            
-            await this.db.run(
-                UPDATE(MultistepLog)
-                    .set({
-                        inputData: JSON.stringify(inputData),
-                        code: executionResult.code,
-                        message: updatedMessage,
-                        objkey: executionResult.objkey,
-                        executionTime,
-                        modifiedAt: new Date(),
-                        modifiedBy: 'SYSTEM'
-                    })
-                    .where({ zrfc_logid: zrfcLogid, zrfcid, canum: canum.toString() })
-            );
-        } else {
-            // 如果日志不存在，插入新记录
-            await this.db.run(
-                INSERT.into(MultistepLog).entries({
-                    zrfc_logid: zrfcLogid,
-                    zrfcid,
-                    canum: canum.toString(),
-                    inputData: JSON.stringify(inputData),
-                    code: executionResult.code,
-                    message: executionResult.message,
-                    objkey: executionResult.objkey,
-                    executionTime,
-                    createdAt: new Date(),
-                    createdBy: 'SYSTEM',
-                    modifiedAt: new Date(),
-                    modifiedBy: 'SYSTEM'
-                })
-            );
-        }
+        return header;
     }
 }
 
-module.exports = MultiStepProcessor;
+module.exports = MaterialDocumentService;

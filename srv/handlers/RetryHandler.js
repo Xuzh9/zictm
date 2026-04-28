@@ -74,7 +74,7 @@ class RetryHandler {
                 const executionTime = (endTime - startTime) / 1000;
 
                 // 保存日志
-                await this.saveLog(zrfcLogid, zrfcid, step.canum, stepInputData, executionResult, executionTime);
+                await this.saveLog(zrfcLogid, zrfcid, step.canum, executionResult, executionTime);
 
                 // 更新上一步对象号
                 lastObjKey = executionResult.objkey || lastObjKey;
@@ -93,7 +93,7 @@ class RetryHandler {
             };
         } catch (error) {
             // 保存错误日志
-            await this.saveLog(zrfcLogid, '', '0', inputData, {
+            await this.saveLog(zrfcLogid, '', '0', {
                 code: 'E',
                 message: error.message
             }, 0);
@@ -158,6 +158,8 @@ class RetryHandler {
      */
     async readInputData(zrfcLogid, zrfcid, step) {
         let readSteps = step.readsteps;
+        let objkey = null;
+        
         if (!readSteps) {
             // 如果读取步骤编号为空，默认读取上一步骤的对象号
             const prevStepNum = step.canum - 10;
@@ -172,11 +174,19 @@ class RetryHandler {
                     .where({ zrfc_logid: zrfcLogid, zrfcid, canum: readSteps })
             );
             if (log) {
-                return JSON.parse(log.inputData || '{}');
+                objkey = log.objkey;
             }
         }
 
-        return {};
+        // 构建标准入参格式
+        return {
+            zrfcid,
+            canum: step.canum,
+            description: step.description,
+            serviceName: step.serviceName,
+            readsteps: step.readsteps,
+            objkey
+        };
     }
 
     /**
@@ -188,7 +198,7 @@ class RetryHandler {
      * @param {Object} executionResult - 执行结果
      * @param {number} executionTime - 执行时间
      */
-    async saveLog(zrfcLogid, zrfcid, canum, inputData, executionResult, executionTime) {
+    async saveLog(zrfcLogid, zrfcid, canum, executionResult, executionTime) {
         const MultistepLog = cds.entities['com.sap.zictm.MultistepLog'];
         
         // 检查日志是否已存在
@@ -206,7 +216,6 @@ class RetryHandler {
             await this.db.run(
                 UPDATE(MultistepLog)
                     .set({
-                        inputData: JSON.stringify(inputData),
                         code: executionResult.code,
                         message: updatedMessage,
                         objkey: executionResult.objkey,
@@ -223,7 +232,6 @@ class RetryHandler {
                     zrfc_logid: zrfcLogid,
                     zrfcid,
                     canum: canum.toString(),
-                    inputData: JSON.stringify(inputData),
                     code: executionResult.code,
                     message: executionResult.message,
                     objkey: executionResult.objkey,

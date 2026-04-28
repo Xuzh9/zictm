@@ -61,12 +61,31 @@ module.exports = cds.service.impl(async function () {
     await INSERT.into(Transfer).entries(data);
 
     // --------------------------
+    // 调用 MultiStepInvoker 处理多步流程
+    // --------------------------
+    const MultiStepInvoker = require('./handlers/MultiStepInvoker');
+    const invoker = new MultiStepInvoker();
+    
+    // 只调用一次 MultiStepInvoker，处理整个批处理
+    let invokerResult = null;
+    if (data.length > 0) {
+      invokerResult = await invoker.process('Transfer', data);
+    }
+
+    // --------------------------
     // 返回创建成功的数据
     // --------------------------
-    return {
-      code: 200,
-      message: "推送成功",
+    const result = {
+      code: invokerResult.code === 'S' ? 200 : 400,
+      message: invokerResult.message ? invokerResult.message.substring(0, 500) : '推送成功'
     };
+    
+    // 只有同步模式且 objkey 有值时才添加 objkey 字段
+    if (invokerResult.objkey) {
+      result.objkey = invokerResult.objkey;
+    }
+    
+    return result;
   });
   //收付款单
   this.on('PrCreate', async (req) => {

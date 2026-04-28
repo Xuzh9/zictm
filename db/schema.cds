@@ -43,10 +43,9 @@ entity MultistepLog {
     key zrfc_logid : UUID;           // 多步ID
     key zrfcid     : String(10);     // 业务流程ID
     key canum      : String(10);     // 步骤编号（如10、20、30）
-    inputData      : LargeString;    // 入参数据，JSON格式
     code           : String(2);      // 消息状态(S成功/E失败)
     message        : String(255);    // 消息文本
-    objkey         : String(20);     //对象号
+    objkey         : String(20);     // 对象号
     executionTime  : Decimal(10,2);  // 执行时间（秒）
 }
 
@@ -95,7 +94,7 @@ entity Transfer {
     key TransferOrderItem        : String(6);          // 调拨单行项目
     PostingDate                  : Date;               // 过账日期
     GoodsMovementCode            : String(3);          // 移动类型代码
-    Customer                     : String(10);         // 客户
+    Customer                     : String(20);         // 客户
     Material                     : String(40);         // 物料编号
     Plant                        : String(4);          // 发出工厂
     StorageLocation              : String(4);          // 库存地点
