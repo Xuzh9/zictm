@@ -6,7 +6,7 @@
     "node": "20.x"
   },
   "dependencies": {
-    "@cap-js/hana": "^2",
+    "@cap-js/hana": "^2.7.1",
     "@sap-cloud-sdk/connectivity": "^3.26.4",
     "@sap-cloud-sdk/http-client": "^3.26.4",
     "@sap-cloud-sdk/odata-v2": "^4.6.0",
@@ -25,33 +25,24 @@
     "build:mta": "mbt build --mtar archive",
     "deploy": "cf deploy mta_archives/archive.mtar --retries 1",
     "watch-mpt": "cds watch --open mpt/index.html?sap-ui-xx-viewCache=false --livereload false",
-    "watch-multi-step": "cds watch --open multistep/index.html?sap-ui-xx-viewCache=false --livereload false"
+    "watch-multi-step": "cds watch --open multistep/index.html?sap-ui-xx-viewCache=false --livereload false",
+    "watch-multi-log": "cds watch --open multilog/index.html?sap-ui-xx-viewCache=false --livereload false",
+    "watch-multi-log-hybrid": "cds watch --profile hybrid --open multilog/index.html?sap-ui-xx-viewCache=false --livereload false"
   },
   "cds": {
     "requires": {
       "db": "hana",
       "auth": {
-        "kind": "xsuaa"
-      },
-      "API_PRODUCT_SRV": {
-        "kind": "odata-v2",
-        "model": "srv/external/API_PRODUCT_SRV",
-        "credentials": {
-          "destination": "ES_API",
-          "requestTimeout": 30000
-        }
-      },
-      "API_MATERIAL_DOCUMENT_SRV": {
-        "kind": "odata-v2",
-        "model": "srv/external/API_MATERIAL_DOCUMENT_SRV",
-        "credentials": {
-          "destination": "ES_API",
-          "requestTimeout": 30000
-        }
+        "kind": "mocked"
       }
     },
     "server": {
       "welcome": true
+    },
+    "services": {
+      "MultistepLogService": {
+        "path": "/odata/v4/multistep-log"
+      }
     }
   },
   "workspaces": [
@@ -59,7 +50,10 @@
   ],
   "sapux": [
     "app/mpt",
-    "app/mpt",
-    "app/multi-step"
-  ]
+    "app/multi-step",
+    "app/multi-log"
+  ],
+  "devDependencies": {
+    "cds-plugin-ui5": "^0.13.0"
+  }
 }

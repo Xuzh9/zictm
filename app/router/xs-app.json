@@ -19,6 +19,12 @@
       "localDir": ".",
       "authenticationType": "xsuaa",
       "csrfProtection": false
+    },
+    {
+      "source": "^/multi-log/(.*)$",
+      "localDir": ".",
+      "authenticationType": "xsuaa",
+      "csrfProtection": false
     }
   ]
 }

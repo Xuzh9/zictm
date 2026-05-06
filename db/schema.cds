@@ -5,6 +5,11 @@ type PriceDirection : String(1) enum {
     PRICE_REVERSE @title: '销售价格逆向' = 'B';
 };
 
+type paymentType : String(2) enum {
+    Income  @title: '收入' = '01';
+    Expense @title: '支出' = '02';
+};
+
 // 业务流程配置表
 entity ProcessConfig {
     key zrfcid     : String(10);      // 业务流程ID
@@ -46,7 +51,8 @@ entity MultistepLog {
     code           : String(2);      // 消息状态(S成功/E失败)
     message        : String(255);    // 消息文本
     objkey         : String(20);     // 对象号
-    executionTime  : Decimal(10,2);  // 执行时间（秒）
+    executionAt    : Timestamp;      // 执行时间
+    executionTime  : Decimal(10,2);  // 运行时间（秒）
 }
 
 // 多方交易类型配置表
@@ -90,7 +96,7 @@ entity MPTStepConfig {
 
 //调拨单
 entity Transfer {
-    key TransferOrder            : String(10);         // 调拨单
+    key TransferOrder            : String(16);         // 调拨单
     key TransferOrderItem        : String(6);          // 调拨单行项目
     PostingDate                  : Date;               // 过账日期
     GoodsMovementCode            : String(3);          // 移动类型代码
@@ -107,7 +113,7 @@ entity Transfer {
 
 //销售出库单
 entity OutboundDelivery{
-    key SalesOrder           : String(10);         // 销售出库单号
+    key SalesOrder           : String(16);         // 销售出库单号
     key SalesOrderItem       : String(6);          // 销售出库单行号
     SalesOrganization        : String(4);          // 销售组织
     SalesOrderType           : String(4);          // 销售订单类型
@@ -130,16 +136,14 @@ entity OutboundDelivery{
 
 //收付款单
 entity PaymentReceipt {
-    key paymentReceiptNo        : String(20);     // 单据编号  
+    key paymentReceiptNo        : String(16);     // 单据编号  
     key paymentReceiptNoItem    : String(6);      // 单据行号    
     settlementOrganization      : String(4);      // 结算组织
     salesOrganization           : String(4);      // 销售组织
     procurementOrganization     : String(4);      // 采购组织
     paymentOrganization         : String(4);      // 付款组织
     receivingOrganization       : String(32);     // 收款组织
-    procurementDepartment       : String(32);     // 采购部门
-    salesDepartment             : String(32);     // 销售部门
-    expenseResponsibleDepartment: String(32);     // 费用承担部门
+    expenseResponsibleDepartment: String(32);     // 部门
     currency                    : String(3) ;     // 币别        
     businessDate                : Date;           // 业务日期
     documentType                : String(20);     // 单据类型
@@ -157,6 +161,8 @@ entity PaymentReceipt {
     generalLedgerAccountNonCash : String(20) ;    // 总账科目（非资金科目）
     expenseItem                 : String(40);     // 费用项目     
     itemRemark                  : String(50);     // 明细备注   
+    documentName                : String(10);     // 单据名称
+    incomeExpenseType           : paymentType;    // 收支类型
     zrfcid                      : String(10);     // 业务流程ID
     zrfc_logid                  : UUID;           // 多步ID
 }
@@ -210,28 +216,28 @@ entity SalesOrderCreate {
     YY1_FD_FNSKU                  : String(20);    // FNSKU/快递袋编码
     YY1_FD_SKU                    : String(30);    // 客户SKU
     ZB01_Value                    : Decimal(15,2); // ZB01价格
-    ZB01_CurrencyCode             : Integer;       // ZB01价格单位
+    ZB01_CurrencyCode             : String(3);     // ZB01价格单位
     ZB01_UnitOfMeasure            : Integer;       // ZB01数量单位
     ZB02_Value                    : Decimal(15,2); // ZB02价格
-    ZB02_CurrencyCode             : Integer;       // ZB02价格单位
+    ZB02_CurrencyCode             : String(3);     // ZB02价格单位
     ZB02_UnitOfMeasure            : Integer;       // ZB02数量单位
     ZB03_Value                    : Decimal(15,2); // ZB03价格
-    ZB03_CurrencyCode             : Integer;       // ZB03价格单位
+    ZB03_CurrencyCode             : String(3);     // ZB03价格单位
     ZB03_UnitOfMeasure            : Integer;       // ZB03数量单位
     ZB04_Value                    : Decimal(15,2); // ZB04价格
-    ZB04_CurrencyCode             : Integer;       // ZB04价格单位
+    ZB04_CurrencyCode             : String(3);     // ZB04价格单位
     ZB04_UnitOfMeasure            : Integer;       // ZB04数量单位
     ZC01_Value                    : Decimal(15,2); // ZC01价格
-    ZC01_CurrencyCode             : Integer;       // ZC01价格单位
+    ZC01_CurrencyCode             : String(3);     // ZC01价格单位
     ZC01_UnitOfMeasure            : Integer;       // ZC01数量单位
     ZC02_Value                    : Decimal(15,2); // ZC02价格
-    ZC02_CurrencyCode             : Integer;       // ZC02价格单位
+    ZC02_CurrencyCode             : String(3);     // ZC02价格单位
     ZC02_UnitOfMeasure            : Integer;       // ZC02数量单位
     ZP00_Value                    : Decimal(15,2); // ZP00价格
-    ZP00_CurrencyCode             : Integer;       // ZP00价格单位
+    ZP00_CurrencyCode             : String(3);     // ZP00价格单位
     ZP00_UnitOfMeasure            : Integer;       // ZP00数量单位
     PartnerFunction               : String(5);     // 合作伙伴功能
-    Customer                      : String(20);    // 合作伙伴编号
+    Customer                      : String(10);    // 合作伙伴编号
     ConfirmedDeliveryDate         : Date;          // 交货日期
     ScheduleLineOrderQuantity     : Decimal(15,3); // 订单确认数量
     zrfcid                        : String(10);    // 业务流程ID
@@ -249,25 +255,25 @@ entity SalesOrderChange {
     RequestedQuantityUnit         : String(3);      // 单位
     ProductionPlant               : String(4);      // 工厂
     ZB01_Value                    : Decimal(15,2);  // ZB01价格
-    ZB01_CurrencyCode             : Integer;        // ZB01价格单位
+    ZB01_CurrencyCode             : String(3);      // ZB01价格单位
     ZB01_UnitOfMeasure            : Integer;        // ZB01数量单位
     ZB02_Value                    : Decimal(15,2);  // ZB02价格
-    ZB02_CurrencyCode             : Integer;        // ZB02价格单位
+    ZB02_CurrencyCode             : String(3);      // ZB02价格单位
     ZB02_UnitOfMeasure            : Integer;        // ZB02数量单位
     ZB03_Value                    : Decimal(15,2);  // ZB03价格
-    ZB03_CurrencyCode             : Integer;        // ZB03价格单位
+    ZB03_CurrencyCode             : String(3);      // ZB03价格单位
     ZB03_UnitOfMeasure            : Integer;        // ZB03数量单位
     ZB04_Value                    : Decimal(15,2);  // ZB04价格
-    ZB04_CurrencyCode             : Integer;        // ZB04价格单位
+    ZB04_CurrencyCode             : String(3);      // ZB04价格单位
     ZB04_UnitOfMeasure            : Integer;        // ZB04数量单位
     ZC01_Value                    : Decimal(15,2);  // ZC01价格
-    ZC01_CurrencyCode             : Integer;        // ZC01价格单位
+    ZC01_CurrencyCode             : String(3);      // ZC01价格单位
     ZC01_UnitOfMeasure            : Integer;        // ZC01数量单位
     ZC02_Value                    : Decimal(15,2);  // ZC02价格
-    ZC02_CurrencyCode             : Integer;        // ZC02价格单位
+    ZC02_CurrencyCode             : String(3);      // ZC02价格单位
     ZC02_UnitOfMeasure            : Integer;        // ZC02数量单位
     ZP00_Value                    : Decimal(15,2);  // ZP00价格
-    ZP00_CurrencyCode             : Integer;        // ZP00价格单位
+    ZP00_CurrencyCode             : String(3);      // ZP00价格单位
     ZP00_UnitOfMeasure            : Integer;        // ZP00数量单位
     YY1_FD_FNSKU                  : String(20);     // FNSKU/快递袋编码
     YY1_FD_SKU                    : String(30);     // 客户SKU

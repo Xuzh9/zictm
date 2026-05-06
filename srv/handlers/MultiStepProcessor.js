@@ -6,7 +6,6 @@ class MultiStepProcessor {
     constructor() {
         this.serviceCache = new Map();
         this.servicesDir = path.join(__dirname, '../services');
-        this.db = cds.transaction();
     }
 
     /**
@@ -40,7 +39,8 @@ class MultiStepProcessor {
                 // 读取入参数据
                 const stepInputData = await this.readInputData(zrfcLogid, zrfcid, step);
                 
-                // 调用方法
+                // 记录开始执行时间戳
+                const executionAt = new Date();
                 const startTime = Date.now();
                 let executionResult;
                 try {
@@ -63,7 +63,7 @@ class MultiStepProcessor {
                 await this.saveLog(zrfcLogid, zrfcid, step.canum, {
                     ...executionResult,
                     message: logMessage
-                }, executionTime);
+                }, executionTime, executionAt);
 
                 // 更新上一步对象号、消息和代码
                 lastObjKey = executionResult.objkey || lastObjKey;
@@ -90,7 +90,7 @@ class MultiStepProcessor {
             await this.saveLog(zrfcLogid, zrfcid, '0', {
                 code: 'E',
                 message: errorMessage
-            }, 0);
+            }, 0, new Date());
 
             return {
                 code: 'E',
@@ -99,8 +99,7 @@ class MultiStepProcessor {
                 objkey: lastObjKey
             };
         } finally {
-            // 关闭数据库事务
-            await this.db.commit();
+            // 事务由 CAP 框架自动管理
         }
     }
 
@@ -111,7 +110,7 @@ class MultiStepProcessor {
      */
     async getProcessConfig(zrfcid) {
         const ProcessConfig = cds.entities['com.sap.zictm.ProcessConfig'];
-        const result = await this.db.run(
+        const result = await cds.run(
             SELECT.one.from(ProcessConfig).where({ zrfcid })
         );
         return result;
@@ -124,7 +123,7 @@ class MultiStepProcessor {
      */
     async getSteps(zrfcid) {
         const StepConfig = cds.entities['com.sap.zictm.StepConfig'];
-        const result = await this.db.run(
+        const result = await cds.run(
             SELECT.from(StepConfig).where({ zrfcid })
         );
         return result;
@@ -150,7 +149,7 @@ class MultiStepProcessor {
         if (readSteps) {
             // 查询多步执行日志表，获取指定步骤的对象号
             const MultistepLog = cds.entities['com.sap.zictm.MultistepLog'];
-            const log = await this.db.run(
+            const log = await cds.run(
                 SELECT.one.from(MultistepLog)
                     .where({ zrfc_logid: zrfcLogid, zrfcid, canum: readSteps })
             );
@@ -162,6 +161,7 @@ class MultiStepProcessor {
         // 构建标准入参格式
         return {
             zrfcid,
+            zrfcLogid,
             canum: step.canum,
             description: step.description,
             serviceName: step.serviceName,
@@ -236,26 +236,28 @@ class MultiStepProcessor {
      * @param {string} canum - 步骤编号
      * @param {Object} inputData - 输入数据
      * @param {Object} executionResult - 执行结果
-     * @param {number} executionTime - 执行时间
+     * @param {number} executionTime - 执行时间（秒）
+     * @param {Date} executionAt - 开始执行时间戳
      */
-    async saveLog(zrfcLogid, zrfcid, canum, executionResult, executionTime) {
+    async saveLog(zrfcLogid, zrfcid, canum, executionResult, executionTime, executionAt) {
         const MultistepLog = cds.entities['com.sap.zictm.MultistepLog'];
         
         // 检查日志是否已存在
-        const existingLog = await this.db.run(
+        const existingLog = await cds.run(
             SELECT.one.from(MultistepLog)
                 .where({ zrfc_logid: zrfcLogid, zrfcid, canum: canum.toString() })
         );
 
         if (existingLog) {
             // 如果日志已存在，更新记录
-            await this.db.run(
+            await cds.run(
                 UPDATE(MultistepLog)
                     .set({
                         code: executionResult.code,
                         message: executionResult.message,
                         objkey: executionResult.objkey,
                         executionTime,
+                        executionAt,
                         modifiedAt: new Date(),
                         modifiedBy: 'SYSTEM'
                     })
@@ -263,7 +265,7 @@ class MultiStepProcessor {
             );
         } else {
             // 如果日志不存在，插入新记录
-            await this.db.run(
+            await cds.run(
                 INSERT.into(MultistepLog).entries({
                     zrfc_logid: zrfcLogid,
                     zrfcid,
@@ -272,6 +274,7 @@ class MultiStepProcessor {
                     message: executionResult.message,
                     objkey: executionResult.objkey,
                     executionTime,
+                    executionAt,
                     createdAt: new Date(),
                     createdBy: 'SYSTEM',
                     modifiedAt: new Date(),

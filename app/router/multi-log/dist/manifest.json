@@ -93,8 +93,15 @@
 		"resources": {
 			"css": []
 		},
+		"controllerExtensions": {
+			"sap.fe.templates.ListReport.ListReportController": {
+				"controllerName": "multilog.ext.controller.ListReportExtension"
+			}
+		},
 		"routing": {
-			"config": {},
+			"config": {
+				"async": true
+			},
 			"routes": [
 				{
 					"pattern": ":?query:",
@@ -112,6 +119,7 @@
 					"type": "Component",
 					"id": "MultistepLogList",
 					"name": "sap.fe.templates.ListReport",
+					"controlAggregation": "pages",
 					"options": {
 						"settings": {
 							"contextPath": "/MultistepLog",
@@ -138,6 +146,7 @@
 					"type": "Component",
 					"id": "MultistepLogObjectPage",
 					"name": "sap.fe.templates.ObjectPage",
+					"controlAggregation": "pages",
 					"options": {
 						"settings": {
 							"editableHeaderContent": false,

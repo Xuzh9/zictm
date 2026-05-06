@@ -10,21 +10,16 @@ class RetryHandler {
     /**
      * 重处理失败的业务流程
      * @param {string} zrfcLogid - 多步ID
-     * @param {string} inputData - 输入数据
      * @returns {Promise<Object>} 执行结果
      */
-    async retry(zrfcLogid, inputData) {
+    async retry(zrfcLogid) {
         try {
             // 查询多步执行日志，找到失败的步骤
             const failedSteps = await this.getFailedSteps(zrfcLogid);
             
             if (failedSteps.length === 0) {
-                // 没有失败步骤，停止执行
-                return {
-                    code: 'S',
-                    message: '没有失败步骤，无需重处理',
-                    zrfcLogid
-                };
+                // 没有失败步骤，返回错误
+                throw new Error('没有失败步骤，无法重推');
             }
 
             // 找到最早的失败步骤

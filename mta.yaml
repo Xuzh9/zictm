@@ -18,8 +18,8 @@ modules:
       instances: 1
       buildpack: nodejs_buildpack
       command: node node_modules/@sap/cds-dk/bin/cds.js run
-      disk-quota: 1024M
-      memory: 512M
+      disk-quota: 2048M
+      memory: 256M
       routes:
       - route: "zictm-srv.btp.sunlu3d.cn"
       idle-routes:
@@ -51,7 +51,7 @@ modules:
     parameters:
       buildpack: nodejs_buildpack
       keep-existing-routes: true
-      disk-quota: 1024M
+      disk-quota: 2048M
       memory: 256M
       routes:
       - route: "zictm.btp.sunlu3d.cn"

@@ -56,33 +56,38 @@ module.exports = cds.service.impl(async function () {
     }
 
     // --------------------------
-    // 校验通过，执行批量插入
+    // 检查数据是否为空
     // --------------------------
-    await INSERT.into(Transfer).entries(data);
+    if (!data || data.length === 0) {
+      req.error(400, '传入的数据为空');
+      return req.reject();
+    }
 
     // --------------------------
     // 调用 MultiStepInvoker 处理多步流程
+    // zrfc_logid 和 zrfcid 的生成以及业务表的插入由 MultiStepInvoker 负责
     // --------------------------
     const MultiStepInvoker = require('./handlers/MultiStepInvoker');
     const invoker = new MultiStepInvoker();
     
-    // 只调用一次 MultiStepInvoker，处理整个批处理
-    let invokerResult = null;
-    if (data.length > 0) {
-      invokerResult = await invoker.process('Transfer', data);
-    }
+    // 调用 MultiStepInvoker，传入业务流程ID和原始数据
+    const invokerResult = await invoker.process('MM01', data);
 
     // --------------------------
     // 返回创建成功的数据
     // --------------------------
-    const result = {
-      code: invokerResult.code === 'S' ? 200 : 400,
-      message: invokerResult.message ? invokerResult.message.substring(0, 500) : '推送成功'
-    };
-    
-    // 只有同步模式且 objkey 有值时才添加 objkey 字段
-    if (invokerResult.objkey) {
-      result.objkey = invokerResult.objkey;
+    const result = {};
+    if (invokerResult) {
+      result.code = invokerResult.code === 'S' ? 200 : 400;
+      result.message = invokerResult.message ? invokerResult.message.substring(0, 500) : '处理成功';
+      result.zrfc_logid = invokerResult.zrfcLogid;
+      result.zrfcid = invokerResult.zrfcid;
+      if (invokerResult.objkey) {
+        result.objkey = invokerResult.objkey;
+      }
+    } else {
+      result.code = 200;
+      result.message = '没有数据需要处理';
     }
     
     return result;

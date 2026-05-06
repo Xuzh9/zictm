@@ -1,0 +1,2 @@
+sap.ui.define(["sap/fe/test/JourneyRunner","multilog/test/integration/pages/MultistepLogList","multilog/test/integration/pages/MultistepLogObjectPage"],function(t,e,i){"use strict";var s=new t({launchUrl:sap.ui.require.toUrl("multilog")+"/test/flp.html#app-preview",pages:{onTheMultistepLogList:e,onTheMultistepLogObjectPage:i},async:true});return s});
+//# sourceMappingURL=JourneyRunner.js.map

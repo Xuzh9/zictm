@@ -15,7 +15,10 @@ class MaterialDocumentService {
     async execute(inputData) {
         try {
             // 入参只包含指定字段
-            const { zrfcid, canum, serviceName, readsteps, objkey } = inputData;
+            const { zrfcid, canum, serviceName, readsteps, objkey, zrfcLogid } = inputData;
+            
+            // 保存 zrfcLogid 到实例变量，供后续查询使用
+            this.zrfcLogid = zrfcLogid;
 
             // 读取 ProcessConfig 表获取业务表名
             const businessTable = await this.getBusinessTable(zrfcid);
@@ -59,7 +62,7 @@ class MaterialDocumentService {
             console.log('CSRF token 获取成功:', csrfResult.headers['x-csrf-token']);
             console.log('CSRF 响应头:', csrfResult.headers);
 
-            // 提取 cookie
+            // 提取 cookie（需要在 POST 请求中带上）
             const cookies = csrfResult.headers['set-cookie'] || [];
             console.log('获取到的 cookie:', cookies);
 
@@ -181,13 +184,61 @@ class MaterialDocumentService {
                 };
             }
 
-            // 统一使用 zrfc_logid 字段查询业务数据，返回所有记录
-            const businessData = await cds.run(SELECT.from(BusinessEntity).where({ zrfc_logid: objkey }));
+            // 根据不同业务表使用不同的查询条件
+            let businessData;
+            console.log(`查询业务数据: businessTable=${businessTable}, objkey=${objkey}, zrfcLogid=${this.zrfcLogid}`);
+            
+            switch (businessTable) {
+                case 'Transfer':
+                    // Transfer 表优先使用 TransferOrder 作为查询条件，若为空则使用 zrfc_logid
+                    if (objkey) {
+                        businessData = await cds.run(SELECT.from(BusinessEntity).where({ TransferOrder: objkey }));
+                    } else {
+                        // 第一步执行时 objkey 为空，使用 zrfc_logid 查询
+                        businessData = await cds.run(SELECT.from(BusinessEntity).where({ zrfc_logid: this.zrfcLogid }));
+                    }
+                    break;
+                case 'OutboundDelivery':
+                    // OutboundDelivery 表优先使用 DeliveryDocument 作为查询条件
+                    if (objkey) {
+                        businessData = await cds.run(SELECT.from(BusinessEntity).where({ DeliveryDocument: objkey }));
+                    } else {
+                        businessData = await cds.run(SELECT.from(BusinessEntity).where({ zrfc_logid: this.zrfcLogid }));
+                    }
+                    break;
+                case 'PaymentReceipt':
+                    // PaymentReceipt 表优先使用 PaymentDocument 作为查询条件
+                    if (objkey) {
+                        businessData = await cds.run(SELECT.from(BusinessEntity).where({ PaymentDocument: objkey }));
+                    } else {
+                        businessData = await cds.run(SELECT.from(BusinessEntity).where({ zrfc_logid: this.zrfcLogid }));
+                    }
+                    break;
+                case 'SalesOrder':
+                    // SalesOrder 表优先使用 SalesOrder 作为查询条件
+                    if (objkey) {
+                        businessData = await cds.run(SELECT.from(BusinessEntity).where({ SalesOrder: objkey }));
+                    } else {
+                        businessData = await cds.run(SELECT.from(BusinessEntity).where({ zrfc_logid: this.zrfcLogid }));
+                    }
+                    break;
+                case 'DeliveryActualInfo':
+                    // DeliveryActualInfo 表优先使用 DeliveryDocument 作为查询条件
+                    if (objkey) {
+                        businessData = await cds.run(SELECT.from(BusinessEntity).where({ DeliveryDocument: objkey }));
+                    } else {
+                        businessData = await cds.run(SELECT.from(BusinessEntity).where({ zrfc_logid: this.zrfcLogid }));
+                    }
+                    break;
+                default:
+                    // 默认使用 zrfc_logid 查询
+                    businessData = await cds.run(SELECT.from(BusinessEntity).where({ zrfc_logid: this.zrfcLogid }));
+            }
 
             if (!businessData || businessData.length === 0) {
                 return {
                     code: 'E',
-                    message: `未找到业务数据: ${objkey}`,
+                    message: `未找到业务数据: ${objkey || this.zrfcLogid}`,
                     businessData: []
                 };
             }
