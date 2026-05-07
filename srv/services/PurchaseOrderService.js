@@ -1,7 +1,7 @@
 const cds = require('@sap/cds');
 const { executeHttpRequest } = require('@sap-cloud-sdk/http-client');
 
-class MaterialDocumentService {
+class PurchaseOrderService {
     constructor() {
         this.zrfcLogid = null;
     }
@@ -14,10 +14,8 @@ class MaterialDocumentService {
 
     async execute(inputData) {
         try {
-            // 入参只包含指定字段
             const { zrfcid, canum, serviceName, readsteps, objkey, zrfcLogid } = inputData;
             
-            // 保存 zrfcLogid 到实例变量，供后续查询使用
             this.zrfcLogid = zrfcLogid;
 
             // 读取 ProcessConfig 表获取业务表名
@@ -41,29 +39,28 @@ class MaterialDocumentService {
             }
             const businessDataList = businessDataResult.businessData;
 
-            // 构建物料凭证数据
-            const materialDocData = this.buildMaterialDocumentData(businessDataList);
+            // 构建采购订单数据
+            const purchaseOrderData = this.buildPurchaseOrderData(businessDataList);
  
-            // 使用 SAP Cloud SDK 的 executeHttpRequest 方法获取 CSRF token
+            // 获取 CSRF token
             const csrfResult = await executeHttpRequest(
                 {
                     destinationName: 'ES_API'
                 },
                 {
                     method: 'GET',
-                    url: '/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader',
+                    url: '/sap/opu/odata4/sap/api_purchaseorder_2/srvd_a2x/sap/purchaseorder/0001/$metadata',
                     headers: {
                         'X-CSRF-Token': 'Fetch',
                         'Accept': 'application/json'
-                    },
+                    }
                 }
             );
 
-            // 提取 cookie（需要在 POST 请求中带上）
+            // 提取 cookie 和 CSRF token
             const cookies = csrfResult.headers['set-cookie'] || [];
-
-            // 构建 cookie 字符串
             const cookieString = cookies.map(cookie => cookie.split(';')[0]).join('; ');
+            const csrfToken = csrfResult.headers['x-csrf-token'];
             
             const result = await executeHttpRequest(
                 {
@@ -71,36 +68,31 @@ class MaterialDocumentService {
                 },
                 {
                     method: 'POST',
-                    url: '/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader',
-                    data: materialDocData,
+                    url: '/sap/opu/odata4/sap/api_purchaseorder_2/srvd_a2x/sap/purchaseorder/0001/PurchaseOrder',
+                    data: purchaseOrderData,
                     headers: {
-                        'X-CSRF-Token': csrfResult.headers['x-csrf-token'],
+                        'X-CSRF-Token': csrfToken,
                         'Content-Type': 'application/json',
                         'Accept': 'application/json',
                         'Cookie': cookieString,
                         'sap-language': 'ZH'
                     },
                     validateStatus: function (status) {
-                        return true; // 接受所有状态码，以便查看详细的错误信息
+                        return true; // 接受所有状态码
                     }
                 }
             );
 
             if (result.status >= 200 && result.status < 300) {
-                // 从响应数据中提取物料凭证号和年度
-                const docData = result.data.d || result.data;
-                const materialDocument = docData.MaterialDocument || '';
-                const materialDocumentYear = docData.MaterialDocumentYear || '';
-                // 拼接物料凭证号+年度
-                const objkey = materialDocument && materialDocumentYear ? `${materialDocument}${materialDocumentYear}` : '';
+                // OData V4 响应格式
+                const purchaseOrder = result.data.PurchaseOrder || '';
                 
                 return {
                     code: 'S',
-                    message: '物料凭证创建成功',
-                    objkey: objkey
+                    message: '采购订单创建成功',
+                    objkey: purchaseOrder
                 };
             } else {
-                // 提取详细的错误信息
                 let errorMessage = `API 调用失败: ${result.status}`;
                 if (result.data && result.data.error) {
                     const error = result.data.error;
@@ -112,8 +104,9 @@ class MaterialDocumentService {
                     if (error.code) {
                         errorMessage = `${errorMessage} (${error.code})`;
                     }
+                } else if (result.data && result.data.message) {
+                    errorMessage = result.data.message;
                 }
-                // 限制错误消息长度，避免超过系统限制
                 errorMessage = errorMessage.substring(0, 500);
                 return {
                     code: 'E',
@@ -122,8 +115,7 @@ class MaterialDocumentService {
                 };
             }
         } catch (error) {
-            console.error('MaterialDocumentService 执行失败:', error);
-            // 提取详细的错误信息
+            console.error('PurchaseOrderService 执行失败:', error);
             let errorMessage = error.message ? error.message.substring(0, 500) : '未知错误';
             if (error.response && error.response.data && error.response.data.error) {
                 const errorData = error.response.data.error;
@@ -135,7 +127,6 @@ class MaterialDocumentService {
                 if (errorData.code) {
                     errorMessage = `${errorMessage} (${errorData.code})`;
                 }
-                // 限制错误消息长度，避免超过系统限制
                 errorMessage = errorMessage.substring(0, 500);
             }
             return {
@@ -154,7 +145,6 @@ class MaterialDocumentService {
 
     async getBusinessData(businessTable, objkey) {
         try {
-            // 动态获取业务表实体
             const BusinessEntity = cds.entities[businessTable];
             if (!BusinessEntity) {
                 return {
@@ -164,53 +154,24 @@ class MaterialDocumentService {
                 };
             }
 
-            // 根据不同业务表使用不同的查询条件
             let businessData;
             
             switch (businessTable) {
-                case 'Transfer':
-                    // Transfer 表优先使用 TransferOrder 作为查询条件，若为空则使用 zrfc_logid
-                    if (objkey) {
-                        businessData = await cds.run(SELECT.from(BusinessEntity).where({ TransferOrder: objkey }));
-                    } else {
-                        // 第一步执行时 objkey 为空，使用 zrfc_logid 查询
-                        businessData = await cds.run(SELECT.from(BusinessEntity).where({ zrfc_logid: this.zrfcLogid }));
-                    }
-                    break;
-                case 'OutboundDelivery':
-                    // OutboundDelivery 表优先使用 DeliveryDocument 作为查询条件
-                    if (objkey) {
-                        businessData = await cds.run(SELECT.from(BusinessEntity).where({ DeliveryDocument: objkey }));
-                    } else {
-                        businessData = await cds.run(SELECT.from(BusinessEntity).where({ zrfc_logid: this.zrfcLogid }));
-                    }
-                    break;
-                case 'PaymentReceipt':
-                    // PaymentReceipt 表优先使用 PaymentDocument 作为查询条件
-                    if (objkey) {
-                        businessData = await cds.run(SELECT.from(BusinessEntity).where({ PaymentDocument: objkey }));
-                    } else {
-                        businessData = await cds.run(SELECT.from(BusinessEntity).where({ zrfc_logid: this.zrfcLogid }));
-                    }
-                    break;
-                case 'SalesOrder':
-                    // SalesOrder 表优先使用 SalesOrder 作为查询条件
+                case 'SalesOrderCreate':
                     if (objkey) {
                         businessData = await cds.run(SELECT.from(BusinessEntity).where({ SalesOrder: objkey }));
                     } else {
                         businessData = await cds.run(SELECT.from(BusinessEntity).where({ zrfc_logid: this.zrfcLogid }));
                     }
                     break;
-                case 'DeliveryActualInfo':
-                    // DeliveryActualInfo 表优先使用 DeliveryDocument 作为查询条件
+                case 'SalesOrderChange':
                     if (objkey) {
-                        businessData = await cds.run(SELECT.from(BusinessEntity).where({ DeliveryDocument: objkey }));
+                        businessData = await cds.run(SELECT.from(BusinessEntity).where({ SalesOrder: objkey }));
                     } else {
                         businessData = await cds.run(SELECT.from(BusinessEntity).where({ zrfc_logid: this.zrfcLogid }));
                     }
                     break;
                 default:
-                    // 默认使用 zrfc_logid 查询
                     businessData = await cds.run(SELECT.from(BusinessEntity).where({ zrfc_logid: this.zrfcLogid }));
             }
 
@@ -237,40 +198,32 @@ class MaterialDocumentService {
         }
     }
 
-    buildMaterialDocumentData(businessDataList) {
-        // 构建物料凭证头部数据（使用第一条记录的数据）
+    buildPurchaseOrderData(businessDataList) {
         const firstBusinessData = businessDataList[0];
         
-        let formattedPostingDate;
-        if (firstBusinessData.PostingDate) {
-            const dateObj = new Date(firstBusinessData.PostingDate);
-            // 格式：/Date(1234567890123)/
-            formattedPostingDate = `/Date(${dateObj.getTime()})/`;
-        } else {
-            formattedPostingDate = `/Date(${new Date().getTime()})/`;
-        }
-        
+        // OData V4 格式 - 使用 ISO 日期格式
         const header = {
-            PostingDate: formattedPostingDate,
-            MaterialDocumentHeaderText: firstBusinessData.Customer || '',
-            ReferenceDocument: firstBusinessData.TransferOrder || '',
-            GoodsMovementCode: firstBusinessData.GoodsMovementCode || ''
+            PurchaseOrderType: firstBusinessData.SalesOrderType || 'NB',
+            PurchasingOrganization: firstBusinessData.SalesOrganization || '',
+            PurchasingGroup: firstBusinessData.SalesGroup || '',
+            CompanyCode: firstBusinessData.OrganizationDivision || '',
+            Currency: firstBusinessData.TransactionCurrency || 'CNY',
+            DocumentDate: firstBusinessData.SalesOrderDate,
+            Supplier: firstBusinessData.Customer || ''
         };
 
-        // 构建物料凭证行项目（循环处理每条记录）
         const items = [];
         for (const businessData of businessDataList) {
             if (businessData.Material || businessData.Product) {
                 const item = {
-                    Material: businessData.Material || '',
-                    Plant: businessData.Plant || '',
-                    StorageLocation: businessData.StorageLocation || '',
-                    IssuingOrReceivingStorageLoc: businessData.IssuingOrReceivingStorageLoc || '',
-                    GoodsMovementType: businessData.GoodsMovementType || '',
-                    QuantityInEntryUnit: businessData.QuantityInBaseUnit || 0,
-                    EntryUnit: 'PCS',
-                    Batch: '0000000017',
-                    MaterialDocumentItemText: businessData.TransferOrder && businessData.TransferOrderItem ? `${businessData.TransferOrder}-${businessData.TransferOrderItem}` : ''
+                    PurchaseOrderItem: String(items.length + 10),
+                    Material: businessData.Material || businessData.Product || '',
+                    Plant: businessData.ProductionPlant || '',
+                    Quantity: businessData.RequestedQuantity || 0,
+                    OrderQuantityUnit: businessData.RequestedQuantityUnit || 'PCS',
+                    NetPriceAmount: businessData.ZP00_Value || 0,
+                    DocumentCurrency: businessData.ZP00_CurrencyCode || 'CNY',
+                    DeliveryDate: businessData.RequestedDeliveryDate || new Date().toISOString().split('T')[0]
                 };
 
                 items.push(item);
@@ -278,13 +231,11 @@ class MaterialDocumentService {
         }
 
         if (items.length > 0) {
-            header.to_MaterialDocumentItem = {
-                results: items
-            };
+            header.PurchaseOrderItem = items;
         }
 
         return header;
     }
 }
 
-module.exports = MaterialDocumentService;
+module.exports = PurchaseOrderService;

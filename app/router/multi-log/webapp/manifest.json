@@ -132,10 +132,6 @@
                                     "tableSettings": {
                                         "type": "ResponsiveTable"
                                     }
-                                },
-                                "action::retryStep": {
-                                    "enableOn": "selection",
-                                    "refreshBehavior": "force"
                                 }
                             }
                         }

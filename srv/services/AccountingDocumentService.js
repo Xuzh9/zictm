@@ -78,6 +78,9 @@ class AccountingDocumentService {
                 const responseDataStr = typeof result.data === 'string' ? result.data : JSON.stringify(result.data);
                 const objkey = this.extractAccountingDocumentNumber(responseDataStr);
                 
+                // 调试日志：确认提取的凭证号
+                console.log(`提取的会计凭证号 objkey: "${objkey}"`);
+                
                 return {
                     code: 'S',
                     message: '会计凭证创建成功',
@@ -182,49 +185,36 @@ class AccountingDocumentService {
         const firstBusinessData = businessDataList[0];
         const currentDate = new Date();
         
-        // 获取业务日期 (YYYY-MM-DD 格式)
-        let formattedbusinessDate;
-        if (firstBusinessData.businessDate) {
-            // 业务日期格式: 2026-04-27T09:00:00Z，直接截取前10位
-            const businessDateStr = String(firstBusinessData.businessDate);
-            formattedbusinessDate = businessDateStr.substring(0, 10);
-        } else {
-            formattedbusinessDate = currentDate.toISOString().substring(0, 10);
-        }
+        // 业务日期已为 YYYY-MM-DD 格式，直接使用；若无则使用当前日期
+        const businessDate = firstBusinessData.businessDate || currentDate.toISOString().substring(0, 10);
         
         // 构建会计凭证行项目 - 每条业务数据生成客户行 + 费用行
         let lineItems = '';
         let itemNumber = 1;
 
         for (const businessData of businessDataList) {
-            const amount = businessData.NetAmount || businessData.receivableAmount || 0;
-            const currency = businessData.TransactionCurrency || businessData.currency || 'CNY';
-            const glAccount = businessData.generalLedgerAccountCash || businessData.generalLedgerAccountNonCash || '10010100';
-
             // 1. 客户行结构 (DebtorItem)
             lineItems += `
-                <sfin:DebtorItem>
-                    <sfin:ReferenceDocumentItem>${itemNumber}</sfin:ReferenceDocumentItem>
-                    <sfin:CompanyCode>${firstBusinessData.receivingOrganization}</sfin:CompanyCode>
-                    <sfin:AmountInTransactionCurrency>${firstBusinessData.receivableAmount * -1}</sfin:AmountInTransactionCurrency>
-                    <sfin:TransactionCurrency>${firstBusinessData.currency}</sfin:TransactionCurrency>
-                    <sfin:DebitCreditCode>H</sfin:DebitCreditCode>
-                    <sfin:Debtor>${firstBusinessData.payingUnit}</sfin:Debtor>
-                </sfin:DebtorItem>
+                <DebtorItem>
+                    <ReferenceDocumentItem>${itemNumber}</ReferenceDocumentItem>
+                    <CompanyCode>${firstBusinessData.receivingOrganization}</CompanyCode>
+                    <AmountInTransactionCurrency currencyCode="${firstBusinessData.currency}">${firstBusinessData.receivableAmount * -1}</AmountInTransactionCurrency>
+                    <DebitCreditCode>H</DebitCreditCode>
+                    <Debtor>${firstBusinessData.payingUnit}</Debtor>
+                </DebtorItem>
             `;
             itemNumber += 1;
 
             // 2. 费用行结构 (Item)
             lineItems += `
-                <sfin:Item>
-                    <sfin:ReferenceDocumentItem>${itemNumber}</sfin:ReferenceDocumentItem>
-                    <sfin:CompanyCode>${firstBusinessData.receivingOrganization}</sfin:CompanyCode>
-                    <sfin:GLLAccount>1002010000</sfin:GLLAccount>
-                    <sfin:AmountInTransactionCurrency>${firstBusinessData.receivableAmount}</sfin:AmountInTransactionCurrency>
-                    <sfin:TransactionCurrency>${firstBusinessData.currency}</sfin:TransactionCurrency>
-                    <sfin:DebitCreditCode>S</sfin:DebitCreditCode>
-                    <sfin:ReasonCode>050</sfin:ReasonCode>
-                </sfin:Item>
+                <Item>
+                    <ReferenceDocumentItem>${itemNumber}</ReferenceDocumentItem>
+                    <CompanyCode>${firstBusinessData.receivingOrganization}</CompanyCode>
+                    <GLAccount>1002010000</GLAccount>
+                    <AmountInTransactionCurrency currencyCode="${firstBusinessData.currency}">${firstBusinessData.receivableAmount}</AmountInTransactionCurrency>
+                    <DebitCreditCode>S</DebitCreditCode>
+                    <ReasonCode>050</ReasonCode>
+                </Item>
             `;
             itemNumber += 1;
         }
@@ -235,25 +225,27 @@ class AccountingDocumentService {
     <soapenv:Header/>
     <soapenv:Body>
         <sfin:JournalEntryBulkCreateRequest>
-            <sfin:MessageHeader>
-                <sfin:CreationDateTime>${currentDate.toISOString()}</sfin:CreationDateTime>
-            </sfin:MessageHeader>
-            <sfin:JournalEntryCreateRequest>
-                <sfin:MessageHeader>
-                    <sfin:CreationDateTime>${currentDate.toISOString()}</sfin:CreationDateTime>
-                </sfin:MessageHeader>
-                <sfin:JournalEntry>
-                    <sfin:BusinessTransactionType>RV</sfin:BusinessTransactionType>
-                    <sfin:AccountingDocumentType>SA</sfin:AccountingDocumentType>
-                    <sfin:DocumentHeaderText>${firstBusinessData.paymentPurpose}</sfin:DocumentHeaderText>
-                    <sfin:CreatedByUser>CC0000000002</sfin:CreatedByUser>
-                    <sfin:CompanyCode>${firstBusinessData.receivingOrganization}</sfin:CompanyCode>
-                    <sfin:DocumentDate>${formattedbusinessDate}</sfin:DocumentDate>
-                    <sfin:PostingDate>${formattedbusinessDate}</sfin:PostingDate>
-                    <sfin:DocumentReferenceID>${firstBusinessData.paymentReceiptNo}</sfin:DocumentReferenceID>
+            <MessageHeader>
+                <CreationDateTime>${currentDate.toISOString()}</CreationDateTime>
+            </MessageHeader>
+            <JournalEntryCreateRequest>
+                <MessageHeader>
+                    <CreationDateTime>${currentDate.toISOString()}</CreationDateTime>
+                </MessageHeader>
+                <JournalEntry>
+                    <OriginalReferenceDocumentType>BKPFF</OriginalReferenceDocumentType>
+                    <BusinessTransactionType>RFBU</BusinessTransactionType>
+                    <AccountingDocumentType>SA</AccountingDocumentType>
+                    <DocumentHeaderText>${firstBusinessData.paymentPurpose}</DocumentHeaderText>
+                    <CreatedByUser>CC0000000002</CreatedByUser>
+                    <CompanyCode>${firstBusinessData.receivingOrganization}</CompanyCode>
+                    <DocumentDate>${businessDate}</DocumentDate>
+                    <PostingDate>${businessDate}</PostingDate>
+                    <ExchangeRateDate>${businessDate}</ExchangeRateDate>
+                    <DocumentReferenceID>${firstBusinessData.paymentReceiptNo}</DocumentReferenceID>
                     ${lineItems}
-                </sfin:JournalEntry>
-            </sfin:JournalEntryCreateRequest>
+                </JournalEntry>
+            </JournalEntryCreateRequest>
         </sfin:JournalEntryBulkCreateRequest>
     </soapenv:Body>
 </soapenv:Envelope>`;
@@ -263,17 +255,54 @@ class AccountingDocumentService {
 
     extractAccountingDocumentNumber(responseData) {
         // 从 SOAP 响应中提取会计凭证号
-        // 响应格式通常包含 <DocumentNumber> 标签
-        const docNumberMatch = responseData.match(/<DocumentNumber>([^<]+)<\/DocumentNumber>/);
-        const fiscalYearMatch = responseData.match(/<FiscalYear>([^<]+)<\/FiscalYear>/);
+        // 根据实际响应格式，使用 <AccountingDocument> 标签
+        // objkey 格式: AccountingDocument + CompanyCode + FiscalYear
+        // 考虑可能存在命名空间前缀，如 <n0:AccountingDocument>
+        const docNumberMatch = responseData.match(/<[^>]*AccountingDocument[^>]*>([^<]+)<\/[^>]*AccountingDocument[^>]*>/);
+        const companyCodeMatch = responseData.match(/<[^>]*CompanyCode[^>]*>([^<]+)<\/[^>]*CompanyCode[^>]*>/);
+        const fiscalYearMatch = responseData.match(/<[^>]*FiscalYear[^>]*>([^<]+)<\/[^>]*FiscalYear[^>]*>/);
         
-        if (docNumberMatch && fiscalYearMatch) {
-            return `${docNumberMatch[1]}${fiscalYearMatch[1]}`;
-        } else if (docNumberMatch) {
-            return docNumberMatch[1];
+        // 检查SAP响应中的错误日志
+        const logError = this.parseSapLogError(responseData);
+        if (logError) {
+            throw new Error(`SAP错误: ${logError}`);
         }
         
-        return '';
+        // 验证凭证号是否有效（不是全零）
+        if (docNumberMatch) {
+            const docNumber = docNumberMatch[1].trim();
+            // 检查是否为有效的凭证号（不是全零）
+            if (docNumber !== '0000000000' && docNumber !== '0') {
+                const companyCode = companyCodeMatch ? companyCodeMatch[1].trim() : '';
+                const fiscalYear = fiscalYearMatch ? fiscalYearMatch[1].trim() : '';
+                // 拼接格式: AccountingDocument + CompanyCode + FiscalYear
+                return `${docNumber}${companyCode}${fiscalYear}`;
+            }
+        }
+        
+        throw new Error('会计凭证创建失败: SAP返回空凭证号或全零凭证号');
+    }
+    
+    parseSapLogError(responseData) {
+        // 解析SAP响应中的错误日志
+        // <MaximumLogItemSeverityCode>3</MaximumLogItemSeverityCode> 表示有错误
+        // <Note>标签包含具体错误消息
+        
+        // 检查错误级别代码 (3=错误, 2=警告, 1=信息)
+        const severityCodeMatch = responseData.match(/<[^>]*MaximumLogItemSeverityCode[^>]*>([^<]+)<\/[^>]*MaximumLogItemSeverityCode[^>]*>/);
+        if (severityCodeMatch) {
+            const severityCode = parseInt(severityCodeMatch[1].trim());
+            // 如果是错误级别 (3)，提取错误消息
+            if (severityCode >= 3) {
+                const noteMatch = responseData.match(/<[^>]*Note[^>]*>([^<]+)<\/[^>]*Note[^>]*>/);
+                if (noteMatch) {
+                    const errorNote = noteMatch[1].trim();
+                    return errorNote;
+                }
+            }
+        }
+        
+        return null;
     }
 
     parseSoapError(responseData) {

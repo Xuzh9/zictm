@@ -52,11 +52,8 @@ annotate service.MultistepLog with @(
             { $Type: 'UI.DataField', Value: canum },
             { $Type: 'UI.DataField', Value: code },
             { $Type: 'UI.DataField', Value: message },
-            { $Type: 'UI.DataField', Value: executionAt },
-            { $Type: 'UI.DataField', Value: executionTime },
-            { $Type: 'UI.DataField', Value: lastExecutionAt },
-            { $Type: 'UI.DataField', Value: lastExecutionTime },    
             { $Type: 'UI.DataField', Value: objkey },
+            { $Type: 'UI.DataField', Value: lastExecutionAt },
             {
                 $Type: 'UI.DataFieldForAction',
                 Label: '重推',
@@ -71,11 +68,11 @@ annotate service.MultistepLog with @(
             { $Type: 'UI.DataField', Value: canum },
             { $Type: 'UI.DataField', Value: code },
             { $Type: 'UI.DataField', Value: message },
+            { $Type: 'UI.DataField', Value: objkey },
             { $Type: 'UI.DataField', Value: executionAt },
             { $Type: 'UI.DataField', Value: executionTime },
             { $Type: 'UI.DataField', Value: lastExecutionAt },
-            { $Type: 'UI.DataField', Value: lastExecutionTime },
-            { $Type: 'UI.DataField', Value: objkey }
+            { $Type: 'UI.DataField', Value: lastExecutionTime }
         ],
 
         Facets: [
