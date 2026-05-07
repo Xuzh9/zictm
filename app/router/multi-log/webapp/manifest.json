@@ -134,7 +134,8 @@
                                     }
                                 },
                                 "action::retryStep": {
-                                    "enableOn": "selection"  
+                                    "enableOn": "selection",
+                                    "refreshBehavior": "force"
                                 }
                             }
                         }

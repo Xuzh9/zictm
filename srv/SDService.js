@@ -70,8 +70,8 @@ module.exports = cds.service.impl(async function () {
     const MultiStepInvoker = require('./handlers/MultiStepInvoker');
     const invoker = new MultiStepInvoker();
     
-    // 调用 MultiStepInvoker，传入业务流程ID和原始数据
-    const invokerResult = await invoker.process('MM01', data);
+    // 调用 MultiStepInvoker，传入业务流程ID和三个业务表的数据
+    const invokerResult = await invoker.process('MM01', data, null, null);
 
     // --------------------------
     // 返回创建成功的数据
@@ -148,17 +148,33 @@ module.exports = cds.service.impl(async function () {
     }
 
     // --------------------------
-    // 校验通过，执行批量插入
+    // 调用 MultiStepInvoker 处理多步流程
+    // zrfc_logid 和 zrfcid 的生成以及业务表的插入由 MultiStepInvoker 负责
     // --------------------------
-    await INSERT.into(PaymentReceipt).entries(data);
+    const MultiStepInvoker = require('./handlers/MultiStepInvoker');
+    const invoker = new MultiStepInvoker();
+    
+    // 调用 MultiStepInvoker，传入业务流程ID和三个业务表的数据
+    const invokerResult = await invoker.process('FI01', data, null, null);
 
     // --------------------------
     // 返回创建成功的数据
     // --------------------------
-    return {
-      code: 200,
-      message: "推送成功",
-    };
+    const result = {};
+    if (invokerResult) {
+      result.code = invokerResult.code === 'S' ? 200 : 400;
+      result.message = invokerResult.message ? invokerResult.message.substring(0, 500) : '处理成功';
+      result.zrfc_logid = invokerResult.zrfcLogid;
+      result.zrfcid = invokerResult.zrfcid;
+      if (invokerResult.objkey) {
+        result.objkey = invokerResult.objkey;
+      }
+    } else {
+      result.code = 200;
+      result.message = '没有数据需要处理';
+    }
+    
+    return result;
   });
   //销售出库
     this.on('OdCreate', async (req) => {
@@ -216,16 +232,32 @@ module.exports = cds.service.impl(async function () {
     }
 
     // --------------------------
-    // 校验通过，执行批量插入
+    // 调用 MultiStepInvoker 处理多步流程
+    // zrfc_logid 和 zrfcid 的生成以及业务表的插入由 MultiStepInvoker 负责
     // --------------------------
-    await INSERT.into(OutboundDelivery).entries(data);
+    const MultiStepInvoker = require('./handlers/MultiStepInvoker');
+    const invoker = new MultiStepInvoker();
+    
+    // 调用 MultiStepInvoker，传入业务流程ID和三个业务表的数据
+    const invokerResult = await invoker.process('SD01', data, null, null);
 
     // --------------------------
     // 返回创建成功的数据
     // --------------------------
-    return {
-      code: 200,
-      message: "推送成功",
-    };
+    const result = {};
+    if (invokerResult) {
+      result.code = invokerResult.code === 'S' ? 200 : 400;
+      result.message = invokerResult.message ? invokerResult.message.substring(0, 500) : '处理成功';
+      result.zrfc_logid = invokerResult.zrfcLogid;
+      result.zrfcid = invokerResult.zrfcid;
+      if (invokerResult.objkey) {
+        result.objkey = invokerResult.objkey;
+      }
+    } else {
+      result.code = 200;
+      result.message = '没有数据需要处理';
+    }
+    
+    return result;
   });
 });

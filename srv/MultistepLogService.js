@@ -1,61 +1,71 @@
-module.exports = cds.service.impl(async function () {
-    const { MultistepLog } = this.entities;
-    const RetryHandler = require('./handlers/RetryHandler');
-    
-    this.on('retryStep', async (req) => {
-        const oData = Array.isArray(req.params) && req.params.length > 0 ? req.params[0] : req.params;
-        
-        const zrfc_logid = oData && (oData.zrfc_logid || oData.ZrfcLogid || oData.ZRFC_LOGID);
-        
-        if (!zrfc_logid) {
-            return req.error(500, '无法获取日志ID，请选择一行数据');
+const cds = require('@sap/cds');
+const { SELECT } = cds.ql;
+const RetryHandler = require('./handlers/RetryHandler');
+
+module.exports = srv => {
+    const { MultistepLog } = srv.entities;
+
+    // Bound Action - 支持单选和多选
+    srv.on('retryStep', 'MultistepLog', async (req) => {
+        // 获取所有选中行的主键数组
+        let selectedIds = req.params;
+        // 处理参数格式
+        if (!selectedIds || selectedIds.length === 0) {
+            return req.error(500, '请至少选择一行数据');
+        }
+
+        // 确保 selectedIds 是字符串数组
+        const stringIds = [];
+        for (const param of selectedIds) {
+            if (typeof param === 'string') {
+                stringIds.push(param);
+            } else if (param?.zrfc_logid) {
+                stringIds.push(param.zrfc_logid);
+            } else if (param?.ZRFC_LOGID) {
+                stringIds.push(param.ZRFC_LOGID);
+            }
         }
         
-        return await this._handleRetryStep(zrfc_logid, null, req);
-    });
-    
-    this.on('retryStepUnbound', async (req) => {
-        const { zrfc_logid, zrfcid } = req.data;
-        
-        if (!zrfc_logid) {
-            return req.error(500, '无法获取日志ID');
+        selectedIds = stringIds;
+
+        if (selectedIds.length === 0) {
+            return req.error(500, '请至少选择一行数据');
         }
-        
-        if (!zrfcid) {
-            return req.error(500, '无法获取业务流程ID');
-        }
-        
-        return await this._handleRetryStep(zrfc_logid, zrfcid, req);
-    });
-    
-    this._handleRetryStep = async function(zrfc_logid, zrfcid, req) {
-        try {
+
+        // 批量校验所有数据
+        const invalidLogids = [];
+        for (const zrfc_logid of selectedIds) {
             const allLogs = await SELECT.from(MultistepLog).where({ zrfc_logid });
-            
             const failedSteps = allLogs.filter(log => log.code !== 'S' && log.code !== 's');
             
             if (failedSteps.length === 0) {
-                return req.error(500, `业务ID ${zrfc_logid} 没有失败的步骤，无法执行重推`);
+                invalidLogids.push(zrfc_logid);
             }
-            
-            await UPDATE(MultistepLog)
-                .set({ code: 'R', message: '重推中...' })
-                .where({ zrfc_logid });
-            
-            const retryHandler = new RetryHandler();
-            const result = await retryHandler.retry(zrfc_logid);
-            
-            if (result.code === 'E') {
-                return req.error(500, result.message);
-            }
-            
-            return {
-                code: result.code,
-                message: result.message
-            };
-            
-        } catch (error) {
-            return req.error(500, `重推失败: ${error.message}`);
         }
-    };
-});
+
+        if (invalidLogids.length > 0) {
+            const errorMsg = invalidLogids.map(id => `业务ID ${id} 没有失败的步骤，无法重推`).join('\n');
+            return req.error(500, errorMsg);
+        }
+
+        // 批量遍历处理所有选中的数据
+        for (const zrfc_logid of selectedIds) {
+
+            // 调用重试处理器 - 日志更新由 MultiStepProcessor 统一处理
+            const retryHandler = new RetryHandler();
+            await retryHandler.retry(zrfc_logid);
+        }
+
+        // 返回所有数据（触发 Fiori Elements 重新渲染整个列表）
+        const allData = await SELECT.from(MultistepLog);
+        
+        // 使用轻量级通知（note）替代弹窗
+        req.notify({
+            code: '200',
+            message: `已重推 ${selectedIds.length} 条记录`,
+            severity: 'success'
+        });
+
+        return allData;
+    });
+};

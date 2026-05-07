@@ -10,10 +10,12 @@ class MultiStepInvoker {
      * 处理外围系统传输的json报文数据
      * 流程：先生成 zrfc_logid，然后插入业务表（包含 zrfcid 和 zrfc_logid），最后调用 MultiStepProcessor
      * @param {string} zrfcid - 业务流程ID
-     * @param {Array} data - 接口传入的完整数据
+     * @param {Array} businessTable1 - 业务表1的数据
+     * @param {Array} businessTable2 - 业务表2的数据（可选）
+     * @param {Array} businessTable3 - 业务表3的数据（可选）
      * @returns {Promise<Object>} 执行结果，包含zrfcid用于后续记录对账
      */
-    async process(zrfcid, data) {
+    async process(zrfcid, businessTable1, businessTable2, businessTable3) {
         const zrfcLogid = this.generateZrfcLogid();
         
         let result = {
@@ -25,63 +27,52 @@ class MultiStepInvoker {
         let hasSavedLog = false;
         
         try {
-            console.log(`=== 开始处理业务数据: zrfcid=${zrfcid}, zrfcLogid=${zrfcLogid} ===`);
-            
             // 获取业务流程配置
             const processConfig = await this.getProcessConfig(zrfcid);
             if (!processConfig) {
                 result.code = 'E';
                 result.message = `业务流程配置不存在: ${zrfcid}`;
-                await this.saveApiInputLog(zrfcLogid, data, result.message);
+                await this.saveApiInputLog(zrfcLogid, { businessTable1, businessTable2, businessTable3 }, result.message);
                 hasSavedLog = true;
                 return result;
             }
             
-            // 将 zrfcid 和 zrfc_logid 添加到每条业务数据中
-            console.log(`=== 将 zrfcid 和 zrfc_logid 添加到业务数据中 ===`);
-            const dataWithLogIds = data.map(item => ({
-                ...item,
-                zrfcid,
-                zrfc_logid: zrfcLogid
-            }));
-            
-            // 插入业务表（根据 zrfcid 确定表名）
-            console.log(`=== 插入业务表: zrfcid=${zrfcid} ===`);
-            await this.insertBusinessData(zrfcid, dataWithLogIds);
+            // 根据 ProcessConfig 中的 businessTable1、businessTable2、businessTable3 分别插入对应表的数据
+            await this.insertBusinessDataByConfig(processConfig, businessTable1, businessTable2, businessTable3, zrfcid, zrfcLogid);
             
             // 构建输入数据
             const inputData = {
                 zrfcLogid,
                 zrfcid,
-                data: dataWithLogIds
+                businessTable1,
+                businessTable2,
+                businessTable3
             };
+
+            // 入参处理完成，准备调用 MultiStepProcessor，ApiInputLog 记录成功
+            // 步骤执行结果由 MultistepLog 负责记录，与 ApiInputLog 无关
+            await this.saveApiInputLog(zrfcLogid, inputData, null);
+            hasSavedLog = true;
             
             // 根据 isAsync 字段判断同步还是异步调用
             if (processConfig.isAsync) {
-                console.log(`=== 异步调用 MultiStepProcessor: zrfcid=${zrfcid}, zrfcLogid=${zrfcLogid} ===`);
                 this.executeAsync(zrfcid, zrfcLogid);
                 result.message = '异步调用成功，正在处理中';
             } else {
-                console.log(`=== 同步调用 MultiStepProcessor: zrfcid=${zrfcid}, zrfcLogid=${zrfcLogid} ===`);
                 const processorResult = await this.processor.processWithLogId(zrfcLogid, zrfcid);
                 result.code = processorResult.code;
                 result.message = processorResult.message ? processorResult.message.substring(0, 500) : '执行成功';
                 result.objkey = processorResult.objkey || '';
             }
-        
-            // 保存接口入参日志（只保存一条记录）
-            await this.saveApiInputLog(zrfcLogid, inputData, result.code === 'E' ? result.message : null);
-            hasSavedLog = true;
-            console.log(`=== 业务数据处理完成: code=${result.code}, message=${result.message} ===`);
             
         } catch (error) {
             result.code = 'E';
             const errorMessage = error.message ? error.message.substring(0, 500) : '未知错误';
             result.message = `系统错误: ${errorMessage}`;
-            console.error(`=== 业务数据处理异常: ${result.message} ===`, error);
+            console.error(`业务数据处理异常: ${result.message}`, error);
             
             if (!hasSavedLog) {
-                await this.saveApiInputLog(zrfcLogid, data, result.message);
+                await this.saveApiInputLog(zrfcLogid, { businessTable1, businessTable2, businessTable3 }, result.message);
                 hasSavedLog = true;
             }
         } finally {
@@ -117,10 +108,11 @@ class MultiStepInvoker {
         
         await cds.run(
             INSERT.into(ApiInputLog).entries({
-                zrfc_logid: zrfcLogid,
+                id: zrfcLogid,
                 inputData: inputDataStr,
                 code: errorMessage ? 'E' : 'S',
-                message: errorMessage || '处理成功'
+                message: errorMessage || '入参处理成功',
+                executionAt: new Date()
             })
         );
     }
@@ -148,22 +140,66 @@ class MultiStepInvoker {
             try {
                 await this.processor.processWithLogId(zrfcLogid, zrfcid);
             } catch (error) {
-                console.error('Async processing error:', error);
+                console.error('异步处理异常:', error);
             }
         }, 100);
     }
 
     /**
-     * 插入业务数据表（包含 zrfcid 和 zrfc_logid 字段）
+     * 根据 ProcessConfig 配置分别插入 businessTable1、businessTable2、businessTable3 对应的数据表
+     * @param {Object} processConfig - 业务流程配置
+     * @param {Array} businessTable1Data - 业务表1的数据
+     * @param {Array} businessTable2Data - 业务表2的数据
+     * @param {Array} businessTable3Data - 业务表3的数据
      * @param {string} zrfcid - 业务流程ID
+     * @param {string} zrfcLogid - 日志ID
+     */
+    async insertBusinessDataByConfig(processConfig, businessTable1Data, businessTable2Data, businessTable3Data, zrfcid, zrfcLogid) {
+        try {
+            // 处理 businessTable1
+            if (processConfig.businessTable1 && businessTable1Data) {
+                const table1Data = businessTable1Data.map(item => ({
+                    ...item,
+                    zrfcid,
+                    zrfc_logid: zrfcLogid
+                }));
+                await this.insertBusinessData(processConfig.businessTable1, table1Data);
+            }
+
+            // 处理 businessTable2
+            if (processConfig.businessTable2 && businessTable2Data) {
+                const table2Data = businessTable2Data.map(item => ({
+                    ...item,
+                    zrfcid,
+                    zrfc_logid: zrfcLogid
+                }));
+                await this.insertBusinessData(processConfig.businessTable2, table2Data);
+            }
+
+            // 处理 businessTable3
+            if (processConfig.businessTable3 && businessTable3Data) {
+                const table3Data = businessTable3Data.map(item => ({
+                    ...item,
+                    zrfcid,
+                    zrfc_logid: zrfcLogid
+                }));
+                await this.insertBusinessData(processConfig.businessTable3, table3Data);
+            }
+        } catch (error) {
+            console.error('按配置插入业务数据失败:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * 插入业务数据表（包含 zrfcid 和 zrfc_logid 字段）
+     * @param {string} tableName - 业务表名
      * @param {Array} data - 业务数据（已包含 zrfcid 和 zrfc_logid）
      */
-    async insertBusinessData(zrfcid, data) {
+    async insertBusinessData(tableName, data) {
         try {
-            // 根据 zrfcid 确定业务表名
-            const tableName = this.getTableNameByZrfcid(zrfcid);
             if (!tableName) {
-                console.warn(`未配置的业务流程ID: ${zrfcid}`);
+                console.warn('业务表名为空');
                 return;
             }
 
@@ -176,39 +212,16 @@ class MultiStepInvoker {
 
             // 执行批量插入（数据已包含 zrfcid 和 zrfc_logid）
             if (Array.isArray(data) && data.length > 0) {
-                const insertResult = await cds.run(
+                await cds.run(
                     INSERT.into(BusinessEntity).entries(data)
                 );
-                console.log(`插入业务表成功: ${tableName}, 记录数: ${data.length}`, insertResult);
             } else {
-                console.warn('数据不是数组或为空:', data);
+                console.warn('数据不是数组或为空');
             }
         } catch (error) {
             console.error('插入业务数据失败:', error);
             throw error;
         }
     }
-
-    /**
-     * 根据 zrfcid 获取对应的业务表名
-     * @param {string} zrfcid - 业务流程ID
-     * @returns {string|null} 业务表名
-     */
-    getTableNameByZrfcid(zrfcid) {
-        // 根据 zrfcid 确定业务表名
-        // MM01 -> Transfer
-        // 其他 zrfcid 可以后续添加
-        switch (zrfcid) {
-            case 'MM01':
-                return 'Transfer';
-            // 其他业务流程ID对应的表可以后续添加
-            // case 'XX01':
-            //     return 'OtherTable';
-            default:
-                console.warn(`未配置的业务流程ID: ${zrfcid}`);
-                return null;
-        }
-    }
 }
-
 module.exports = MultiStepInvoker;

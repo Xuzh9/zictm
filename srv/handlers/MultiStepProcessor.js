@@ -1,69 +1,84 @@
 const cds = require('@sap/cds');
-const fs = require('fs');
-const path = require('path');
+const StepServiceFactory = require('../services/StepServiceFactory');
 
 class MultiStepProcessor {
     constructor() {
-        this.serviceCache = new Map();
-        this.servicesDir = path.join(__dirname, '../services');
+        this.stepServiceFactory = new StepServiceFactory();
     }
 
     /**
-     * 处理多步流程（带日志ID）
-     * @param {string} zrfcLogid - 多步执行日志ID
+     * 处理多步流程
+     * @param {string} zrfcLogid - 多步ID
      * @param {string} zrfcid - 业务流程ID
+     * @param {number|null} startStepNum - 起始步骤编号（可选，用于重推时从失败步骤开始）
+     * @param {boolean} isRetry - 是否为重推操作
      * @returns {Promise<Object>} 处理结果
      */
-    async processWithLogId(zrfcLogid, zrfcid) {
+    async processWithLogId(zrfcLogid, zrfcid, startStepNum = null, isRetry = false) {
+        let lastObjKey = '';
+        let lastMessage = '';
+        let lastCode = '';
+        
         try {
-            // 查询业务流程配置
-            const processConfig = await this.getProcessConfig(zrfcid);
-            if (!processConfig) {
-                throw new Error(`业务流程配置不存在: ${zrfcid}`);
-            }
-
-            // 查询步骤配置
+            // 获取步骤配置
             const steps = await this.getSteps(zrfcid);
-            if (steps.length === 0) {
-                throw new Error(`业务流程无步骤配置: ${zrfcid}`);
+            if (!steps || steps.length === 0) {
+                const errorMsg = `未找到步骤配置: zrfcid=${zrfcid}`;
+                await this.saveLog(zrfcLogid, zrfcid, '0', {
+                    code: 'E',
+                    message: errorMsg
+                }, 0, new Date(), isRetry);
+                return {
+                    code: 'E',
+                    message: errorMsg,
+                    zrfcLogid
+                };
             }
-
-            // 按步骤编号排序
-            steps.sort((a, b) => a.canum - b.canum);
-
-            // 执行每一步
-            let lastObjKey = null;
-            let lastMessage = '执行成功';
-            let lastCode = 'S';
+            
+            // 按顺序执行每个步骤
+            // 先查询该 zrfcLogid 的所有日志记录，提高效率
+            const MultistepLog = cds.entities['com.sap.zictm.MultistepLog'];
+            const allLogs = await cds.run(
+                SELECT.from(MultistepLog).where({ zrfc_logid: zrfcLogid })
+            );
+            // 将日志记录转换为以 canum 为 key 的 Map，方便快速查找
+            const logMap = {};
+            for (const log of allLogs) {
+                logMap[log.canum] = log;
+            }
+            
             for (const step of steps) {
-                // 读取入参数据
-                const stepInputData = await this.readInputData(zrfcLogid, zrfcid, step);
-                
-                // 记录开始执行时间戳
-                const executionAt = new Date();
-                const startTime = Date.now();
-                let executionResult;
-                try {
-                    executionResult = await this.invokeMethod(step.serviceName, stepInputData);
-                } catch (error) {
-                    // 限制错误消息长度，避免超过系统限制
-                    const errorMessage = error.message ? error.message.substring(0, 500) : '未知错误';
-                    executionResult = {
-                        code: 'E',
-                        message: errorMessage,
-                        objkey: lastObjKey
-                    };
+                // 如果指定了起始步骤，跳过之前的步骤
+                if (startStepNum !== null && step.canum < startStepNum) {
+                    continue;
                 }
+                
+                // 从 logMap 中查找该步骤的日志记录
+                const existingLog = logMap[step.canum];
+                
+                // 如果日志存在且执行成功（code 为 'S'），跳过该步骤
+                if (existingLog && (existingLog.code === 'S' || existingLog.code === 's')) {
+                    // 更新上一步对象号，以便后续步骤使用
+                    lastObjKey = existingLog.objkey || lastObjKey;
+                    continue;
+                }
+                
+                const startTime = Date.now();
+                // 存储 UTC 时间，前端会根据时区自动转换显示
+                const executionAt = new Date();
+                
+                // 执行步骤
+                const executionResult = await this.executeStep(zrfcLogid, zrfcid, step, lastObjKey);
+                
                 const endTime = Date.now();
-                const executionTime = (endTime - startTime) / 1000;
-
+                const executionTime = Math.round((endTime - startTime) / 1000);
+                
                 // 保存日志
-                // 限制消息长度，避免超过系统限制
                 const logMessage = executionResult.message ? executionResult.message.substring(0, 500) : '';
                 await this.saveLog(zrfcLogid, zrfcid, step.canum, {
                     ...executionResult,
                     message: logMessage
-                }, executionTime, executionAt);
+                }, executionTime, executionAt, isRetry);
 
                 // 更新上一步对象号、消息和代码
                 lastObjKey = executionResult.objkey || lastObjKey;
@@ -85,12 +100,11 @@ class MultiStepProcessor {
             };
         } catch (error) {
             // 保存错误日志
-            // 限制错误消息长度，避免超过系统限制
             const errorMessage = error.message ? error.message.substring(0, 500) : '未知错误';
             await this.saveLog(zrfcLogid, zrfcid, '0', {
                 code: 'E',
                 message: errorMessage
-            }, 0, new Date());
+            }, 0, new Date(), isRetry);
 
             return {
                 code: 'E',
@@ -98,22 +112,7 @@ class MultiStepProcessor {
                 zrfcLogid,
                 objkey: lastObjKey
             };
-        } finally {
-            // 事务由 CAP 框架自动管理
         }
-    }
-
-    /**
-     * 获取业务流程配置
-     * @param {string} zrfcid - 业务流程ID
-     * @returns {Promise<Object>} 业务流程配置
-     */
-    async getProcessConfig(zrfcid) {
-        const ProcessConfig = cds.entities['com.sap.zictm.ProcessConfig'];
-        const result = await cds.run(
-            SELECT.one.from(ProcessConfig).where({ zrfcid })
-        );
-        return result;
     }
 
     /**
@@ -123,110 +122,64 @@ class MultiStepProcessor {
      */
     async getSteps(zrfcid) {
         const StepConfig = cds.entities['com.sap.zictm.StepConfig'];
-        const result = await cds.run(
-            SELECT.from(StepConfig).where({ zrfcid })
+        const steps = await cds.run(
+            SELECT.from(StepConfig)
+                .where({ process_zrfcid: zrfcid })
+                .orderBy('canum')
         );
-        return result;
+        return steps;
     }
 
     /**
-     * 读取入参数据
+     * 执行单个步骤
      * @param {string} zrfcLogid - 多步ID
      * @param {string} zrfcid - 业务流程ID
      * @param {Object} step - 步骤配置
-     * @returns {Promise<Object>} 入参数据
+     * @param {string} lastObjKey - 上一步的对象号
+     * @returns {Promise<Object>} 执行结果
      */
-    async readInputData(zrfcLogid, zrfcid, step) {
-        let readSteps = step.readsteps;
-        let objkey = null;
-        
-        if (!readSteps) {
-            // 如果读取步骤编号为空，默认读取上一步骤的对象号
-            const prevStepNum = step.canum - 10;
-            readSteps = prevStepNum > 0 ? prevStepNum.toString() : null;
-        }
-
-        if (readSteps) {
-            // 查询多步执行日志表，获取指定步骤的对象号
-            const MultistepLog = cds.entities['com.sap.zictm.MultistepLog'];
-            const log = await cds.run(
-                SELECT.one.from(MultistepLog)
-                    .where({ zrfc_logid: zrfcLogid, zrfcid, canum: readSteps })
-            );
-            if (log) {
-                objkey = log.objkey;
-            }
-        }
-
-        // 构建标准入参格式
-        return {
-            zrfcid,
-            zrfcLogid,
-            canum: step.canum,
-            description: step.description,
-            serviceName: step.serviceName,
-            readsteps: step.readsteps,
-            objkey
-        };
-    }
-
-    /**
-     * 调用服务
-     * @param {string} serviceName - 服务文件名
-     * @param {Object} inputData - 输入数据
-     * @returns {Promise<Object>} 调用结果
-     */
-    async invokeMethod(serviceName, inputData) {
+    async executeStep(zrfcLogid, zrfcid, step, lastObjKey) {
         try {
-            // 加载服务实例
-            const service = await this.loadService(serviceName);
+            // 使用工厂模式获取服务实例
+            const service = this.stepServiceFactory.getService(step.serviceName);
             
-            // 执行服务的主要方法
-            return await service.execute(inputData);
+            if (!service) {
+                return {
+                    code: 'E',
+                    message: `服务类不存在: ${step.serviceName}`,
+                    objkey: ''
+                };
+            }
+
+            // 初始化服务
+            await service.initService(zrfcLogid, zrfcid, step.canum);
+            
+            // 构建入参对象
+            const inputData = {
+                zrfcid,
+                canum: step.canum,
+                serviceName: step.serviceName,
+                readsteps: step.readsteps,
+                objkey: lastObjKey,
+                zrfcLogid
+            };
+            
+            // 执行服务
+            const result = await service.execute(inputData);
+            
+            return {
+                code: result.code || 'S',
+                message: result.message || '执行成功',
+                objkey: result.objkey || ''
+            };
         } catch (error) {
-            console.error('调用方法失败:', error);
+            console.error(`步骤执行失败: ${step.serviceName}`, error);
             return {
                 code: 'E',
-                message: error.message,
-                objkey: inputData.objkey || ''
+                message: `步骤执行失败: ${error.message}`,
+                objkey: ''
             };
         }
-    }
-
-    /**
-     * 加载服务实例
-     * @param {string} serviceName - 服务名称（文件名）
-     * @returns {Promise<Object>} 服务实例
-     */
-    async loadService(serviceName) {
-        // 检查缓存
-        if (this.serviceCache.has(serviceName)) {
-            return this.serviceCache.get(serviceName);
-        }
-
-        // 构建服务文件路径
-        const serviceFile = path.join(this.servicesDir, `${serviceName}.js`);
-        
-        // 检查文件是否存在
-        if (!fs.existsSync(serviceFile)) {
-            throw new Error(`服务文件不存在: ${serviceFile}`);
-        }
-
-        // 加载服务模块
-        const ServiceClass = require(serviceFile);
-        
-        // 实例化服务
-        const service = new ServiceClass();
-        
-        // 检查服务是否有execute方法
-        if (!service.execute || typeof service.execute !== 'function') {
-            throw new Error(`服务文件必须包含execute方法: ${serviceFile}`);
-        }
-
-        // 缓存服务实例
-        this.serviceCache.set(serviceName, service);
-        
-        return service;
     }
 
     /**
@@ -234,12 +187,12 @@ class MultiStepProcessor {
      * @param {string} zrfcLogid - 多步ID
      * @param {string} zrfcid - 业务流程ID
      * @param {string} canum - 步骤编号
-     * @param {Object} inputData - 输入数据
      * @param {Object} executionResult - 执行结果
      * @param {number} executionTime - 执行时间（秒）
      * @param {Date} executionAt - 开始执行时间戳
+     * @param {boolean} isRetry - 是否为重推操作
      */
-    async saveLog(zrfcLogid, zrfcid, canum, executionResult, executionTime, executionAt) {
+    async saveLog(zrfcLogid, zrfcid, canum, executionResult, executionTime, executionAt, isRetry = false) {
         const MultistepLog = cds.entities['com.sap.zictm.MultistepLog'];
         
         // 检查日志是否已存在
@@ -249,22 +202,38 @@ class MultiStepProcessor {
         );
 
         if (existingLog) {
-            // 如果日志已存在，更新记录
-            await cds.run(
-                UPDATE(MultistepLog)
-                    .set({
-                        code: executionResult.code,
-                        message: executionResult.message,
-                        objkey: executionResult.objkey,
-                        executionTime,
-                        executionAt,
-                        modifiedAt: new Date(),
-                        modifiedBy: 'SYSTEM'
-                    })
-                    .where({ zrfc_logid: zrfcLogid, zrfcid, canum: canum.toString() })
-            );
+            // 如果日志已存在，根据是否为重推操作更新不同的字段
+            if (isRetry) {
+                // 重推操作：只更新 lastExecutionAt 和 lastExecutionTime
+                await cds.run(
+                    UPDATE(MultistepLog)
+                        .set({
+                            code: executionResult.code,
+                            message: executionResult.message,
+                            objkey: executionResult.objkey,
+                            lastExecutionAt: executionAt,
+                            lastExecutionTime: executionTime
+                        })
+                        .where({ zrfc_logid: zrfcLogid, zrfcid, canum: canum.toString() })
+                );
+            } else {
+                // 非重推操作：更新所有字段
+                await cds.run(
+                    UPDATE(MultistepLog)
+                        .set({
+                            code: executionResult.code,
+                            message: executionResult.message,
+                            objkey: executionResult.objkey,
+                            executionTime,
+                            executionAt,
+                            lastExecutionAt: executionAt,
+                            lastExecutionTime: executionTime
+                        })
+                        .where({ zrfc_logid: zrfcLogid, zrfcid, canum: canum.toString() })
+                );
+            }
         } else {
-            // 如果日志不存在，插入新记录
+            // 如果日志不存在，插入新记录（首次执行）
             await cds.run(
                 INSERT.into(MultistepLog).entries({
                     zrfc_logid: zrfcLogid,
@@ -275,10 +244,8 @@ class MultiStepProcessor {
                     objkey: executionResult.objkey,
                     executionTime,
                     executionAt,
-                    createdAt: new Date(),
-                    createdBy: 'SYSTEM',
-                    modifiedAt: new Date(),
-                    modifiedBy: 'SYSTEM'
+                    lastExecutionAt: executionAt,
+                    lastExecutionTime: executionTime
                 })
             );
         }

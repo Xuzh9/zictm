@@ -3,13 +3,13 @@ const { executeHttpRequest } = require('@sap-cloud-sdk/http-client');
 
 class MaterialDocumentService {
     constructor() {
-        this.materialDocSrv = null;
+        this.zrfcLogid = null;
     }
 
-    async initService() {
-        if (!this.materialDocSrv) {
-            this.materialDocSrv = await cds.connect.to('API_MATERIAL_DOCUMENT_SRV');
-        }
+    async initService(zrfcLogid, zrfcid, canum) {
+        this.zrfcLogid = zrfcLogid;
+        this.zrfcid = zrfcid;
+        this.canum = canum;
     }
 
     async execute(inputData) {
@@ -44,8 +44,7 @@ class MaterialDocumentService {
             // 构建物料凭证数据
             const materialDocData = this.buildMaterialDocumentData(businessDataList);
  
-            // 使用 SAP Cloud SDK 的 executeHttpRequest 方法
-            console.log('开始获取 CSRF token...');
+            // 使用 SAP Cloud SDK 的 executeHttpRequest 方法获取 CSRF token
             const csrfResult = await executeHttpRequest(
                 {
                     destinationName: 'ES_API'
@@ -56,23 +55,16 @@ class MaterialDocumentService {
                     headers: {
                         'X-CSRF-Token': 'Fetch',
                         'Accept': 'application/json'
-                    }
+                    },
+                    timeout: 60000  // 60秒超时
                 }
             );
-            console.log('CSRF token 获取成功:', csrfResult.headers['x-csrf-token']);
-            console.log('CSRF 响应头:', csrfResult.headers);
 
             // 提取 cookie（需要在 POST 请求中带上）
             const cookies = csrfResult.headers['set-cookie'] || [];
-            console.log('获取到的 cookie:', cookies);
 
-            // 然后使用 token 发送 POST 请求
-            console.log('开始发送 POST 请求...');
-            console.log('请求数据:', JSON.stringify(materialDocData, null, 2));
-            
             // 构建 cookie 字符串
             const cookieString = cookies.map(cookie => cookie.split(';')[0]).join('; ');
-            console.log('发送的 cookie:', cookieString);
             
             const result = await executeHttpRequest(
                 {
@@ -89,16 +81,12 @@ class MaterialDocumentService {
                         'Cookie': cookieString,
                         'sap-language': 'ZH'
                     },
+                    timeout: 120000,  // 120秒超时
                     validateStatus: function (status) {
                         return true; // 接受所有状态码，以便查看详细的错误信息
                     }
                 }
             );
-            console.log('POST 请求状态码:', result.status);
-            console.log('POST 响应头:', result.headers);
-            // 只输出响应数据的前 500 个字符，避免日志过长
-            const responseDataStr = JSON.stringify(result.data);
-            console.log('POST 响应数据:', responseDataStr.length > 500 ? responseDataStr.substring(0, 500) + '...' : responseDataStr);
 
             if (result.status >= 200 && result.status < 300) {
                 // 从响应数据中提取物料凭证号和年度
@@ -137,12 +125,6 @@ class MaterialDocumentService {
             }
         } catch (error) {
             console.error('MaterialDocumentService 执行失败:', error);
-            console.error('错误响应状态码:', error.response ? error.response.status : 'No status');
-            // 只输出错误响应数据的前 500 个字符，避免日志过长
-            if (error.response && error.response.data) {
-                const errorDataStr = JSON.stringify(error.response.data);
-                console.error('错误响应数据:', errorDataStr.length > 500 ? errorDataStr.substring(0, 500) + '...' : errorDataStr);
-            }
             // 提取详细的错误信息
             let errorMessage = error.message ? error.message.substring(0, 500) : '未知错误';
             if (error.response && error.response.data && error.response.data.error) {
@@ -186,7 +168,6 @@ class MaterialDocumentService {
 
             // 根据不同业务表使用不同的查询条件
             let businessData;
-            console.log(`查询业务数据: businessTable=${businessTable}, objkey=${objkey}, zrfcLogid=${this.zrfcLogid}`);
             
             switch (businessTable) {
                 case 'Transfer':

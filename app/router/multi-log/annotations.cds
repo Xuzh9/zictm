@@ -1,15 +1,37 @@
 using MultistepLogService as service from '../../../srv/MultistepLogService';
+using { Core, Common } from '@sap/cds/common';
 
-// 全局字段中文标签（所有地方生效：表格、筛选、详情）
+// 全局字段中文标签
 annotate service.MultistepLog with {
-    zrfc_logid     @Common.Label: '日志ID';
-    zrfcid         @Common.Label: '业务流程ID';
-    canum          @Common.Label: '步骤编号';
-    code           @Common.Label: '执行状态';
-    message        @Common.Label: '消息';
-    objkey         @Common.Label: '对象号';
-    executionAt    @Common.Label: '执行时间';
-    executionTime  @Common.Label: '运行时间（秒）';
+    zrfc_logid         @Common.Label: '日志ID';
+    zrfcid             @Common.Label: '业务流程ID';
+    canum              @Common.Label: '步骤编号';
+    code               @Common.Label: '执行状态';
+    message            @Common.Label: '消息';
+    objkey             @Common.Label: '对象号';
+    executionAt        @Common.Label: '执行时间';
+    executionTime      @Common.Label: '运行时间（秒）';
+    lastExecutionAt    @Common.Label: '最新执行时间';
+    lastExecutionTime  @Common.Label: '最新运行时间（秒）';
+};
+
+// 标准的 SideEffects 配置 - 确保前端自动刷新
+annotate service.MultistepLog with @Core.SideEffects : {
+    SourceEntities : [
+        {
+            Type : Core.SourceEntityType.Action,
+            Action : 'service.MultistepLog.retryStep'
+        }
+    ],
+    TargetEntities : [
+        'service.MultistepLog'
+    ],
+    TriggerActions : [
+        {
+            Action : 'service.MultistepLog.retryStep',
+            EntitySet : 'MultistepLog'
+        }
+    ]
 };
 
 annotate service.MultistepLog with @(
@@ -24,17 +46,16 @@ annotate service.MultistepLog with @(
         },
         SelectionFields: [zrfc_logid, zrfcid, code],
 
-        // ==============================================
-        // 这里全部删掉 Label，自动使用全局 @Common.Label
-        // ==============================================
         LineItem: [
             { $Type: 'UI.DataField', Value: zrfc_logid },
             { $Type: 'UI.DataField', Value: zrfcid },
             { $Type: 'UI.DataField', Value: canum },
             { $Type: 'UI.DataField', Value: code },
+            { $Type: 'UI.DataField', Value: message },
             { $Type: 'UI.DataField', Value: executionAt },
             { $Type: 'UI.DataField', Value: executionTime },
-            { $Type: 'UI.DataField', Value: message },
+            { $Type: 'UI.DataField', Value: lastExecutionAt },
+            { $Type: 'UI.DataField', Value: lastExecutionTime },    
             { $Type: 'UI.DataField', Value: objkey },
             {
                 $Type: 'UI.DataFieldForAction',
@@ -49,9 +70,11 @@ annotate service.MultistepLog with @(
             { $Type: 'UI.DataField', Value: zrfcid },
             { $Type: 'UI.DataField', Value: canum },
             { $Type: 'UI.DataField', Value: code },
+            { $Type: 'UI.DataField', Value: message },
             { $Type: 'UI.DataField', Value: executionAt },
             { $Type: 'UI.DataField', Value: executionTime },
-            { $Type: 'UI.DataField', Value: message },
+            { $Type: 'UI.DataField', Value: lastExecutionAt },
+            { $Type: 'UI.DataField', Value: lastExecutionTime },
             { $Type: 'UI.DataField', Value: objkey }
         ],
 

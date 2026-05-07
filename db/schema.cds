@@ -41,18 +41,21 @@ entity ApiInputLog {
     inputData      : LargeString;    // 入参数据，JSON格式
     code           : String(2);      // 消息状态(S成功/E失败)
     message        : String(255);    // 消息文本
+    executionAt    : Timestamp;      // 执行时间
 }
 
 // 多步执行日志表
 entity MultistepLog {
-    key zrfc_logid : UUID;           // 多步ID
-    key zrfcid     : String(10);     // 业务流程ID
-    key canum      : String(10);     // 步骤编号（如10、20、30）
-    code           : String(2);      // 消息状态(S成功/E失败)
-    message        : String(255);    // 消息文本
-    objkey         : String(20);     // 对象号
-    executionAt    : Timestamp;      // 执行时间
-    executionTime  : Decimal(10,2);  // 运行时间（秒）
+    key zrfc_logid      : UUID;           // 多步ID
+    key zrfcid          : String(10);     // 业务流程ID
+    key canum           : String(10);     // 步骤编号（如10、20、30）
+    code                : String(2);      // 消息状态(S成功/E失败)
+    message             : String(255);    // 消息文本
+    objkey              : String(20);     // 对象号
+    executionAt         : Timestamp;      // 执行时间
+    executionTime       : Decimal(10,2);  // 运行时间（秒）
+    lastExecutionAt     : Timestamp;      // 最新执行时间
+    lastExecutionTime   : Decimal(10,2);  // 最新运行时间（秒）
 }
 
 // 多方交易类型配置表
