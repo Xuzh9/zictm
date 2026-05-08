@@ -1,5 +1,5 @@
 module.exports = cds.service.impl(async function () {
-  const { Transfer,PaymentReceipt,OutboundDelivery } = this.entities;
+  const { Transfer, PaymentReceipt, OutboundDelivery, MPTTypeConfig } = this.entities;
   //调拨单
   this.on('TrCreate', async (req) => {
     const { data } = req.data;
@@ -192,6 +192,12 @@ module.exports = cds.service.impl(async function () {
       if (!item.SalesOrderItem) {
         req.error(400, `第 ${rowNum} 条数据缺少必填字段：SalesOrderItem`);
       }
+      if (!item.SalesOrganization) {
+        req.error(400, `第 ${rowNum} 条数据缺少必填字段：SalesOrganization`);
+      }
+      if (!item.ReceivingPlant) {
+        req.error(400, `第 ${rowNum} 条数据缺少必填字段：ReceivingPlant`);
+      }
     });
 
     // --------------------------
@@ -232,14 +238,31 @@ module.exports = cds.service.impl(async function () {
     }
 
     // --------------------------
+    // 根据 SalesOrganization 和 ReceivingPlant 查询 MPTTypeConfig
+    // SalesOrganization = zxsf（销售方）, ReceivingPlant = zfcf（发出方）
+    // --------------------------
+    const firstData = data[0];
+    const mptConfig = await SELECT.one(MPTTypeConfig)
+      .columns(['zrfcid', 'zdfjy'])
+      .where({
+        zxsf: firstData.SalesOrganization,
+        zfcf: firstData.ReceivingPlant
+      });
+
+    if (!mptConfig) {
+      req.error(400, `未找到多方交易类型配置：SalesOrganization=${firstData.SalesOrganization}, ReceivingPlant=${firstData.ReceivingPlant}`);
+      return req.reject();
+    }
+
+    // --------------------------
     // 调用 MultiStepInvoker 处理多步流程
-    // zrfc_logid 和 zrfcid 的生成以及业务表的插入由 MultiStepInvoker 负责
+    // 传入查询到的 zrfcid 和 zdfjy
     // --------------------------
     const MultiStepInvoker = require('./handlers/MultiStepInvoker');
     const invoker = new MultiStepInvoker();
     
-    // 调用 MultiStepInvoker，传入业务流程ID和三个业务表的数据
-    const invokerResult = await invoker.process('SD01', data, null, null);
+    // 调用 MultiStepInvoker，传入业务流程ID、数据和 zdfjy
+    const invokerResult = await invoker.process(mptConfig.zrfcid, data, null, null, mptConfig.zdfjy);
 
     // --------------------------
     // 返回创建成功的数据

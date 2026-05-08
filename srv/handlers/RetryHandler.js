@@ -1,10 +1,12 @@
 const cds = require('@sap/cds');
 const MultiStepProcessor = require('./MultiStepProcessor');
+const CommonUtils = require('./CommonUtils');
 
 class RetryHandler {
     constructor() {
         this.db = cds.transaction();
         this.processor = new MultiStepProcessor();
+        this.commonUtils = new CommonUtils();
     }
 
     /**
@@ -60,19 +62,6 @@ class RetryHandler {
     }
 
     /**
-     * 获取业务流程配置
-     * @param {string} zrfcid - 业务流程ID
-     * @returns {Promise<Object>} 业务流程配置
-     */
-    async getProcessConfig(zrfcid) {
-        const ProcessConfig = cds.entities['com.sap.zictm.ProcessConfig'];
-        const result = await this.db.run(
-            SELECT.one.from(ProcessConfig).where({ zrfcid })
-        );
-        return result;
-    }
-
-    /**
      * 获取步骤配置
      * @param {string} zrfcid - 业务流程ID
      * @returns {Promise<Array>} 步骤配置列表
@@ -86,33 +75,15 @@ class RetryHandler {
     }
 
     /**
-     * 读取入参数据
+     * 读取入参数据（使用通用工具类）
      * @param {string} zrfcLogid - 多步ID
      * @param {string} zrfcid - 业务流程ID
      * @param {Object} step - 步骤配置
      * @returns {Promise<Object>} 入参数据
      */
     async readInputData(zrfcLogid, zrfcid, step) {
-        let readSteps = step.readsteps;
-        let objkey = null;
-        
-        if (!readSteps) {
-            // 如果读取步骤编号为空，默认读取上一步骤的对象号
-            const prevStepNum = step.canum - 10;
-            readSteps = prevStepNum > 0 ? prevStepNum.toString() : null;
-        }
-
-        if (readSteps) {
-            // 查询多步执行日志表，获取指定步骤的对象号
-            const MultistepLog = cds.entities['com.sap.zictm.MultistepLog'];
-            const log = await this.db.run(
-                SELECT.one.from(MultistepLog)
-                    .where({ zrfc_logid: zrfcLogid, zrfcid, canum: readSteps })
-            );
-            if (log) {
-                objkey = log.objkey;
-            }
-        }
+        // 使用通用工具类获取之前步骤的 objkey
+        const objkey = await this.commonUtils.getPreviousStepObjkey(zrfcLogid, zrfcid, step.readsteps, step.canum);
 
         // 构建标准入参格式
         return {

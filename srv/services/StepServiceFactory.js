@@ -1,5 +1,6 @@
 const MaterialDocumentService = require('./MaterialDocumentService');
 const AccountingDocumentService = require('./AccountingDocumentService');
+const PurchaseOrderService = require('./PurchaseOrderService');
 
 class StepServiceFactory {
     constructor() {
@@ -22,6 +23,8 @@ class StepServiceFactory {
                 return new MaterialDocumentService();
             case 'AccountingDocumentService':
                 return new AccountingDocumentService();
+            case 'PurchaseOrderService':
+                return new PurchaseOrderService();
             default:
                 // 未知的服务类
                 return null;

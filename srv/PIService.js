@@ -1,5 +1,27 @@
 module.exports = cds.service.impl(async function () {
-  const { SalesOrderCreate,SalesOrderChange } = this.entities;
+  const { SalesOrderCreate, SalesOrderChange, MPTTypeConfig } = this.entities;
+  
+  // --------------------------
+  // 根据 YY1_FD_ZDFJY 获取 zrfcid 和 zdfjy
+  // --------------------------
+  async function getZrfcidByZdfjy(req, YY1_FD_ZDFJY) {
+    if (!YY1_FD_ZDFJY) {
+      req.error(400, 'YY1_FD_ZDFJY 不能为空');
+      return null;
+    }
+    
+    const config = await SELECT.one(MPTTypeConfig)
+      .columns(['zrfcid', 'zdfjy'])
+      .where({ zdfjy: YY1_FD_ZDFJY });
+    
+    if (!config) {
+      req.error(400, `未找到多方交易类型配置：${YY1_FD_ZDFJY}`);
+      return null;
+    }
+    
+    return config;
+  }
+  
   //创建
   this.on('SOCreate', async (req) => {
     const { data } = req.data;
@@ -11,10 +33,13 @@ module.exports = cds.service.impl(async function () {
     data.forEach((item, index) => {
       const rowNum = index + 1;
       if (!item.PIOrder) {
-        req.error(400, `第 ${rowNum} 条数据缺少必填字段：PIOrdero`);
+        req.error(400, `第 ${rowNum} 条数据缺少必填字段：PIOrder`);
       }
       if (!item.PIOrderItem) {
         req.error(400, `第 ${rowNum} 条数据缺少必填字段：PIOrderItem`);
+      }
+      if (!item.YY1_FD_ZDFJY) {
+        req.error(400, `第 ${rowNum} 条数据缺少必填字段：YY1_FD_ZDFJY`);
       }
     });
 
@@ -56,18 +81,45 @@ module.exports = cds.service.impl(async function () {
     }
 
     // --------------------------
-    // 校验通过，执行批量插入
+    // 根据 YY1_FD_ZDFJY 获取 zrfcid 和 zdfjy
     // --------------------------
-    await INSERT.into(SalesOrderCreate).entries(data);
+    const mptConfig = await getZrfcidByZdfjy(req, data[0].YY1_FD_ZDFJY);
+    
+    // 如果有错误，直接回滚并返回
+    if (req.errors || !mptConfig) {
+      return req.reject();
+    }
 
     // --------------------------
-    // 返回成功
+    // 调用 MultiStepInvoker 处理多步流程
+    // zrfc_logid 和 zrfcid 的生成以及业务表的插入由 MultiStepInvoker 负责
     // --------------------------
-    return {
-      code: 200,
-      message: "推送成功",
-    };
+    const MultiStepInvoker = require('./handlers/MultiStepInvoker');
+    const invoker = new MultiStepInvoker();
+    
+    // 调用 MultiStepInvoker，传入查询到的业务流程ID和 zdfjy
+    const invokerResult = await invoker.process(mptConfig.zrfcid, data, null, null, mptConfig.zdfjy);
+
+    // --------------------------
+    // 返回创建成功的数据
+    // --------------------------
+    const result = {};
+    if (invokerResult) {
+      result.code = invokerResult.code === 'S' ? 200 : 400;
+      result.message = invokerResult.message ? invokerResult.message.substring(0, 500) : '处理成功';
+      result.zrfc_logid = invokerResult.zrfcLogid;
+      result.zrfcid = invokerResult.zrfcid;
+      if (invokerResult.objkey) {
+        result.objkey = invokerResult.objkey;
+      }
+    } else {
+      result.code = 200;
+      result.message = '没有数据需要处理';
+    }
+    
+    return result;
   });
+  
   //修改
   this.on('SOChange', async (req) => {
     const { data } = req.data;
@@ -79,10 +131,13 @@ module.exports = cds.service.impl(async function () {
     data.forEach((item, index) => {
       const rowNum = index + 1;
       if (!item.SalesOrder) {
-        req.error(400, `第 ${rowNum} 条数据缺少必填字段：SalesOrdero`);
+        req.error(400, `第 ${rowNum} 条数据缺少必填字段：SalesOrder`);
       }
       if (!item.SalesOrderItem) {
         req.error(400, `第 ${rowNum} 条数据缺少必填字段：SalesOrderItem`);
+      }
+      if (!item.YY1_FD_ZDFJY) {
+        req.error(400, `第 ${rowNum} 条数据缺少必填字段：YY1_FD_ZDFJY`);
       }
     });
 
@@ -124,16 +179,42 @@ module.exports = cds.service.impl(async function () {
     }
 
     // --------------------------
-    // 校验通过，执行批量插入
+    // 根据 YY1_FD_ZDFJY 获取 zrfcid 和 zdfjy
     // --------------------------
-    await INSERT.into(SalesOrderChange).entries(data);
+    const mptConfig = await getZrfcidByZdfjy(req, data[0].YY1_FD_ZDFJY);
+    
+    // 如果有错误，直接回滚并返回
+    if (req.errors || !mptConfig) {
+      return req.reject();
+    }
 
     // --------------------------
-    // 返回成功
+    // 调用 MultiStepInvoker 处理多步流程
+    // zrfc_logid 和 zrfcid 的生成以及业务表的插入由 MultiStepInvoker 负责
     // --------------------------
-    return {
-      code: 200,
-      message: "推送成功",
-    };
+    const MultiStepInvoker = require('./handlers/MultiStepInvoker');
+    const invoker = new MultiStepInvoker();
+    
+    // 调用 MultiStepInvoker，传入查询到的业务流程ID和 zdfjy
+    const invokerResult = await invoker.process(mptConfig.zrfcid, data, null, null, mptConfig.zdfjy);
+
+    // --------------------------
+    // 返回创建成功的数据
+    // --------------------------
+    const result = {};
+    if (invokerResult) {
+      result.code = invokerResult.code === 'S' ? 200 : 400;
+      result.message = invokerResult.message ? invokerResult.message.substring(0, 500) : '处理成功';
+      result.zrfc_logid = invokerResult.zrfcLogid;
+      result.zrfcid = invokerResult.zrfcid;
+      if (invokerResult.objkey) {
+        result.objkey = invokerResult.objkey;
+      }
+    } else {
+      result.code = 200;
+      result.message = '没有数据需要处理';
+    }
+    
+    return result;
   });
 });

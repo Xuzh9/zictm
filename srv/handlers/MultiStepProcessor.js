@@ -12,9 +12,10 @@ class MultiStepProcessor {
      * @param {string} zrfcid - 业务流程ID
      * @param {number|null} startStepNum - 起始步骤编号（可选，用于重推时从失败步骤开始）
      * @param {boolean} isRetry - 是否为重推操作
+     * @param {string} zdfjy - 多方交易类型ID
      * @returns {Promise<Object>} 处理结果
      */
-    async processWithLogId(zrfcLogid, zrfcid, startStepNum = null, isRetry = false) {
+    async processWithLogId(zrfcLogid, zrfcid, startStepNum = null, isRetry = false, zdfjy = null) {
         let lastObjKey = '';
         let lastMessage = '';
         let lastCode = '';
@@ -68,7 +69,7 @@ class MultiStepProcessor {
                 const executionAt = new Date();
                 
                 // 执行步骤
-                const executionResult = await this.executeStep(zrfcLogid, zrfcid, step, lastObjKey);
+                const executionResult = await this.executeStep(zrfcLogid, zrfcid, step, lastObjKey, zdfjy);
                 
                 const endTime = Date.now();
                 const executionTime = Math.round((endTime - startTime) / 1000);
@@ -78,7 +79,7 @@ class MultiStepProcessor {
                 await this.saveLog(zrfcLogid, zrfcid, step.canum, {
                     ...executionResult,
                     message: logMessage
-                }, executionTime, executionAt, isRetry);
+                }, executionTime, executionAt, isRetry, step.objtype);
 
                 // 更新上一步对象号、消息和代码
                 lastObjKey = executionResult.objkey || lastObjKey;
@@ -136,9 +137,10 @@ class MultiStepProcessor {
      * @param {string} zrfcid - 业务流程ID
      * @param {Object} step - 步骤配置
      * @param {string} lastObjKey - 上一步的对象号
+     * @param {string} zdfjy - 多方交易类型ID
      * @returns {Promise<Object>} 执行结果
      */
-    async executeStep(zrfcLogid, zrfcid, step, lastObjKey) {
+    async executeStep(zrfcLogid, zrfcid, step, lastObjKey, zdfjy = null) {
         try {
             // 使用工厂模式获取服务实例
             const service = this.stepServiceFactory.getService(step.serviceName);
@@ -161,7 +163,8 @@ class MultiStepProcessor {
                 serviceName: step.serviceName,
                 readsteps: step.readsteps,
                 objkey: lastObjKey,
-                zrfcLogid
+                zrfcLogid,
+                zdfjy
             };
             
             // 执行服务
@@ -191,8 +194,9 @@ class MultiStepProcessor {
      * @param {number} executionTime - 执行时间（秒）
      * @param {Date} executionAt - 开始执行时间戳
      * @param {boolean} isRetry - 是否为重推操作
+     * @param {string} objtype - 对象类型（从StepConfig获取）
      */
-    async saveLog(zrfcLogid, zrfcid, canum, executionResult, executionTime, executionAt, isRetry = false) {
+    async saveLog(zrfcLogid, zrfcid, canum, executionResult, executionTime, executionAt, isRetry = false, objtype = null) {
         const MultistepLog = cds.entities['com.sap.zictm.MultistepLog'];
         
         // 检查日志是否已存在
@@ -224,6 +228,7 @@ class MultiStepProcessor {
                             code: executionResult.code,
                             message: executionResult.message,
                             objkey: executionResult.objkey,
+                            objtype: objtype || existingLog.objtype,
                             executionTime,
                             executionAt,
                             lastExecutionAt: executionAt,
@@ -242,6 +247,7 @@ class MultiStepProcessor {
                     code: executionResult.code,
                     message: executionResult.message,
                     objkey: executionResult.objkey,
+                    objtype: objtype || '',
                     executionTime,
                     executionAt,
                     lastExecutionAt: executionAt,

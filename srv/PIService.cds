@@ -11,6 +11,15 @@ service PIService {
      */
     entity SalesOrderChange as projection on db.SalesOrderChange;
 
+    /**
+     * PI销售订单关系表
+     */
+    entity PISalesOrderRel as projection on db.PISalesOrderRel;
+    
+    /**
+     * PI交货单关系表
+     */
+    entity PIDeliveryRel as projection on db.PIDeliveryRel;
 
     action SOCreate(data: array of SalesOrderCreate) returns array of SalesOrderCreate;
     action SOChange(data: array of SalesOrderChange) returns array of SalesOrderChange;

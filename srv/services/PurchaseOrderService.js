@@ -14,7 +14,7 @@ class PurchaseOrderService {
 
     async execute(inputData) {
         try {
-            const { zrfcid, canum, serviceName, readsteps, objkey, zrfcLogid } = inputData;
+            const { zrfcid, canum, serviceName, readsteps, objkey, zrfcLogid, zdfjy } = inputData;
             
             this.zrfcLogid = zrfcLogid;
 
@@ -39,8 +39,11 @@ class PurchaseOrderService {
             }
             const businessDataList = businessDataResult.businessData;
 
-            // 构建采购订单数据
-            const purchaseOrderData = this.buildPurchaseOrderData(businessDataList);
+            // 根据 zdfjy 和 canum 查找 MPTStepConfig 配置
+            const mptStepConfig = await this.getMPTStepConfig(zdfjy, canum);
+
+            // 构建采购订单数据，同时获取行号映射
+            const { purchaseOrderData, itemMapping } = this.buildPurchaseOrderData(businessDataList, mptStepConfig);
  
             // 获取 CSRF token
             const csrfResult = await executeHttpRequest(
@@ -86,6 +89,9 @@ class PurchaseOrderService {
             if (result.status >= 200 && result.status < 300) {
                 // OData V4 响应格式
                 const purchaseOrder = result.data.PurchaseOrder || '';
+                
+                // 更新 PISalesOrderRel 表中的 PurchaseOrder1 和 PurchaseOrderItem1
+                await this.updatePISalesOrderRel(purchaseOrder, itemMapping);
                 
                 return {
                     code: 'S',
@@ -143,6 +149,24 @@ class PurchaseOrderService {
         return config ? config.businessTable1 : null;
     }
 
+    async getMPTStepConfig(zdfjy, canum) {
+        if (!zdfjy || !canum) {
+            return null;
+        }
+        
+        try {
+            const MPTStepConfig = cds.entities['com.sap.zictm.MPTStepConfig'];
+            const config = await cds.run(
+                SELECT.one.from(MPTStepConfig)
+                    .where({ zdfjy: zdfjy, canum: parseInt(canum) })
+            );
+            return config || null;
+        } catch (error) {
+            console.error('获取 MPTStepConfig 失败:', error);
+            return null;
+        }
+    }
+
     async getBusinessData(businessTable, objkey) {
         try {
             const BusinessEntity = cds.entities[businessTable];
@@ -198,43 +222,114 @@ class PurchaseOrderService {
         }
     }
 
-    buildPurchaseOrderData(businessDataList) {
+    buildPurchaseOrderData(businessDataList, mptStepConfig) {
         const firstBusinessData = businessDataList[0];
         
         // OData V4 格式 - 使用 ISO 日期格式
+        // 从 MPTStepConfig 获取配置字段
         const header = {
-            PurchaseOrderType: firstBusinessData.SalesOrderType || 'NB',
-            PurchasingOrganization: firstBusinessData.SalesOrganization || '',
-            PurchasingGroup: firstBusinessData.SalesGroup || '',
-            CompanyCode: firstBusinessData.OrganizationDivision || '',
-            Currency: firstBusinessData.TransactionCurrency || 'CNY',
-            DocumentDate: firstBusinessData.SalesOrderDate,
-            Supplier: firstBusinessData.Customer || ''
+            PurchaseOrderType: 'Z07',
+            PurchasingOrganization: mptStepConfig?.ekorg,
+            PurchasingGroup: mptStepConfig?.ekgrp,
+            CompanyCode: firstBusinessData.SalesDistrict,
+            Currency: firstBusinessData.TransactionCurrency,
+            PurchaseOrderDate: firstBusinessData.SalesOrderDate,
+            Supplier: mptStepConfig?.lifnr
         };
 
         const items = [];
-        for (const businessData of businessDataList) {
-            if (businessData.Material || businessData.Product) {
-                const item = {
-                    PurchaseOrderItem: String(items.length + 10),
-                    Material: businessData.Material || businessData.Product || '',
-                    Plant: businessData.ProductionPlant || '',
-                    Quantity: businessData.RequestedQuantity || 0,
-                    OrderQuantityUnit: businessData.RequestedQuantityUnit || 'PCS',
-                    NetPriceAmount: businessData.ZP00_Value || 0,
-                    DocumentCurrency: businessData.ZP00_CurrencyCode || 'CNY',
-                    DeliveryDate: businessData.RequestedDeliveryDate || new Date().toISOString().split('T')[0]
-                };
+        // 用于记录业务数据索引与行项目号的映射关系
+        const itemMapping = [];
+        
+        for (let index = 0; index < businessDataList.length; index++) {
+            const businessData = businessDataList[index];
+            const purchaseOrderItem = String(items.length + 10);
+            
+            // 获取业务数据中的金额（如 NetPriceAmount 或其他金额字段）
+            const baseAmount = 100;
+            // 获取 MPTStepConfig 中的 zjgbl（加价比例，存储为百分比），默认为 100（即 100%）
+            const zjgblPercent = parseFloat(mptStepConfig?.zjgbl) || 100;
+            // 计算最终金额：金额 * (加价百分比 / 100)
+            const calculatedNetPriceAmount = baseAmount * (zjgblPercent / 100);
+            
+            const item = {
+                PurchaseOrderItem: purchaseOrderItem,
+                Material: businessData.Material,
+                Plant: businessData.ProductionPlant,
+                StorageLocation: mptStepConfig?.umwrk,
+                OrderQuantity: businessData.RequestedQuantity,
+                NetPriceAmount: calculatedNetPriceAmount,
+                DocumentCurrency: businessData.TransactionCurrency,
+                TaxCode: mptStepConfig?.mwskz
+            };
 
-                items.push(item);
-            }
+            items.push(item);
+            
+            // 记录映射关系：业务数据索引 -> 行项目号（包含计算后的金额）
+            itemMapping.push({
+                index: index,
+                purchaseOrderItem: purchaseOrderItem,
+                piOrder: businessData.PIOrder || '',
+                piOrderItem: businessData.PIOrderItem || '',
+                netPriceAmount: calculatedNetPriceAmount
+            });
         }
 
         if (items.length > 0) {
             header.PurchaseOrderItem = items;
         }
 
-        return header;
+        return { purchaseOrderData: header, itemMapping };
+    }
+
+    async updatePISalesOrderRel(purchaseOrder, itemMapping) {
+        try {
+            const PISalesOrderRel = cds.entities['com.sap.zictm.PISalesOrderRel'];
+            
+            // 遍历行号映射，更新或插入对应的 PISalesOrderRel 记录
+            for (const mapping of itemMapping) {
+                const { piOrder, piOrderItem, purchaseOrderItem, netPriceAmount } = mapping;
+                
+                if (!piOrder || !piOrderItem) {
+                    continue; // 没有 PI 信息，跳过
+                }
+                
+                // 先查询是否存在记录
+                const existingRecord = await cds.run(
+                    SELECT.one.from(PISalesOrderRel)
+                        .where({ PIOrder: piOrder, PIOrderItem: piOrderItem })
+                );
+                
+                if (existingRecord) {
+                    // 如果存在记录，执行更新（包含 NetPriceAmount）
+                    await cds.run(
+                        UPDATE(PISalesOrderRel)
+                            .set({
+                                PurchaseOrder1: purchaseOrder,
+                                PurchaseOrderItem1: purchaseOrderItem,
+                                NetPriceAmount: netPriceAmount
+                            })
+                            .where({ PIOrder: piOrder, PIOrderItem: piOrderItem })
+                    );
+                } else {
+                    // 如果不存在记录，执行插入（包含 NetPriceAmount）
+                    await cds.run(
+                        INSERT.into(PISalesOrderRel).entries({
+                            PIOrder: piOrder,
+                            PIOrderItem: piOrderItem,
+                            PurchaseOrder1: purchaseOrder,
+                            PurchaseOrderItem1: purchaseOrderItem,
+                            NetPriceAmount: netPriceAmount
+                        })
+                    );
+                }
+            }
+            
+            console.log(`已更新/插入 PISalesOrderRel 表，采购订单号: ${purchaseOrder}`);
+        } catch (error) {
+            console.error('更新/插入 PISalesOrderRel 表失败:', error);
+            // 更新失败不影响主流程，继续执行
+        }
     }
 }
 

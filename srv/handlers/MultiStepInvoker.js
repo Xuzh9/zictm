@@ -1,9 +1,11 @@
 const cds = require('@sap/cds');
 const MultiStepProcessor = require('./MultiStepProcessor');
+const CommonUtils = require('./CommonUtils');
 
 class MultiStepInvoker {
     constructor() {
         this.processor = new MultiStepProcessor();
+        this.commonUtils = new CommonUtils();
     }
 
     /**
@@ -13,9 +15,10 @@ class MultiStepInvoker {
      * @param {Array} businessTable1 - 业务表1的数据
      * @param {Array} businessTable2 - 业务表2的数据（可选）
      * @param {Array} businessTable3 - 业务表3的数据（可选）
+     * @param {string} zdfjy - 多方交易类型ID（可选，用于更新业务表的 zdfjy 字段）
      * @returns {Promise<Object>} 执行结果，包含zrfcid用于后续记录对账
      */
-    async process(zrfcid, businessTable1, businessTable2, businessTable3) {
+    async process(zrfcid, businessTable1, businessTable2, businessTable3, zdfjy = null) {
         const zrfcLogid = this.generateZrfcLogid();
         
         let result = {
@@ -27,8 +30,8 @@ class MultiStepInvoker {
         let hasSavedLog = false;
         
         try {
-            // 获取业务流程配置
-            const processConfig = await this.getProcessConfig(zrfcid);
+            // 获取业务流程配置（使用通用工具类）
+            const processConfig = await this.commonUtils.getProcessConfig(zrfcid);
             if (!processConfig) {
                 result.code = 'E';
                 result.message = `业务流程配置不存在: ${zrfcid}`;
@@ -38,7 +41,7 @@ class MultiStepInvoker {
             }
             
             // 根据 ProcessConfig 中的 businessTable1、businessTable2、businessTable3 分别插入对应表的数据
-            await this.insertBusinessDataByConfig(processConfig, businessTable1, businessTable2, businessTable3, zrfcid, zrfcLogid);
+            await this.insertBusinessDataByConfig(processConfig, businessTable1, businessTable2, businessTable3, zrfcid, zrfcLogid, zdfjy);
             
             // 构建输入数据
             const inputData = {
@@ -56,10 +59,10 @@ class MultiStepInvoker {
             
             // 根据 isAsync 字段判断同步还是异步调用
             if (processConfig.isAsync) {
-                this.executeAsync(zrfcid, zrfcLogid);
+                this.executeAsync(zrfcid, zrfcLogid, zdfjy);
                 result.message = '异步调用成功，正在处理中';
             } else {
-                const processorResult = await this.processor.processWithLogId(zrfcLogid, zrfcid);
+                const processorResult = await this.processor.processWithLogId(zrfcLogid, zrfcid, null, false, zdfjy);
                 result.code = processorResult.code;
                 result.message = processorResult.message ? processorResult.message.substring(0, 500) : '执行成功';
                 result.objkey = processorResult.objkey || '';
@@ -118,27 +121,15 @@ class MultiStepInvoker {
     }
 
     /**
-     * 获取业务流程配置
-     * @param {string} zrfcid - 业务流程ID
-     * @returns {Promise<Object>} 业务流程配置
-     */
-    async getProcessConfig(zrfcid) {
-        const ProcessConfig = cds.entities['com.sap.zictm.ProcessConfig'];
-        const result = await cds.run(
-            SELECT.one.from(ProcessConfig).where({ zrfcid })
-        );
-        return result;
-    }
-
-    /**
      * 异步执行多步处理
      * @param {string} zrfcid - 业务流程ID
      * @param {string} zrfcLogid - 日志ID
+     * @param {string} zdfjy - 多方交易类型ID
      */
-    executeAsync(zrfcid, zrfcLogid) {
+    executeAsync(zrfcid, zrfcLogid, zdfjy = null) {
         setTimeout(async () => {
             try {
-                await this.processor.processWithLogId(zrfcLogid, zrfcid);
+                await this.processor.processWithLogId(zrfcLogid, zrfcid, null, false, zdfjy);
             } catch (error) {
                 console.error('异步处理异常:', error);
             }
@@ -153,15 +144,17 @@ class MultiStepInvoker {
      * @param {Array} businessTable3Data - 业务表3的数据
      * @param {string} zrfcid - 业务流程ID
      * @param {string} zrfcLogid - 日志ID
+     * @param {string} zdfjy - 多方交易类型ID（可选）
      */
-    async insertBusinessDataByConfig(processConfig, businessTable1Data, businessTable2Data, businessTable3Data, zrfcid, zrfcLogid) {
+    async insertBusinessDataByConfig(processConfig, businessTable1Data, businessTable2Data, businessTable3Data, zrfcid, zrfcLogid, zdfjy = null) {
         try {
             // 处理 businessTable1
             if (processConfig.businessTable1 && businessTable1Data) {
                 const table1Data = businessTable1Data.map(item => ({
                     ...item,
                     zrfcid,
-                    zrfc_logid: zrfcLogid
+                    zrfc_logid: zrfcLogid,
+                    ...(zdfjy && { zdfjy })
                 }));
                 await this.insertBusinessData(processConfig.businessTable1, table1Data);
             }
@@ -171,7 +164,8 @@ class MultiStepInvoker {
                 const table2Data = businessTable2Data.map(item => ({
                     ...item,
                     zrfcid,
-                    zrfc_logid: zrfcLogid
+                    zrfc_logid: zrfcLogid,
+                    ...(zdfjy && { zdfjy })
                 }));
                 await this.insertBusinessData(processConfig.businessTable2, table2Data);
             }
@@ -181,7 +175,8 @@ class MultiStepInvoker {
                 const table3Data = businessTable3Data.map(item => ({
                     ...item,
                     zrfcid,
-                    zrfc_logid: zrfcLogid
+                    zrfc_logid: zrfcLogid,
+                    ...(zdfjy && { zdfjy })
                 }));
                 await this.insertBusinessData(processConfig.businessTable3, table3Data);
             }

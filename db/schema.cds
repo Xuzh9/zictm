@@ -32,6 +32,7 @@ entity StepConfig {
     // 业务字段
     description    : String(50) @title: '步骤描述';      // 步骤描述
     serviceName    : String(100) @title: '服务文件名';     // 服务文件名
+    objtype        : String(5) @title: '对象类型';     // 对象类型
     readsteps      : String(10) @title: '读取步骤编号';      // 读取步骤编号（如10、20、30）
 }
 
@@ -51,6 +52,7 @@ entity MultistepLog {
     key canum           : String(10) @title: '步骤编号';     // 步骤编号（如10、20、30）
     code                : String(2) @title: '消息状态';      // 消息状态(S成功/E失败)
     message             : String(255) @title: '消息文本';    // 消息文本
+    objtype             : String(5) @title: '对象类型';      // 对象类型
     objkey              : String(20) @title: '对象号';     // 对象号
     executionAt         : Timestamp @title: '执行时间';      // 执行时间
     executionTime       : Decimal(10,2) @title: '运行时间';  // 运行时间（秒）
@@ -90,7 +92,7 @@ entity MPTStepConfig {
     umwrk          : String(4) @title: '收货工厂';      // 收货工厂
     umlgo          : String(4) @title: '收货库存地点';      // 收货库存地点
     // 价格和税务信息
-    zjgbl          : Decimal(10,2) @title: '价格比例';  // 价格比例
+    zjgbl          : Decimal(10,2) @title: '价格比例(%)';  // 价格比例(%)
     mwskz          : String(3) @title: '税码';      // 税码
     zsl            : Decimal(10,2) @title: '税率';  // 税率
     // 枚举类型：价格方向
@@ -135,6 +137,7 @@ entity OutboundDelivery{
     DeliveryDate             : Date @title: '发货日期';               // 发货日期
     zrfcid                   : String(10) @title: '业务流程ID';         // 业务流程ID
     zrfc_logid               : UUID @title: '多步ID';               // 多步ID
+    zdfjy                    : String(10) @title: '多方交易类型ID';     // 多方交易类型ID
 }
 
 //收付款单
@@ -245,6 +248,7 @@ entity SalesOrderCreate {
     ScheduleLineOrderQuantity     : Decimal(15,3) @title: '订单确认数量'; // 订单确认数量
     zrfcid                        : String(10) @title: '业务流程ID';    // 业务流程ID
     zrfc_logid                    : UUID @title: '多步ID';          // 多步ID
+    zdfjy                         : String(10) @title: '多方交易类型ID';     // 多方交易类型ID
 }
 
 // 销售订单修改表
@@ -285,6 +289,7 @@ entity SalesOrderChange {
     SalesDocumentRjcnReason       : String(4) @title: '销售订单拒绝原因';      // 销售订单拒绝原因
     zrfcid                        : String(10) @title: '业务流程ID';     // 业务流程ID
     zrfc_logid                    : UUID @title: '多步ID';           // 多步ID
+    zdfjy                         : String(10) @title: '多方交易类型ID';     // 多方交易类型ID
 }
 
 //交货单表
@@ -318,6 +323,8 @@ entity PISalesOrderRel {
       PurchaseOrderItem2        : String(6) @title: '采购订单项目号2';     // 采购订单项目号2
       SalesOrder2               : String(10) @title: '销售订单号2';    // 销售订单号2
       SalesOrderItem2           : String(6) @title: '销售订单项目号2';     // 销售订单项目号2
+      ProductionOrder           : String(10) @title: '生产订单';     // 生产订单
+      NetPriceAmount            : Decimal(13,3) @title: '单价';   // 单价
 }
 
 //PI交货单关系表
