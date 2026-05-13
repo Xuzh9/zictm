@@ -1,4 +1,5 @@
 const cds = require('@sap/cds');
+const { SELECT, INSERT, UPDATE, DELETE } = cds.ql;
 const MultiStepProcessor = require('./MultiStepProcessor');
 const CommonUtils = require('./CommonUtils');
 
@@ -19,7 +20,9 @@ class MultiStepInvoker {
      * @returns {Promise<Object>} 执行结果，包含zrfcid用于后续记录对账
      */
     async process(zrfcid, businessTable1, businessTable2, businessTable3, zdfjy = null) {
+        console.log('[MultiStepInvoker.process] 开始处理, zrfcid:', zrfcid, ', zdfjy:', zdfjy);
         const zrfcLogid = this.generateZrfcLogid();
+        console.log('[MultiStepInvoker.process] 生成的 zrfcLogid:', zrfcLogid);
         
         let result = {
             code: 'S',
@@ -31,7 +34,9 @@ class MultiStepInvoker {
         
         try {
             // 获取业务流程配置（使用通用工具类）
+            console.log('[MultiStepInvoker.process] 开始获取业务流程配置');
             const processConfig = await this.commonUtils.getProcessConfig(zrfcid);
+            console.log('[MultiStepInvoker.process] 业务流程配置获取成功:', JSON.stringify(processConfig));
             if (!processConfig) {
                 result.code = 'E';
                 result.message = `业务流程配置不存在: ${zrfcid}`;
@@ -219,4 +224,5 @@ class MultiStepInvoker {
         }
     }
 }
+
 module.exports = MultiStepInvoker;

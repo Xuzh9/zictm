@@ -15,25 +15,6 @@ annotate service.MultistepLog with {
     lastExecutionTime  @Common.Label: '最新运行时间（秒）';
 };
 
-// 标准的 SideEffects 配置 - 确保前端自动刷新
-annotate service.MultistepLog with @Core.SideEffects : {
-    SourceEntities : [
-        {
-            Type : Core.SourceEntityType.Action,
-            Action : 'service.MultistepLog.retryStep'
-        }
-    ],
-    TargetEntities : [
-        'service.MultistepLog'
-    ],
-    TriggerActions : [
-        {
-            Action : 'service.MultistepLog.retryStep',
-            EntitySet : 'MultistepLog'
-        }
-    ]
-};
-
 annotate service.MultistepLog with @(
     Common.Label: '多步日志查询',
 
@@ -50,6 +31,7 @@ annotate service.MultistepLog with @(
             { $Type: 'UI.DataField', Value: zrfc_logid },
             { $Type: 'UI.DataField', Value: zrfcid },
             { $Type: 'UI.DataField', Value: canum },
+            { $Type: 'UI.DataField', Value: description },
             { $Type: 'UI.DataField', Value: code },
             { $Type: 'UI.DataField', Value: message },
             { $Type: 'UI.DataField', Value: objkey },
@@ -58,7 +40,11 @@ annotate service.MultistepLog with @(
                 $Type: 'UI.DataFieldForAction',
                 Label: '重推',
                 Action: 'service.MultistepLog.retryStep',
-                RequiresSelection: true
+                RequiresSelection: true,
+                Determining: false,
+                @Common: { SideEffects: { TargetProperties: ['/service.MultistepLog'] } },
+                TargetProperties: ['code', 'message', 'objkey','lastExecutionAt', 'lastExecutionTime'],
+                TriggerAction: 'service.MultistepLog.retryStep'
             }
         ],
 
@@ -66,8 +52,10 @@ annotate service.MultistepLog with @(
             { $Type: 'UI.DataField', Value: zrfc_logid },
             { $Type: 'UI.DataField', Value: zrfcid },
             { $Type: 'UI.DataField', Value: canum },
+            { $Type: 'UI.DataField', Value: description },
             { $Type: 'UI.DataField', Value: code },
             { $Type: 'UI.DataField', Value: message },
+            { $Type: 'UI.DataField', Value: objtype },
             { $Type: 'UI.DataField', Value: objkey },
             { $Type: 'UI.DataField', Value: executionAt },
             { $Type: 'UI.DataField', Value: executionTime },

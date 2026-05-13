@@ -1,6 +1,15 @@
 const MaterialDocumentService = require('./MaterialDocumentService');
 const AccountingDocumentService = require('./AccountingDocumentService');
-const PurchaseOrderService = require('./PurchaseOrderService');
+const PurchaseOrderCreateService = require('./PurchaseOrderCreateService');
+const PurchaseOrderItemUpdateService = require('./PurchaseOrderItemUpdateService');
+const PurchaseOrderScheduleLineUpdateService = require('./PurchaseOrderScheduleLineUpdateService');
+const SalesOrderCreateService = require('./SalesOrderCreateService');
+const ProductionOrderCreateService = require('./ProductionOrderCreateService');
+const ProductionOrderUpdateService = require('./ProductionOrderUpdateService');
+const SalesOrderHeaderUpdateService = require('./SalesOrderHeaderUpdateService');
+const SalesOrderItemUpdateService = require('./SalesOrderItemUpdateService');
+const SalesOrderPricingUpdateService = require('./SalesOrderPricingUpdateService');
+const SalesOrderQueryService = require('./SalesOrderQueryService');
 
 class StepServiceFactory {
     constructor() {
@@ -24,7 +33,26 @@ class StepServiceFactory {
             case 'AccountingDocumentService':
                 return new AccountingDocumentService();
             case 'PurchaseOrderService':
-                return new PurchaseOrderService();
+            case 'PurchaseOrderCreateService':
+                return new PurchaseOrderCreateService();
+            case 'PurchaseOrderItemUpdateService':
+                return new PurchaseOrderItemUpdateService();
+            case 'PurchaseOrderScheduleLineUpdateService':
+                return new PurchaseOrderScheduleLineUpdateService();
+            case 'SalesOrderCreateService':
+                return new SalesOrderCreateService();
+            case 'ProductionOrderCreateService':
+                return new ProductionOrderCreateService();
+            case 'ProductionOrderUpdateService':
+                return new ProductionOrderUpdateService();
+            case 'SalesOrderHeaderUpdateService':
+                return new SalesOrderHeaderUpdateService();
+            case 'SalesOrderItemUpdateService':
+                return new SalesOrderItemUpdateService();
+            case 'SalesOrderPricingUpdateService':
+                return new SalesOrderPricingUpdateService();
+            case 'SalesOrderQueryService':
+                return new SalesOrderQueryService();
             default:
                 // 未知的服务类
                 return null;

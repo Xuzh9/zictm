@@ -43,6 +43,7 @@ annotate service.StepConfig with @(
             { $Type: 'UI.DataField', Label: '步骤编号', Value: canum, Editable: true },
             { $Type: 'UI.DataField', Label: '步骤描述', Value: description, Editable: true },
             { $Type: 'UI.DataField', Label: '服务文件名', Value: serviceName, Editable: true },
+            { $Type: 'UI.DataField', Label: '对象类型', Value: objtype, Editable: true },
             { $Type: 'UI.DataField', Label: '读取步骤', Value: readsteps, Editable: true }
         ],
         Identification: [
@@ -50,6 +51,7 @@ annotate service.StepConfig with @(
             { $Type: 'UI.DataField', Label: '步骤编号', Value: canum, Editable: true },
             { $Type: 'UI.DataField', Label: '步骤描述', Value: description, Editable: true },
             { $Type: 'UI.DataField', Label: '服务文件名', Value: serviceName, Editable: true },
+            { $Type: 'UI.DataField', Label: '对象类型', Value: objtype, Editable: true },
             { $Type: 'UI.DataField', Label: '读取步骤', Value: readsteps, Editable: true }
         ],
         Facets: [

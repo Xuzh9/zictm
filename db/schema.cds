@@ -32,13 +32,13 @@ entity StepConfig {
     // 业务字段
     description    : String(50) @title: '步骤描述';      // 步骤描述
     serviceName    : String(100) @title: '服务文件名';     // 服务文件名
-    objtype        : String(5) @title: '对象类型';     // 对象类型
+    objtype        : String(5) @title: '对象类型';       // 对象类型
     readsteps      : String(10) @title: '读取步骤编号';      // 读取步骤编号（如10、20、30）
 }
 
 // 接口入参日志表
 entity ApiInputLog {
-    key id         : UUID @title: 'ID';           // ID
+    key id         : UUID @title: 'ID';                // ID
     inputData      : LargeString @title: '入参数据';    // 入参数据，JSON格式
     code           : String(2) @title: '消息状态';      // 消息状态(S成功/E失败)
     message        : String(255) @title: '消息文本';    // 消息文本
@@ -50,6 +50,7 @@ entity MultistepLog {
     key zrfc_logid      : UUID @title: '多步ID';           // 多步ID
     key zrfcid          : String(10) @title: '业务流程ID';     // 业务流程ID
     key canum           : String(10) @title: '步骤编号';     // 步骤编号（如10、20、30）
+    description         : String(50) @title: '步骤描述';      // 步骤描述
     code                : String(2) @title: '消息状态';      // 消息状态(S成功/E失败)
     message             : String(255) @title: '消息文本';    // 消息文本
     objtype             : String(5) @title: '对象类型';      // 对象类型
@@ -83,9 +84,9 @@ entity MPTStepConfig {
     // 配置参数
     vkorg          : String(4) @title: '销售组织';      // 销售组织
     vtweg          : String(2) @title: '分销渠道';      // 分销渠道
-    kunnr          : String(10) @title: '客户';     // 客户
+    kunnr          : String(10) @title: '客户';        // 客户
     werks          : String(4) @title: '发货工厂';      // 发货工厂
-    lgort          : String(4) @title: '发货库存地点';      // 发货库存地点
+    lgort          : String(4) @title: '发货库存地点';  // 发货库存地点
     lifnr          : String(10) @title: '供应商';     // 供应商
     ekorg          : String(4) @title: '采购组织';      // 采购组织
     ekgrp          : String(4) @title: '采购组';      // 采购组
@@ -131,6 +132,7 @@ entity OutboundDelivery{
     SalesOrderItemType       : String(5) @title: '行项目类别';          // 行项目类别
     NetAmount                : Decimal(13,3) @title: '总金额';      // 总金额
     RequestedQuantity        : Decimal(13,3) @title: '总数量';      // 总数量
+    PurchasePrice            : Decimal(15,2) @title: '采购单价'; // 采购单价
     ItemTransactionCurrency  : String(3) @title: '币别';          // 币别
     ReceivingPlant           : String(4) @title: '库存组织';          // 库存组织
     ReceivingStorageLocation : String(4) @title: '库存地点';          // 库存地点
@@ -149,8 +151,8 @@ entity PaymentReceipt {
     procurementOrganization     : String(4) @title: '采购组织';      // 采购组织
     paymentOrganization         : String(4) @title: '付款组织';      // 付款组织
     receivingOrganization       : String(32) @title: '收款组织';     // 收款组织
-    expenseResponsibleDepartment: String(32) @title: '部门';     // 部门
-    currency                    : String(3) @title: '币别' ;     // 币别        
+    expenseResponsibleDepartment: String(32) @title: '部门';        // 部门
+    currency                    : String(3) @title: '币别' ;        // 币别        
     businessDate                : Date @title: '业务日期';           // 业务日期
     documentType                : String(20) @title: '单据类型';     // 单据类型
     businessType                : String(20) @title: '业务类型';     // 业务类型
@@ -161,7 +163,7 @@ entity PaymentReceipt {
     payingUnitType              : String(10) @title: '付款单位类型';     // 付款单位类型
     payingUnit                  : String(32) @title: '付款单位';     // 付款单位
     receivableAmount            : Decimal(15,2) @title: '应收金额';  // 应收金额  
-    taxRate                     : Decimal(5,2) @title: '税率';   // 税率      
+    taxRate                     : Decimal(5,2) @title: '税率';       // 税率      
     ourBankAccount              : String(50) @title: '我方银行账号';     // 我方银行账号
     generalLedgerAccountCash    : String(20) @title: '总账科目（资金科目）';     // 总账科目（资金科目）
     generalLedgerAccountNonCash : String(20) @title: '总账科目（非资金科目）' ;    // 总账科目（非资金科目）
@@ -220,7 +222,9 @@ entity SalesOrderCreate {
     ProductTaxClassification1     : String(4) @title: '产品税分类';     // 产品税分类
     SalesDocumentRjcnReason       : String(4) @title: '销售订单拒绝原因';     // 销售订单拒绝原因
     YY1_FD_FNSKU                  : String(20) @title: 'FNSKU/快递袋编码';    // FNSKU/快递袋编码
-    YY1_FD_SKU                    : String(30) @title: '客户SKU';    // 客户SKU
+    YY1_FD_SKU                    : String(30) @title: '客户SKU';    // 客户SKU 
+    YY1_FD_DZKB                   : String(2) @title: '定制卡板';    // 定制卡板
+    PurchasePrice                 : Decimal(15,2) @title: '采购单价'; // 采购单价
     ZB01_Value                    : Decimal(15,2) @title: 'ZB01价格'; // ZB01价格
     ZB01_CurrencyCode             : String(3) @title: 'ZB01价格单位';     // ZB01价格单位
     ZB01_UnitOfMeasure            : Integer @title: 'ZB01数量单位';       // ZB01数量单位
@@ -244,6 +248,7 @@ entity SalesOrderCreate {
     ZP00_UnitOfMeasure            : Integer @title: 'ZP00数量单位';       // ZP00数量单位
     PartnerFunction               : String(5) @title: '合作伙伴功能';     // 合作伙伴功能
     Customer                      : String(10) @title: '合作伙伴编号';    // 合作伙伴编号
+    ProductionStartDate           : Date @title: '生产开始日期';          // 生产开始日期
     ConfirmedDeliveryDate         : Date @title: '交货日期';          // 交货日期
     ScheduleLineOrderQuantity     : Decimal(15,3) @title: '订单确认数量'; // 订单确认数量
     zrfcid                        : String(10) @title: '业务流程ID';    // 业务流程ID
@@ -253,14 +258,15 @@ entity SalesOrderCreate {
 
 // 销售订单修改表
 entity SalesOrderChange {
-    key SalesOrder                : String(10) @title: '销售订单号';     // 销售订单号
-    key SalesOrderItem            : String(6) @title: '销售订单项目号';      // 销售订单项目号
+    key PIOrder                   : String(10) @title: 'PI单号';    // PI单号
+    key PIOrderItem               : String(6) @title: 'PI项目号';     // PI项目号
     SalesOrderItemCategory        : String(4) @title: '销售订单项目类别';      // 销售订单项目类别
     Material                      : String(40) @title: '物料号';     // 物料号
     MaterialByCustomer            : String(40) @title: '客户物料编号';     // 客户物料编号
     RequestedQuantity             : Decimal(15,3) @title: '数量';  // 数量
     RequestedQuantityUnit         : String(3) @title: '单位';      // 单位
     ProductionPlant               : String(4) @title: '工厂';      // 工厂
+    PurchasePrice                 : Decimal(15,2) @title: '采购单价'; // 采购单价
     ZB01_Value                    : Decimal(15,2) @title: 'ZB01价格';  // ZB01价格
     ZB01_CurrencyCode             : String(3) @title: 'ZB01价格单位';      // ZB01价格单位
     ZB01_UnitOfMeasure            : Integer @title: 'ZB01数量单位';        // ZB01数量单位
@@ -284,6 +290,8 @@ entity SalesOrderChange {
     ZP00_UnitOfMeasure            : Integer @title: 'ZP00数量单位';        // ZP00数量单位
     YY1_FD_FNSKU                  : String(20) @title: 'FNSKU/快递袋编码';     // FNSKU/快递袋编码
     YY1_FD_SKU                    : String(30) @title: '客户SKU';     // 客户SKU
+    YY1_FD_DZKB                   : String(2) @title: '定制卡板';    // 定制卡板
+    ProductionStartDate           : Date @title: '生产开始日期';          // 生产开始日期
     ConfirmedDeliveryDate         : Date @title: '交货日期';           // 交货日期
     ScheduleLineOrderQuantity     : Decimal(13,3) @title: '订单确认数量';  // 订单确认数量
     SalesDocumentRjcnReason       : String(4) @title: '销售订单拒绝原因';      // 销售订单拒绝原因
@@ -313,8 +321,9 @@ entity DeliveryActualInfo {
 entity PISalesOrderRel {
   key PIOrder                   : String(10) @title: 'PI单号';    // PI单号
   key PIOrderItem               : String(6) @title: 'PI项目号';     // PI项目号
-      SalesOrder                : String(10) @title: '销售订单号';    // 销售订单号
-      SalesOrderItem            : String(6) @title: '销售订单项目号';     // 销售订单项目号
+      zrfc_logid                : UUID @title: '多步ID';           // 多步ID
+      SalesOrder                : String(10) @title: '销售订单号';    // 对外销售订单号
+      SalesOrderItem            : String(6) @title: '销售订单项目号';     // 对外销售订单项目号
       PurchaseOrder1            : String(10) @title: '采购订单号1';    // 采购订单号1
       PurchaseOrderItem1        : String(6) @title: '采购订单项目号1';     // 采购订单项目号1
       SalesOrder1               : String(10) @title: '销售订单号1';    // 销售订单号1
@@ -323,14 +332,14 @@ entity PISalesOrderRel {
       PurchaseOrderItem2        : String(6) @title: '采购订单项目号2';     // 采购订单项目号2
       SalesOrder2               : String(10) @title: '销售订单号2';    // 销售订单号2
       SalesOrderItem2           : String(6) @title: '销售订单项目号2';     // 销售订单项目号2
-      ProductionOrder           : String(10) @title: '生产订单';     // 生产订单
-      NetPriceAmount            : Decimal(13,3) @title: '单价';   // 单价
+      ProductionOrder           : String(12) @title: '生产订单';     // 生产订单
 }
 
 //PI交货单关系表
 entity PIDeliveryRel {
   key PIOrder                   : String(10) @title: 'PI单号';    // PI单号
   key PIOrderItem               : String(6) @title: 'PI项目号';     // PI项目号
+      zrfc_logid                : UUID @title: '多步ID';           // 多步ID
       DeliveryNo1               : String(10) @title: '交货单号1';    // 交货单号1
       DeliveryNoItem1           : String(6) @title: '交货单项目号1';     // 交货单项目号1
       InboundDeliveryNo1        : String(10) @title: '内向交货单号1';    // 内向交货单号1

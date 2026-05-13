@@ -1,4 +1,4 @@
-  module.exports = cds.service.impl(async function () {
+module.exports = cds.service.impl(async function () {
   const { DeliveryActualInfo } = this.entities;
   //交货
   this.on('DN', async (req) => {
@@ -35,11 +35,11 @@
     // --------------------------
     // 数据库已存在校验
     // --------------------------
-    const existingKeys = await SELECT.from(DeliveryActualInfo)
+    const existingKeys = await cds.run(SELECT.from(DeliveryActualInfo)
       .columns(['DeliveryDocument', 'DeliveryDocumentItem'])
       .where({
         DeliveryDocument: { in: data.map(p => p.DeliveryDocument) }
-      });
+      }));
 
     existingKeys.forEach(existing => {
       const key = `${existing.DeliveryDocument}-${existing.DeliveryDocumentItem}`;
@@ -58,7 +58,7 @@
     // --------------------------
     // 校验通过，执行批量插入
     // --------------------------
-    await INSERT.into(DeliveryActualInfo).entries(data);
+    await cds.run(INSERT.into(DeliveryActualInfo).entries(data));
 
     // --------------------------
     // 返回成功

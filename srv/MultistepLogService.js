@@ -1,71 +1,31 @@
 const cds = require('@sap/cds');
-const { SELECT } = cds.ql;
 const RetryHandler = require('./handlers/RetryHandler');
 
 module.exports = srv => {
     const { MultistepLog } = srv.entities;
 
-    // Bound Action - 支持单选和多选
-    srv.on('retryStep', 'MultistepLog', async (req) => {
-        // 获取所有选中行的主键数组
-        let selectedIds = req.params;
-        // 处理参数格式
-        if (!selectedIds || selectedIds.length === 0) {
-            return req.error(500, '请至少选择一行数据');
-        }
+    // 1. 执行业务逻辑（重推）
+    srv.on('retryStep', MultistepLog, async (req) => {
+        // 获取前端传递的完整联合主键
+        const targetKey = req.params[0];
+        if (!targetKey) return req.error(400, '请选择数据');
 
-        // 确保 selectedIds 是字符串数组
-        const stringIds = [];
-        for (const param of selectedIds) {
-            if (typeof param === 'string') {
-                stringIds.push(param);
-            } else if (param?.zrfc_logid) {
-                stringIds.push(param.zrfc_logid);
-            } else if (param?.ZRFC_LOGID) {
-                stringIds.push(param.ZRFC_LOGID);
-            }
-        }
-        
-        selectedIds = stringIds;
+        // 执行重推
+        await new RetryHandler().retry(targetKey.zrfc_logid);
 
-        if (selectedIds.length === 0) {
-            return req.error(500, '请至少选择一行数据');
-        }
-
-        // 批量校验所有数据
-        const invalidLogids = [];
-        for (const zrfc_logid of selectedIds) {
-            const allLogs = await SELECT.from(MultistepLog).where({ zrfc_logid });
-            const failedSteps = allLogs.filter(log => log.code !== 'S' && log.code !== 's');
-            
-            if (failedSteps.length === 0) {
-                invalidLogids.push(zrfc_logid);
-            }
-        }
-
-        if (invalidLogids.length > 0) {
-            const errorMsg = invalidLogids.map(id => `业务ID ${id} 没有失败的步骤，无法重推`).join('\n');
-            return req.error(500, errorMsg);
-        }
-
-        // 批量遍历处理所有选中的数据
-        for (const zrfc_logid of selectedIds) {
-
-            // 调用重试处理器 - 日志更新由 MultiStepProcessor 统一处理
-            const retryHandler = new RetryHandler();
-            await retryHandler.retry(zrfc_logid);
-        }
-
-        // 返回所有数据（触发 Fiori Elements 重新渲染整个列表）
-        const allData = await SELECT.from(MultistepLog);
-        
-        // 使用轻量级通知（note）替代弹窗
+        // 成功提示
         req.notify({
-            code: '200',
-            message: `已重推 ${selectedIds.length} 条记录`,
+            message: '重推执行完成',
             severity: 'success'
         });
+    });
 
-        return allData;
+    // 2. 核心：事务提交后，返回最新数据（前端必刷新）
+    srv.after('retryStep', MultistepLog, async (_, req) => {
+        // 从请求参数中获取主键（安全无并发问题）
+        const targetKey = req.params[0];
+        
+        // 用完整联合主键查询 → 前端100%匹配刷新
+        return SELECT.one(MultistepLog).where(targetKey);
     });
 };

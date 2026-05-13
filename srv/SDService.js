@@ -35,11 +35,11 @@ module.exports = cds.service.impl(async function () {
     // --------------------------
     // 数据库已存在校验
     // --------------------------
-    const existingKeys = await SELECT.from(Transfer)
+    const existingKeys = await cds.run(SELECT.from(Transfer)
       .columns(['TransferOrder', 'TransferOrderItem'])
       .where({
         TransferOrder: { in: data.map(p => p.TransferOrder) }
-      });
+      }));
 
     existingKeys.forEach(existing => {
       const key = `${existing.TransferOrder}-${existing.TransferOrderItem}`;
@@ -127,11 +127,11 @@ module.exports = cds.service.impl(async function () {
     // --------------------------
     // 数据库已存在校验
     // --------------------------
-    const existingKeys = await SELECT.from(PaymentReceipt)
+    const existingKeys = await cds.run(SELECT.from(PaymentReceipt)
       .columns(['paymentReceiptNo', 'paymentReceiptNoItem'])
       .where({
         paymentReceiptNo: { in: data.map(p => p.paymentReceiptNo) }
-      });
+      }));
 
     existingKeys.forEach(existing => {
       const key = `${existing.paymentReceiptNo}-${existing.paymentReceiptNoItem}`;
@@ -217,11 +217,11 @@ module.exports = cds.service.impl(async function () {
     // --------------------------
     // 数据库已存在校验
     // --------------------------
-    const existingKeys = await SELECT.from(OutboundDelivery)
+    const existingKeys = await cds.run(SELECT.from(OutboundDelivery)
       .columns(['SalesOrder', 'SalesOrderItem'])
       .where({
         SalesOrder: { in: data.map(p => p.SalesOrder) }
-      });
+      }));
 
     existingKeys.forEach(existing => {
       const key = `${existing.SalesOrder}-${existing.SalesOrderItem}`;
@@ -242,12 +242,12 @@ module.exports = cds.service.impl(async function () {
     // SalesOrganization = zxsf（销售方）, ReceivingPlant = zfcf（发出方）
     // --------------------------
     const firstData = data[0];
-    const mptConfig = await SELECT.one(MPTTypeConfig)
+    const mptConfig = await cds.run(SELECT.one(MPTTypeConfig)
       .columns(['zrfcid', 'zdfjy'])
       .where({
         zxsf: firstData.SalesOrganization,
         zfcf: firstData.ReceivingPlant
-      });
+      }));
 
     if (!mptConfig) {
       req.error(400, `未找到多方交易类型配置：SalesOrganization=${firstData.SalesOrganization}, ReceivingPlant=${firstData.ReceivingPlant}`);

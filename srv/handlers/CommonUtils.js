@@ -1,8 +1,8 @@
 const cds = require('@sap/cds');
+const { SELECT, INSERT, UPDATE, DELETE } = cds.ql;
 
 class CommonUtils {
     constructor() {
-        this.db = cds.db;
     }
 
     /**
@@ -27,7 +27,7 @@ class CommonUtils {
             try {
                 // 查询多步执行日志表，获取指定步骤的对象号
                 const MultistepLog = cds.entities['com.sap.zictm.MultistepLog'];
-                const log = await this.db.run(
+                const log = await cds.run(
                     SELECT.one.from(MultistepLog)
                         .columns(['objkey'])
                         .where({ zrfc_logid: zrfcLogid, zrfcid, canum: readSteps })
@@ -56,7 +56,7 @@ class CommonUtils {
         
         try {
             const MPTStepConfig = cds.entities['com.sap.zictm.MPTStepConfig'];
-            const config = await this.db.run(
+            const config = await cds.run(
                 SELECT.one.from(MPTStepConfig)
                     .where({ zdfjy, canum })
             );
@@ -79,7 +79,7 @@ class CommonUtils {
         
         try {
             const MPTTypeConfig = cds.entities['com.sap.zictm.MPTTypeConfig'];
-            const config = await this.db.run(
+            const config = await cds.run(
                 SELECT.one.from(MPTTypeConfig)
                     .where({ zdfjy })
             );
@@ -96,9 +96,12 @@ class CommonUtils {
      * @returns {Promise<Object|null>} 配置对象
      */
     async getProcessConfig(zrfcid) {
+        console.log('[CommonUtils.getProcessConfig] 开始查询, zrfcid:', zrfcid);
         try {
             const ProcessConfig = cds.entities['com.sap.zictm.ProcessConfig'];
-            const config = await this.db.run(
+            console.log('[CommonUtils.getProcessConfig] 获取实体成功');
+            console.log('[CommonUtils.getProcessConfig] 准备执行查询 SELECT.one.from(ProcessConfig).where({ zrfcid })');
+            const config = await cds.run(
                 SELECT.one.from(ProcessConfig)
                     .where({ zrfcid })
             );
@@ -112,11 +115,35 @@ class CommonUtils {
     /**
      * 根据 zrfcid 获取业务表名
      * @param {string} zrfcid - 业务流程ID
-     * @returns {Promise<string|null>} 业务表名
+     * @param {boolean} [useTable1] - 是否获取业务表1（可选）
+     * @param {boolean} [useTable2] - 是否获取业务表2（可选）
+     * @param {boolean} [useTable3] - 是否获取业务表3（可选）
+     * @returns {Promise<string|Array|null>} 业务表名或业务表名数组
      */
-    async getBusinessTableName(zrfcid) {
+    async getBusinessTableName(zrfcid, useTable1, useTable2, useTable3) {
         const config = await this.getProcessConfig(zrfcid);
-        return config?.tableName || null;
+        if (!config) {
+            return null;
+        }
+
+        const tables = [];
+        if (useTable1 === true) {
+            tables.push(config.businessTable1);
+        }
+        if (useTable2 === true) {
+            tables.push(config.businessTable2);
+        }
+        if (useTable3 === true) {
+            tables.push(config.businessTable3);
+        }
+
+        if (tables.length === 0) {
+            return config.businessTable1 || null;
+        } else if (tables.length === 1) {
+            return tables[0] || null;
+        } else {
+            return tables.filter(Boolean);
+        }
     }
 
     /**
@@ -134,7 +161,7 @@ class CommonUtils {
                 return [];
             }
 
-            const businessData = await this.db.run(
+            const businessData = await cds.run(
                 SELECT.from(entity)
                     .where({ [keyField]: objkey })
             );

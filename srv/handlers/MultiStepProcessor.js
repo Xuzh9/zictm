@@ -1,4 +1,5 @@
 const cds = require('@sap/cds');
+const { SELECT, INSERT, UPDATE, DELETE } = cds.ql;
 const StepServiceFactory = require('../services/StepServiceFactory');
 
 class MultiStepProcessor {
@@ -28,7 +29,7 @@ class MultiStepProcessor {
                 await this.saveLog(zrfcLogid, zrfcid, '0', {
                     code: 'E',
                     message: errorMsg
-                }, 0, new Date(), isRetry);
+                }, 0, new Date(), isRetry, null, '');
                 return {
                     code: 'E',
                     message: errorMsg,
@@ -48,28 +49,37 @@ class MultiStepProcessor {
                 logMap[log.canum] = log;
             }
             
+            console.log('[MultiStepProcessor] 开始执行步骤循环，步骤数:', steps.length);
+            
             for (const step of steps) {
+                console.log('[MultiStepProcessor] 处理步骤:', step.canum, 'serviceName:', step.serviceName);
+                
                 // 如果指定了起始步骤，跳过之前的步骤
                 if (startStepNum !== null && step.canum < startStepNum) {
+                    console.log('[MultiStepProcessor] 跳过步骤（小于起始步骤）:', step.canum);
                     continue;
                 }
                 
                 // 从 logMap 中查找该步骤的日志记录
                 const existingLog = logMap[step.canum];
+                console.log('[MultiStepProcessor] 步骤', step.canum, '已有日志:', existingLog ? existingLog.code : '无');
                 
                 // 如果日志存在且执行成功（code 为 'S'），跳过该步骤
                 if (existingLog && (existingLog.code === 'S' || existingLog.code === 's')) {
                     // 更新上一步对象号，以便后续步骤使用
                     lastObjKey = existingLog.objkey || lastObjKey;
+                    console.log('[MultiStepProcessor] 跳过步骤（已成功）:', step.canum);
                     continue;
                 }
                 
+                console.log('[MultiStepProcessor] 执行步骤:', step.canum, 'serviceName:', step.serviceName);
                 const startTime = Date.now();
                 // 存储 UTC 时间，前端会根据时区自动转换显示
                 const executionAt = new Date();
                 
                 // 执行步骤
                 const executionResult = await this.executeStep(zrfcLogid, zrfcid, step, lastObjKey, zdfjy);
+                console.log('[MultiStepProcessor] 步骤执行结果:', step.canum, 'code:', executionResult.code);
                 
                 const endTime = Date.now();
                 const executionTime = Math.round((endTime - startTime) / 1000);
@@ -79,7 +89,7 @@ class MultiStepProcessor {
                 await this.saveLog(zrfcLogid, zrfcid, step.canum, {
                     ...executionResult,
                     message: logMessage
-                }, executionTime, executionAt, isRetry, step.objtype);
+                }, executionTime, executionAt, isRetry, step.objtype, step.description);
 
                 // 更新上一步对象号、消息和代码
                 lastObjKey = executionResult.objkey || lastObjKey;
@@ -105,7 +115,7 @@ class MultiStepProcessor {
             await this.saveLog(zrfcLogid, zrfcid, '0', {
                 code: 'E',
                 message: errorMessage
-            }, 0, new Date(), isRetry);
+            }, 0, new Date(), isRetry, null, '');
 
             return {
                 code: 'E',
@@ -114,6 +124,44 @@ class MultiStepProcessor {
                 objkey: lastObjKey
             };
         }
+    }
+
+    /**
+     * 初始化所有步骤 - 首次调用时预插入所有步骤（状态为空）
+     * @param {string} zrfcLogid - 多步ID
+     * @param {string} zrfcid - 业务流程ID
+     * @param {Array} steps - 步骤配置列表
+     */
+    async initAllSteps(zrfcLogid, zrfcid, steps) {
+        const MultistepLog = cds.entities['com.sap.zictm.MultistepLog'];
+        
+        // 检查是否已有日志记录
+        const existingLogs = await cds.run(
+            SELECT.from(MultistepLog).where({ zrfc_logid: zrfcLogid })
+        );
+        
+        // 如果已有记录，说明不是首次调用，跳过初始化
+        if (existingLogs && existingLogs.length > 0) {
+            return;
+        }
+        
+        // 预插入所有步骤，状态为空
+        const entries = steps.map(step => ({
+            zrfc_logid: zrfcLogid,
+            zrfcid,
+            canum: step.canum.toString(),
+            code: '',  // 状态为空
+            message: '',
+            objkey: '',
+            objtype: step.objtype || '',
+            description: step.description || '',
+            executionTime: 0,
+            executionAt: null,
+            lastExecutionAt: null,
+            lastExecutionTime: 0
+        }));
+        
+        await cds.run(INSERT.into(MultistepLog).entries(entries));
     }
 
     /**
@@ -195,8 +243,9 @@ class MultiStepProcessor {
      * @param {Date} executionAt - 开始执行时间戳
      * @param {boolean} isRetry - 是否为重推操作
      * @param {string} objtype - 对象类型（从StepConfig获取）
+     * @param {string} description - 步骤描述（从StepConfig获取）
      */
-    async saveLog(zrfcLogid, zrfcid, canum, executionResult, executionTime, executionAt, isRetry = false, objtype = null) {
+    async saveLog(zrfcLogid, zrfcid, canum, executionResult, executionTime, executionAt, isRetry = false, objtype = null, description = null) {
         const MultistepLog = cds.entities['com.sap.zictm.MultistepLog'];
         
         // 检查日志是否已存在
@@ -206,37 +255,23 @@ class MultiStepProcessor {
         );
 
         if (existingLog) {
-            // 如果日志已存在，根据是否为重推操作更新不同的字段
-            if (isRetry) {
-                // 重推操作：只更新 lastExecutionAt 和 lastExecutionTime
-                await cds.run(
-                    UPDATE(MultistepLog)
-                        .set({
-                            code: executionResult.code,
-                            message: executionResult.message,
-                            objkey: executionResult.objkey,
-                            lastExecutionAt: executionAt,
-                            lastExecutionTime: executionTime
-                        })
-                        .where({ zrfc_logid: zrfcLogid, zrfcid, canum: canum.toString() })
-                );
-            } else {
-                // 非重推操作：更新所有字段
-                await cds.run(
-                    UPDATE(MultistepLog)
-                        .set({
-                            code: executionResult.code,
-                            message: executionResult.message,
-                            objkey: executionResult.objkey,
-                            objtype: objtype || existingLog.objtype,
-                            executionTime,
-                            executionAt,
-                            lastExecutionAt: executionAt,
-                            lastExecutionTime: executionTime
-                        })
-                        .where({ zrfc_logid: zrfcLogid, zrfcid, canum: canum.toString() })
-                );
-            }
+            // 如果日志已存在，更新执行结果
+            // 重推时允许更新状态为 E 或空的记录
+            await cds.run(
+                UPDATE(MultistepLog)
+                    .set({
+                        code: executionResult.code,
+                        message: executionResult.message,
+                        objkey: executionResult.objkey,
+                        objtype: objtype || existingLog.objtype,
+                        description: description || existingLog.description,
+                        executionTime: isRetry ? existingLog.executionTime : executionTime,
+                        executionAt: isRetry ? existingLog.executionAt : executionAt,
+                        lastExecutionAt: executionAt,
+                        lastExecutionTime: executionTime
+                    })
+                    .where({ zrfc_logid: zrfcLogid, zrfcid, canum: canum.toString() })
+            );
         } else {
             // 如果日志不存在，插入新记录（首次执行）
             await cds.run(
@@ -248,6 +283,7 @@ class MultiStepProcessor {
                     message: executionResult.message,
                     objkey: executionResult.objkey,
                     objtype: objtype || '',
+                    description: description || '',
                     executionTime,
                     executionAt,
                     lastExecutionAt: executionAt,

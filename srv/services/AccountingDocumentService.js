@@ -1,4 +1,5 @@
 const cds = require('@sap/cds');
+const { SELECT } = cds.ql;
 const { executeHttpRequest } = require('@sap-cloud-sdk/http-client');
 
 class AccountingDocumentService {
