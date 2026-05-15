@@ -30,8 +30,6 @@ class MultiStepInvoker {
             zrfcLogid,
             zrfcid
         };
-        let hasSavedLog = false;
-        
         try {
             // 获取业务流程配置（使用通用工具类）
             console.log('[MultiStepInvoker.process] 开始获取业务流程配置');
@@ -40,27 +38,11 @@ class MultiStepInvoker {
             if (!processConfig) {
                 result.code = 'E';
                 result.message = `业务流程配置不存在: ${zrfcid}`;
-                await this.saveApiInputLog(zrfcLogid, { businessTable1, businessTable2, businessTable3 }, result.message);
-                hasSavedLog = true;
                 return result;
             }
             
             // 根据 ProcessConfig 中的 businessTable1、businessTable2、businessTable3 分别插入对应表的数据
             await this.insertBusinessDataByConfig(processConfig, businessTable1, businessTable2, businessTable3, zrfcid, zrfcLogid, zdfjy);
-            
-            // 构建输入数据
-            const inputData = {
-                zrfcLogid,
-                zrfcid,
-                businessTable1,
-                businessTable2,
-                businessTable3
-            };
-
-            // 入参处理完成，准备调用 MultiStepProcessor，ApiInputLog 记录成功
-            // 步骤执行结果由 MultistepLog 负责记录，与 ApiInputLog 无关
-            await this.saveApiInputLog(zrfcLogid, inputData, null);
-            hasSavedLog = true;
             
             // 根据 isAsync 字段判断同步还是异步调用
             if (processConfig.isAsync) {
@@ -78,13 +60,6 @@ class MultiStepInvoker {
             const errorMessage = error.message ? error.message.substring(0, 500) : '未知错误';
             result.message = `系统错误: ${errorMessage}`;
             console.error(`业务数据处理异常: ${result.message}`, error);
-            
-            if (!hasSavedLog) {
-                await this.saveApiInputLog(zrfcLogid, { businessTable1, businessTable2, businessTable3 }, result.message);
-                hasSavedLog = true;
-            }
-        } finally {
-            // 事务由 CAP 框架自动管理
         }
         
         result.message = result.message ? result.message.substring(0, 500) : '处理成功';
@@ -98,31 +73,6 @@ class MultiStepInvoker {
      */
     generateZrfcLogid() {
         return cds.utils.uuid();
-    }
-
-    /**
-     * 保存接口入参日志
-     * @param {string} zrfcLogid - 日志ID
-     * @param {Object} inputData - 输入数据
-     * @param {string} errorMessage - 错误消息
-     */
-    async saveApiInputLog(zrfcLogid, inputData, errorMessage = null) {
-        const ApiInputLog = cds.entities['com.sap.zictm.ApiInputLog'];
-        
-        let inputDataStr = JSON.stringify(inputData);
-        if (inputDataStr.length > 1000) {
-            inputDataStr = inputDataStr.substring(0, 1000) + '...';
-        }
-        
-        await cds.run(
-            INSERT.into(ApiInputLog).entries({
-                id: zrfcLogid,
-                inputData: inputDataStr,
-                code: errorMessage ? 'E' : 'S',
-                message: errorMessage || '入参处理成功',
-                executionAt: new Date()
-            })
-        );
     }
 
     /**

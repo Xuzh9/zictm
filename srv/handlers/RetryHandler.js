@@ -7,6 +7,7 @@ class RetryHandler {
     constructor() {
         this.processor = new MultiStepProcessor();
         this.commonUtils = new CommonUtils();
+        this.retryingLogids = new Set(); // 用于记录正在重推的日志ID，防止重复调用
     }
 
     /**
@@ -15,6 +16,19 @@ class RetryHandler {
      * @returns {Promise<Object>} 执行结果
      */
     async retry(zrfcLogid) {
+        // 检查是否正在重推中，防止重复调用
+        if (this.retryingLogids.has(zrfcLogid)) {
+            console.log('[RetryHandler.retry] 日志ID', zrfcLogid, '正在重推中，跳过重复调用');
+            return {
+                code: 'S',
+                message: `日志ID${zrfcLogid}正在重推中，请稍候`,
+                zrfcLogid
+            };
+        }
+        
+        // 添加到正在重推的集合中
+        this.retryingLogids.add(zrfcLogid);
+        
         try {
             console.log('[RetryHandler.retry] 开始重推, zrfcLogid:', zrfcLogid);
             
@@ -38,21 +52,44 @@ class RetryHandler {
                 SELECT.one.from(MPTTypeConfig).where({ zrfcid: zrfcid })
             );
             const zdfjy = mptTypeConfig?.zdfjy || null;
-            console.log('[RetryHandler.retry] 开始同步重推, zrfcid:', zrfcid, 'failedStepNum:', failedStepNum, 'zdfjy:', zdfjy);
 
-            // 同步调用重推（传递 zdfjy）
-            const result = await this.processor.processWithLogId(zrfcLogid, zrfcid, failedStepNum, true, zdfjy);
-            console.log('[RetryHandler.retry] 重推完成, result:', result);
+            // 查询 ProcessConfig 获取 isAsync 配置
+            const ProcessConfig = cds.entities['com.sap.zictm.ProcessConfig'];
+            const processConfig = await cds.run(
+                SELECT.one.from(ProcessConfig).where({ zrfcid: zrfcid })
+            );
+            const isAsync = processConfig?.isAsync || false;
+            console.log('[RetryHandler.retry] 重推配置, zrfcid:', zrfcid, 'failedStepNum:', failedStepNum, 'zdfjy:', zdfjy, 'isAsync:', isAsync);
+
+            let result;
+            if (isAsync) {
+                // 异步执行重推
+                console.log('[RetryHandler.retry] 开始异步重推');
+                this.executeAsync(zrfcLogid, zrfcid, failedStepNum, zdfjy);
+                result = {
+                    code: 'S',
+                    message: '重推请求已提交，正在异步处理中',
+                    zrfcLogid
+                };
+            } else {
+                // 同步执行重推（传递 zdfjy）
+                console.log('[RetryHandler.retry] 开始同步重推');
+                result = await this.processor.processWithLogId(zrfcLogid, zrfcid, failedStepNum, true, zdfjy);
+                console.log('[RetryHandler.retry] 同步重推完成, result:', result);
+            }
 
             // 返回结果
             return {
                 code: result.code,
-                message: result.code === 'S' ? '重推成功' : result.message,
+                message: result.code === 'S' ? (isAsync ? '重推请求已提交，正在异步处理中' : '重推成功') : result.message,
                 zrfcLogid
             };
         } catch (error) {
             console.error('[RetryHandler.retry] 重推失败:', error.message);
             throw error;
+        } finally {
+            // 无论成功还是失败，都从正在重推的集合中移除
+            this.retryingLogids.delete(zrfcLogid);
         }
     }
 

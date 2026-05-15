@@ -1,9 +1,43 @@
+const cds = require('@sap/cds');
+
 module.exports = cds.service.impl(async function () {
-  const { Transfer, PaymentReceipt, OutboundDelivery, MPTTypeConfig } = this.entities;
+  const service = this;
+  const { SELECT } = cds.ql;
+  const { Transfer, PaymentReceipt, OutboundDelivery } = this.entities;
+  
   //调拨单
   this.on('TrCreate', async (req) => {
     const { data } = req.data;
-    if (!data || data.length === 0) req.error(400, "数据不能为空");
+    const ApiInputLogHelper = require('./handlers/ApiInputLogHelper');
+    
+    // --------------------------
+    // 检查数据格式是否正确（必须是数组）
+    // --------------------------
+    if (!data || !Array.isArray(data)) {
+      const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, '数据格式错误：data 必须是数组');
+      return {
+        code: 400,
+        message: '数据格式错误：data 必须是数组',
+        id: logId
+      };
+    }
+    
+    // --------------------------
+    // 检查数据是否为空
+    // --------------------------
+    if (data.length === 0) {
+      const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, '数据不能为空');
+      return {
+        code: 400,
+        message: '数据不能为空',
+        id: logId
+      };
+    }
+
+    // --------------------------
+    // 错误收集数组
+    // --------------------------
+    const errors = [];
 
     // --------------------------
     // 基础空值校验
@@ -11,10 +45,10 @@ module.exports = cds.service.impl(async function () {
     data.forEach((item, index) => {
       const rowNum = index + 1;
       if (!item.TransferOrder) {
-        req.error(400, `第 ${rowNum} 条数据缺少必填字段：TransferOrder`);
+        errors.push(`第 ${rowNum} 条数据缺少必填字段：TransferOrder`);
       }
       if (!item.TransferOrderItem) {
-        req.error(400, `第 ${rowNum} 条数据缺少必填字段：TransferOrderItem`);
+        errors.push(`第 ${rowNum} 条数据缺少必填字段：TransferOrderItem`);
       }
     });
 
@@ -26,16 +60,29 @@ module.exports = cds.service.impl(async function () {
       const rowNum = index + 1;
       const key = `${item.TransferOrder}-${item.TransferOrderItem}`;
       if (keyMap.has(key)) {
-        req.error(400, `第 ${rowNum} 条数据与第 ${keyMap.get(key)} 条数据重复：主键 [${key}] 已存在`);
+        errors.push(`第 ${rowNum} 条数据与第 ${keyMap.get(key)} 条数据重复：主键 [${key}] 已存在`);
       } else {
         keyMap.set(key, rowNum);
       }
     });
 
     // --------------------------
+    // 检查必填字段校验结果（在执行数据库查询之前）
+    // --------------------------
+    if (errors.length > 0) {
+      const errorMessages = errors.join('; ');
+      const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, errorMessages);
+      return {
+        code: 400,
+        message: errorMessages,
+        id: logId
+      };
+    }
+
+    // --------------------------
     // 数据库已存在校验
     // --------------------------
-    const existingKeys = await cds.run(SELECT.from(Transfer)
+    const existingKeys = await service.run(SELECT.from(Transfer)
       .columns(['TransferOrder', 'TransferOrderItem'])
       .where({
         TransferOrder: { in: data.map(p => p.TransferOrder) }
@@ -44,25 +91,28 @@ module.exports = cds.service.impl(async function () {
     existingKeys.forEach(existing => {
       const key = `${existing.TransferOrder}-${existing.TransferOrderItem}`;
       if (keyMap.has(key)) {
-        req.error(409, `主键 [${key}] 已在数据库中存在，无法重复创建`);
+        errors.push(`主键 [${key}] 已在数据库中存在，无法重复创建`);
       }
     });
 
     // --------------------------
-    // 如果有任何错误，直接回滚并返回
+    // 如果有任何错误，保存错误日志并返回（不调用 MultiStepInvoker）
     // --------------------------
-    if (req.errors) {
-      return req.reject(); // 自动回滚事务，返回所有错误
+    if (errors.length > 0) {
+      const errorMessages = errors.join('; ');
+      const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, errorMessages);
+      return {
+        code: 400,
+        message: errorMessages,
+        id: logId
+      };
     }
 
     // --------------------------
-    // 检查数据是否为空
+    // 保存 ApiInputLog（在调用 MultiStepInvoker 之前）
     // --------------------------
-    if (!data || data.length === 0) {
-      req.error(400, '传入的数据为空');
-      return req.reject();
-    }
-
+    const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, null);
+    
     // --------------------------
     // 调用 MultiStepInvoker 处理多步流程
     // zrfc_logid 和 zrfcid 的生成以及业务表的插入由 MultiStepInvoker 负责
@@ -82,12 +132,14 @@ module.exports = cds.service.impl(async function () {
       result.message = invokerResult.message ? invokerResult.message.substring(0, 500) : '处理成功';
       result.zrfc_logid = invokerResult.zrfcLogid;
       result.zrfcid = invokerResult.zrfcid;
+      result.id = logId;
       if (invokerResult.objkey) {
         result.objkey = invokerResult.objkey;
       }
     } else {
       result.code = 200;
       result.message = '没有数据需要处理';
+      result.id = logId;
     }
     
     return result;
@@ -95,7 +147,36 @@ module.exports = cds.service.impl(async function () {
   //收付款单
   this.on('PrCreate', async (req) => {
     const { data } = req.data;
-    if (!data || data.length === 0) req.error(400, "数据不能为空");
+    const ApiInputLogHelper = require('./handlers/ApiInputLogHelper');
+    
+    // --------------------------
+    // 检查数据格式是否正确（必须是数组）
+    // --------------------------
+    if (!data || !Array.isArray(data)) {
+      const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, '数据格式错误：data 必须是数组');
+      return {
+        code: 400,
+        message: '数据格式错误：data 必须是数组',
+        id: logId
+      };
+    }
+    
+    // --------------------------
+    // 检查数据是否为空
+    // --------------------------
+    if (data.length === 0) {
+      const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, '数据不能为空');
+      return {
+        code: 400,
+        message: '数据不能为空',
+        id: logId
+      };
+    }
+
+    // --------------------------
+    // 错误收集数组
+    // --------------------------
+    const errors = [];
 
     // --------------------------
     // 基础空值校验
@@ -103,10 +184,10 @@ module.exports = cds.service.impl(async function () {
     data.forEach((item, index) => {
       const rowNum = index + 1;
       if (!item.paymentReceiptNo) {
-        req.error(400, `第 ${rowNum} 条数据缺少必填字段：paymentReceiptNo`);
+        errors.push(`第 ${rowNum} 条数据缺少必填字段：paymentReceiptNo`);
       }
       if (!item.paymentReceiptNoItem) {
-        req.error(400, `第 ${rowNum} 条数据缺少必填字段：paymentReceiptNoItem`);
+        errors.push(`第 ${rowNum} 条数据缺少必填字段：paymentReceiptNoItem`);
       }
     });
 
@@ -118,16 +199,29 @@ module.exports = cds.service.impl(async function () {
       const rowNum = index + 1;
       const key = `${item.paymentReceiptNo}-${item.paymentReceiptNoItem}`;
       if (keyMap.has(key)) {
-        req.error(400, `第 ${rowNum} 条数据与第 ${keyMap.get(key)} 条数据重复：主键 [${key}] 已存在`);
+        errors.push(`第 ${rowNum} 条数据与第 ${keyMap.get(key)} 条数据重复：主键 [${key}] 已存在`);
       } else {
         keyMap.set(key, rowNum);
       }
     });
 
     // --------------------------
+    // 检查必填字段校验结果（在执行数据库查询之前）
+    // --------------------------
+    if (errors.length > 0) {
+      const errorMessages = errors.join('; ');
+      const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, errorMessages);
+      return {
+        code: 400,
+        message: errorMessages,
+        id: logId
+      };
+    }
+
+    // --------------------------
     // 数据库已存在校验
     // --------------------------
-    const existingKeys = await cds.run(SELECT.from(PaymentReceipt)
+    const existingKeys = await service.run(SELECT.from(PaymentReceipt)
       .columns(['paymentReceiptNo', 'paymentReceiptNoItem'])
       .where({
         paymentReceiptNo: { in: data.map(p => p.paymentReceiptNo) }
@@ -136,17 +230,28 @@ module.exports = cds.service.impl(async function () {
     existingKeys.forEach(existing => {
       const key = `${existing.paymentReceiptNo}-${existing.paymentReceiptNoItem}`;
       if (keyMap.has(key)) {
-        req.error(409, `主键 [${key}] 已在数据库中存在，无法重复创建`);
+        errors.push(`主键 [${key}] 已在数据库中存在，无法重复创建`);
       }
     });
 
     // --------------------------
-    // 如果有任何错误，直接回滚并返回
+    // 如果有任何错误，保存错误日志并返回（不调用 MultiStepInvoker）
     // --------------------------
-    if (req.errors) {
-      return req.reject(); // 自动回滚事务，返回所有错误
+    if (errors.length > 0) {
+      const errorMessages = errors.join('; ');
+      const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, errorMessages);
+      return {
+        code: 400,
+        message: errorMessages,
+        id: logId
+      };
     }
 
+    // --------------------------
+    // 保存 ApiInputLog（在调用 MultiStepInvoker 之前）
+    // --------------------------
+    const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, null);
+    
     // --------------------------
     // 调用 MultiStepInvoker 处理多步流程
     // zrfc_logid 和 zrfcid 的生成以及业务表的插入由 MultiStepInvoker 负责
@@ -166,20 +271,51 @@ module.exports = cds.service.impl(async function () {
       result.message = invokerResult.message ? invokerResult.message.substring(0, 500) : '处理成功';
       result.zrfc_logid = invokerResult.zrfcLogid;
       result.zrfcid = invokerResult.zrfcid;
+      result.id = logId;
       if (invokerResult.objkey) {
         result.objkey = invokerResult.objkey;
       }
     } else {
       result.code = 200;
       result.message = '没有数据需要处理';
+      result.id = logId;
     }
     
     return result;
   });
   //销售出库
-    this.on('OdCreate', async (req) => {
+  this.on('OdCreate', async (req) => {
     const { data } = req.data;
-    if (!data || data.length === 0) req.error(400, "数据不能为空");
+    const ApiInputLogHelper = require('./handlers/ApiInputLogHelper');
+    
+    // --------------------------
+    // 检查数据格式是否正确（必须是数组）
+    // --------------------------
+    if (!data || !Array.isArray(data)) {
+      const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, '数据格式错误：data 必须是数组');
+      return {
+        code: 400,
+        message: '数据格式错误：data 必须是数组',
+        id: logId
+      };
+    }
+    
+    // --------------------------
+    // 检查数据是否为空
+    // --------------------------
+    if (data.length === 0) {
+      const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, '数据不能为空');
+      return {
+        code: 400,
+        message: '数据不能为空',
+        id: logId
+      };
+    }
+
+    // --------------------------
+    // 错误收集数组
+    // --------------------------
+    const errors = [];
 
     // --------------------------
     // 基础空值校验
@@ -187,16 +323,40 @@ module.exports = cds.service.impl(async function () {
     data.forEach((item, index) => {
       const rowNum = index + 1;
       if (!item.SalesOrder) {
-        req.error(400, `第 ${rowNum} 条数据缺少必填字段：SalesOrder`);
+        errors.push(`第 ${rowNum} 条数据缺少必填字段：SalesOrder`);
       }
       if (!item.SalesOrderItem) {
-        req.error(400, `第 ${rowNum} 条数据缺少必填字段：SalesOrderItem`);
+        errors.push(`第 ${rowNum} 条数据缺少必填字段：SalesOrderItem`);
       }
       if (!item.SalesOrganization) {
-        req.error(400, `第 ${rowNum} 条数据缺少必填字段：SalesOrganization`);
+        errors.push(`第 ${rowNum} 条数据缺少必填字段：SalesOrganization`);
+      }
+      if (!item.SalesOrderType) {
+        errors.push(`第 ${rowNum} 条数据缺少必填字段：SalesOrderType`);
+      }
+      if (!item.Customer) {
+        errors.push(`第 ${rowNum} 条数据缺少必填字段：Customer`);
+      }
+      if (!item.SalesOffice) {
+        errors.push(`第 ${rowNum} 条数据缺少必填字段：SalesOffice`);
+      }
+      if (!item.NetAmount && item.NetAmount !== 0) {
+        errors.push(`第 ${rowNum} 条数据缺少必填字段：NetAmount`);
+      }
+      if (!item.RequestedQuantity && item.RequestedQuantity !== 0) {
+        errors.push(`第 ${rowNum} 条数据缺少必填字段：RequestedQuantity`);
+      }
+      if (!item.ItemTransactionCurrency) {
+        errors.push(`第 ${rowNum} 条数据缺少必填字段：ItemTransactionCurrency`);
+      }
+      if (!item.ReceivingStorageLocation) {
+        errors.push(`第 ${rowNum} 条数据缺少必填字段：ReceivingStorageLocation`);
+      }
+      if (!item.DeliveryDate) {
+        errors.push(`第 ${rowNum} 条数据缺少必填字段：DeliveryDate`);
       }
       if (!item.ReceivingPlant) {
-        req.error(400, `第 ${rowNum} 条数据缺少必填字段：ReceivingPlant`);
+        errors.push(`第 ${rowNum} 条数据缺少必填字段：ReceivingPlant`);
       }
     });
 
@@ -208,33 +368,48 @@ module.exports = cds.service.impl(async function () {
       const rowNum = index + 1;
       const key = `${item.SalesOrder}-${item.SalesOrderItem}`;
       if (keyMap.has(key)) {
-        req.error(400, `第 ${rowNum} 条数据与第 ${keyMap.get(key)} 条数据重复：主键 [${key}] 已存在`);
+        errors.push(`第 ${rowNum} 条数据与第 ${keyMap.get(key)} 条数据重复：主键 [${key}] 已存在`);
       } else {
         keyMap.set(key, rowNum);
       }
     });
 
     // --------------------------
+    // 检查必填字段校验结果（在执行数据库查询之前）
+    // --------------------------
+    if (errors.length > 0) {
+      const errorMessages = errors.join('; ');
+      const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, errorMessages);
+      return {
+        code: 400,
+        message: errorMessages,
+        id: logId
+      };
+    }
+
+    // --------------------------
     // 数据库已存在校验
     // --------------------------
-    const existingKeys = await cds.run(SELECT.from(OutboundDelivery)
-      .columns(['SalesOrder', 'SalesOrderItem'])
-      .where({
-        SalesOrder: { in: data.map(p => p.SalesOrder) }
-      }));
-
-    existingKeys.forEach(existing => {
-      const key = `${existing.SalesOrder}-${existing.SalesOrderItem}`;
-      if (keyMap.has(key)) {
-        req.error(409, `主键 [${key}] 已在数据库中存在，无法重复创建`);
-      }
-    });
-
-    // --------------------------
-    // 如果有任何错误，直接回滚并返回
-    // --------------------------
-    if (req.errors) {
-      return req.reject(); // 自动回滚事务，返回所有错误
+    try {
+      const existingKeys = await service.run(SELECT.from(OutboundDelivery)
+        .columns(['SalesOrder', 'SalesOrderItem'])
+        .where({
+          SalesOrder: { in: data.map(p => p.SalesOrder) }
+        }));
+      
+      existingKeys.forEach(existing => {
+        const key = `${existing.SalesOrder}-${existing.SalesOrderItem}`;
+        if (keyMap.has(key)) {
+          errors.push(`主键 [${key}] 已在数据库中存在，无法重复创建`);
+        }
+      });
+    } catch (error) {
+      const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, `数据库查询失败: ${error.message}`);
+      return {
+        code: 500,
+        message: `数据库查询失败: ${error.message}`,
+        id: logId
+      };
     }
 
     // --------------------------
@@ -242,18 +417,71 @@ module.exports = cds.service.impl(async function () {
     // SalesOrganization = zxsf（销售方）, ReceivingPlant = zfcf（发出方）
     // --------------------------
     const firstData = data[0];
-    const mptConfig = await cds.run(SELECT.one(MPTTypeConfig)
+    let mptConfig = null;
+    
+    // 防御性检查：确保 SalesOrganization 和 ReceivingPlant 存在
+    if (!firstData.SalesOrganization) {
+      errors.push('缺少必填字段：SalesOrganization');
+      const errorMessages = errors.join('; ');
+      const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, errorMessages);
+      return {
+        code: 400,
+        message: errorMessages,
+        id: logId
+      };
+    }
+    
+    if (!firstData.ReceivingPlant) {
+      errors.push('缺少必填字段：ReceivingPlant');
+      const errorMessages = errors.join('; ');
+      const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, errorMessages);
+      return {
+        code: 400,
+        message: errorMessages,
+        id: logId
+      };
+    }
+    
+    try {
+      // 使用 cds.run() 来查询不在当前服务中的实体
+      const MPTTypeConfig = cds.entities['com.sap.zictm.MPTTypeConfig'];
+      mptConfig = await cds.run(SELECT.one(MPTTypeConfig)
       .columns(['zrfcid', 'zdfjy'])
       .where({
         zxsf: firstData.SalesOrganization,
         zfcf: firstData.ReceivingPlant
       }));
 
-    if (!mptConfig) {
-      req.error(400, `未找到多方交易类型配置：SalesOrganization=${firstData.SalesOrganization}, ReceivingPlant=${firstData.ReceivingPlant}`);
-      return req.reject();
+      if (!mptConfig) {
+        errors.push(`未找到多方交易类型配置：SalesOrganization=${firstData.SalesOrganization}, ReceivingPlant=${firstData.ReceivingPlant}`);
+      }
+    } catch (error) {
+      const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, `MPTTypeConfig 查询失败: ${error.message}`);
+      return {
+        code: 500,
+        message: `MPTTypeConfig 查询失败: ${error.message}`,
+        id: logId
+      };
     }
 
+    // --------------------------
+    // 如果有任何错误，保存错误日志并返回（不调用 MultiStepInvoker）
+    // --------------------------
+    if (errors.length > 0) {
+      const errorMessages = errors.join('; ');
+      const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, errorMessages);
+      return {
+        code: 400,
+        message: errorMessages,
+        id: logId
+      };
+    }
+
+    // --------------------------
+    // 保存 ApiInputLog（在调用 MultiStepInvoker 之前）
+    // --------------------------
+    const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, null);
+    
     // --------------------------
     // 调用 MultiStepInvoker 处理多步流程
     // 传入查询到的 zrfcid 和 zdfjy
@@ -273,12 +501,14 @@ module.exports = cds.service.impl(async function () {
       result.message = invokerResult.message ? invokerResult.message.substring(0, 500) : '处理成功';
       result.zrfc_logid = invokerResult.zrfcLogid;
       result.zrfcid = invokerResult.zrfcid;
+      result.id = logId;
       if (invokerResult.objkey) {
         result.objkey = invokerResult.objkey;
       }
     } else {
       result.code = 200;
       result.message = '没有数据需要处理';
+      result.id = logId;
     }
     
     return result;

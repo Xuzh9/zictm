@@ -269,7 +269,6 @@ class MaterialDocumentService {
                     IssuingOrReceivingStorageLoc: businessData.IssuingOrReceivingStorageLoc || '',
                     GoodsMovementType: businessData.GoodsMovementType || '',
                     QuantityInEntryUnit: businessData.QuantityInBaseUnit || 0,
-                    EntryUnit: 'PCS',
                     Batch: '0000000017',
                     MaterialDocumentItemText: businessData.TransferOrder && businessData.TransferOrderItem ? `${businessData.TransferOrder}-${businessData.TransferOrderItem}` : ''
                 };

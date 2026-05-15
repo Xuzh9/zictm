@@ -182,7 +182,7 @@ class ProductionOrderCreateService {
             // 数量
             TotalQuantity: businessData.RequestedQuantity,
             // 计划开始日期（格式：/Date(timestamp)/）
-            MfgOrderPlannedStartDate: this.formatDateForSAP(businessData.ConfirmedDeliveryDate),
+            MfgOrderPlannedStartDate: this.formatDateForSAP(businessData.ProductionStartDate),
             // 计划结束日期（格式：/Date(timestamp)/）
             MfgOrderPlannedEndDate: this.formatDateForSAP(businessData.ConfirmedDeliveryDate),
             //箱唛要求
@@ -199,6 +199,8 @@ class ProductionOrderCreateService {
             YY1_FD_REQDATE_ORD: this.formatDateForSAP(businessData.RequestedDeliveryDate),
             //箱唛要求
             YY1_FD_PP_XMYQ_ORD: businessData.YY1_FD_XMYQ,
+            //备注（去除换行符和特殊字符，SAP API不接受）
+            YY1_FD_REMARK_ORD: this.cleanRemark(businessData.Remark),
         };
 
         // 根据 zrfcid 添加不同的字段
@@ -294,6 +296,40 @@ class ProductionOrderCreateService {
         
         // 格式：/Date(timestamp)/
         return `/Date(${dateObj.getTime()})/`;
+    }
+
+    /**
+     * 清理备注字段，去除换行符和特殊字符（SAP API不接受这些字符）
+     * @param {string} remark - 原始备注内容
+     * @returns {string} 清理后的备注内容
+     */
+    cleanRemark(remark) {
+        if (!remark) return '';
+        
+        // 第一步：去除换行符、制表符和多余空格
+        let cleaned = remark
+            .replace(/\r\n/g, ' ')    // 替换 Windows 换行符
+            .replace(/\n/g, ' ')      // 替换 Unix 换行符
+            .replace(/\r/g, ' ')      // 替换 Mac 换行符
+            .replace(/\t/g, ' ')      // 替换制表符
+            .replace(/\s+/g, ' ')     // 合并多个空格为一个
+            .trim();                  // 去除首尾空格
+        
+        // 第二步：移除SAP不支持的特殊字符（使用正则表达式一次性匹配）
+        // 包含：特殊符号、数学符号、中文标点、特殊Unicode字符等
+        const specialChars = /[\*\/\\@#\$%&<>=\|\^~`'"()（）【】「」『』《》：；！？、。·×÷＋－＝＜＞≠≤≥∞∑∏√π°℃℉㎡㎏㎝㎜μΩ℧∪∩∈∉⊂⊃⊆⊇⊄⊅∅∀∃∴∵∶∷]/g;
+        cleaned = cleaned.replace(specialChars, '');
+        
+        // 第三步：再次合并空格并去除首尾空格
+        cleaned = cleaned.replace(/\s+/g, ' ').trim();
+        
+        // 第四步：限制长度（ES字段长度为255）
+        const maxLength = 255;
+        if (cleaned.length > maxLength) {
+            cleaned = cleaned.substring(0, maxLength);
+        }
+        
+        return cleaned;
     }
 
     parseError(errorData) {

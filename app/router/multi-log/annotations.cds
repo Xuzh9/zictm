@@ -39,12 +39,11 @@ annotate service.MultistepLog with @(
             {
                 $Type: 'UI.DataFieldForAction',
                 Label: '重推',
-                Action: 'service.MultistepLog.retryStep',
+                Action: 'service.retryStep',
                 RequiresSelection: true,
                 Determining: false,
                 @Common: { SideEffects: { TargetProperties: ['/service.MultistepLog'] } },
-                TargetProperties: ['code', 'message', 'objkey','lastExecutionAt', 'lastExecutionTime'],
-                TriggerAction: 'service.MultistepLog.retryStep'
+                TargetProperties: ['code', 'message', 'objkey','lastExecutionAt', 'lastExecutionTime']
             }
         ],
 

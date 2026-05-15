@@ -1,4 +1,4 @@
-using { com.sap.zictm as db } from '../db/schema';  
+using { com.sap.zictm as db } from '../db/schema';
 
 service PIService {
     /**
@@ -13,9 +13,15 @@ service PIService {
 
     /**
      * PI销售订单关系表
+     * code: S-成功, E-失败
+     * message: 失败时返回最小失败步骤的message
      */
-    entity PISalesOrderRel as projection on db.PISalesOrderRel;
-    
+    entity PISalesOrderRel as projection on db.PISalesOrderRel {
+        *,
+        cast(null as String(2)) as code : String(2) @title: '状态',
+        cast(null as String(255)) as message : String(255) @title: '消息'
+    };
+
     /**
      * PI交货单关系表
      */

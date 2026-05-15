@@ -49,7 +49,7 @@ class PurchaseOrderService {
             console.log('[PurchaseOrderService] MPTStepConfig:', mptStepConfig);
 
             // 构建采购订单数据，同时获取行号映射
-            const { purchaseOrderData, itemMapping } = this.buildPurchaseOrderData(businessDataList, mptStepConfig);
+            const purchaseOrderData = this.buildPurchaseOrderData(businessDataList, mptStepConfig);
             
             // 调试：打印请求数据
             console.log('[PurchaseOrderService] 请求数据:', JSON.stringify(purchaseOrderData, null, 2));
@@ -115,7 +115,7 @@ class PurchaseOrderService {
                 const purchaseOrder = result.data.PurchaseOrder || '';
                 
                 // 更新 PISalesOrderRel 表中的 PurchaseOrder1 和 PurchaseOrderItem1
-                await this.updatePISalesOrderRel(purchaseOrder, itemMapping);
+                await this.updatePISalesOrderRel(purchaseOrder, businessDataList);
                 
                 return {
                     code: 'S',
@@ -256,20 +256,12 @@ class PurchaseOrderService {
     }
 
     buildPurchaseOrderData(businessDataList, mptStepConfig) {
-        const itemMapping = [];
-        
         // 获取第一行数据作为主数据
         const mainData = businessDataList[0];
         
-        // 构建采购订单行项目数据
-        const purchaseOrderItems = businessDataList.map((item, index) => {
-            // 保存 PIOrderItem 和行号的映射关系
-            const poItemNumber = ((index + 1) * 10).toString().padStart(5, '0');
-            itemMapping.push({
-                PIOrder: item.PIOrder,
-                PIOrderItem: item.PIOrderItem,
-                poItemNumber: poItemNumber
-            });
+        // 构建采购订单行项目数据（直接使用 PIOrderItem 作为行项目号）
+        const purchaseOrderItems = businessDataList.map((item) => {
+            const poItemNumber = item.PIOrderItem;
 
             return {
                 PurchaseOrderItem: poItemNumber,
@@ -335,25 +327,28 @@ class PurchaseOrderService {
             }
         }
 
-        return { purchaseOrderData, itemMapping };
+        return purchaseOrderData;
     }
 
-    async updatePISalesOrderRel(purchaseOrder, itemMapping) {
+    async updatePISalesOrderRel(purchaseOrder, businessDataList) {
         try {
             const PISalesOrderRel = cds.entities['com.sap.zictm.PISalesOrderRel'];
             const { INSERT, UPDATE } = cds.ql;
             
-            for (const mapping of itemMapping) {
+            for (const item of businessDataList) {
+                // 直接使用 PIOrderItem 作为采购订单行项目号
+                const poItemNumber = item.PIOrderItem;
+                
                 // 先尝试更新
                 const updateResult = await cds.run(
                     UPDATE(PISalesOrderRel)
                         .set({
                             PurchaseOrder1: purchaseOrder,
-                            PurchaseOrderItem1: mapping.poItemNumber
+                            PurchaseOrderItem1: poItemNumber
                         })
                         .where({
-                            PIOrder: mapping.PIOrder,
-                            PIOrderItem: mapping.PIOrderItem
+                            PIOrder: item.PIOrder,
+                            PIOrderItem: item.PIOrderItem
                         })
                 );
                 
@@ -362,16 +357,16 @@ class PurchaseOrderService {
                     await cds.run(
                         INSERT.into(PISalesOrderRel).entries({
                             zrfc_logid: this.zrfcLogid,
-                            PIOrder: mapping.PIOrder,
-                            PIOrderItem: mapping.PIOrderItem,
+                            PIOrder: item.PIOrder,
+                            PIOrderItem: item.PIOrderItem,
                             PurchaseOrder1: purchaseOrder,
-                            PurchaseOrderItem1: mapping.poItemNumber
+                            PurchaseOrderItem1: poItemNumber
                         })
                     );
                 }
             }
             
-            console.log(`已更新/插入 PISalesOrderRel 表: ${itemMapping.length} 条记录`);
+            console.log(`已更新/插入 PISalesOrderRel 表: ${businessDataList.length} 条记录`);
         } catch (error) {
             console.error('更新 PISalesOrderRel 表失败:', error);
         }

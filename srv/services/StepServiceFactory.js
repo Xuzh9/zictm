@@ -10,6 +10,10 @@ const SalesOrderHeaderUpdateService = require('./SalesOrderHeaderUpdateService')
 const SalesOrderItemUpdateService = require('./SalesOrderItemUpdateService');
 const SalesOrderPricingUpdateService = require('./SalesOrderPricingUpdateService');
 const SalesOrderQueryService = require('./SalesOrderQueryService');
+const DeliveryOrderCreateService = require('./DeliveryOrderCreateService');
+const DeliveryOrderPostingService = require('./DeliveryOrderPostingService');
+const DeliveryOrderUpdateService = require('./DeliveryOrderUpdateService');
+const DeliveryOrderQueryService = require('./DeliveryOrderQueryService');
 
 class StepServiceFactory {
     constructor() {
@@ -53,6 +57,14 @@ class StepServiceFactory {
                 return new SalesOrderPricingUpdateService();
             case 'SalesOrderQueryService':
                 return new SalesOrderQueryService();
+            case 'DeliveryOrderCreateService':
+                return new DeliveryOrderCreateService();
+            case 'DeliveryOrderPostingService':
+                return new DeliveryOrderPostingService();
+            case 'DeliveryOrderUpdateService':
+                return new DeliveryOrderUpdateService();
+            case 'DeliveryOrderQueryService':
+                return new DeliveryOrderQueryService();
             default:
                 // 未知的服务类
                 return null;

@@ -125,15 +125,15 @@ entity OutboundDelivery{
     SalesOrderType           : String(4) @title: '销售订单类型';          // 销售订单类型
     SalesOrderDate           : Date @title: '订单日期';               // 订单日期
     Customer                 : String(10) @title: '客户';         // 客户
-    SalesOffice              : String(2) @title: '销售部门';          // 销售部门
+    SalesOffice              : String(4) @title: '销售部门';          // 销售部门
     TransactionCurrency      : String(3) @title: '币别';          // 币别
     Country                  : String(3) @title: '国家';          // 国家
     Product                  : String(40) @title: '物料编码';         // 物料编码
     SalesOrderItemType       : String(5) @title: '行项目类别';          // 行项目类别
     NetAmount                : Decimal(13,3) @title: '总金额';      // 总金额
     RequestedQuantity        : Decimal(13,3) @title: '总数量';      // 总数量
-    PurchasePrice            : Decimal(15,2) @title: '采购单价'; // 采购单价
-    ItemTransactionCurrency  : String(3) @title: '币别';          // 币别
+    RequestedQuantityUnit    : String(3) @title: '单位';            // 单位
+    ItemTransactionCurrency  : String(3) @title: '行项目币别';          // 行项目币别
     ReceivingPlant           : String(4) @title: '库存组织';          // 库存组织
     ReceivingStorageLocation : String(4) @title: '库存地点';          // 库存地点
     DeliveryDate             : Date @title: '发货日期';               // 发货日期
@@ -340,14 +340,12 @@ entity PIDeliveryRel {
   key PIOrder                   : String(10) @title: 'PI单号';    // PI单号
   key PIOrderItem               : String(6) @title: 'PI项目号';     // PI项目号
       zrfc_logid                : UUID @title: '多步ID';           // 多步ID
-      DeliveryNo1               : String(10) @title: '交货单号1';    // 交货单号1
-      DeliveryNoItem1           : String(6) @title: '交货单项目号1';     // 交货单项目号1
+      DeliveryNo1               : String(10) @title: '外向交货单号1';    // 外向交货单号1
+      DeliveryNoItem1           : String(6) @title: '外向交货单项目号1';     // 外向交货单项目号1
       InboundDeliveryNo1        : String(10) @title: '内向交货单号1';    // 内向交货单号1
       InboundDeliveryNoItem1    : String(6) @title: '内向交货项目号1';     // 内向交货项目号1
-      DeliveryNo2               : String(10) @title: '交货单号2';    // 交货单号2
-      DeliveryNoItem2           : String(6) @title: '交货单项目号2';     // 交货单项目号2
+      DeliveryNo2               : String(10) @title: '外向交货单号2';    // 外向交货单号2
+      DeliveryNoItem2           : String(6) @title: '外向交货单项目号2';     // 外向交货单项目号2
       InboundDeliveryNo2        : String(10) @title: '内向交货号2';    // 内向交货号2
       InboundDeliveryNoItem2    : String(6) @title: '内向交货项目号2';     // 内向交货项目号2
-      DeliveryNo                : String(10) @title: '销售订单号';    // 销售订单号
-      DeliveryNoItem            : String(6) @title: '销售订单项目号';     // 销售订单项目号
 }

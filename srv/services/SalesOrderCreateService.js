@@ -13,6 +13,54 @@ class SalesOrderCreateService {
         this.canum = canum;
     }
 
+    /**
+     * 根据销售订单类型获取 API 配置
+     * @param {string} salesOrderType - 销售订单类型
+     * @returns {Object} API 配置对象
+     */
+    getApiConfig(salesOrderType) {
+        switch (salesOrderType) {
+            case 'CR':
+            case 'DR':
+                // 借贷项订单（CR/DR）
+                return {
+                    csrfUrl: '/sap/opu/odata/sap/API_DEBIT_MEMO_REQUEST_SRV/$metadata',
+                    createUrl: '/sap/opu/odata/sap/API_DEBIT_MEMO_REQUEST_SRV/A_DebitMemoRequest',
+                    responseField: 'DebitMemoRequest',
+                    dateField: 'DebitMemoRequestDate',
+                    itemCategoryField: 'DebitMemoRequestItemCategory',
+                    itemCategory: salesOrderType === 'CR' ? 'G2N' : 'L2N',
+                    plantField: 'Plant'
+                };
+            case 'CBRE':
+                // CBRE 退货订单
+                return {
+                    csrfUrl: '/sap/opu/odata/sap/API_CUSTOMER_RETURN_SRV/$metadata',
+                    createUrl: '/sap/opu/odata/sap/API_CUSTOMER_RETURN_SRV/A_CustomerReturn',
+                    responseField: 'CustomerReturn',
+                    dateField: 'CustomerReturnDate',
+                    itemCategoryField: 'CustomerReturnItemCategory',
+                    itemCategory: 'CBEN',
+                    plantField: 'ProductionPlant',
+                    hasStorageLocation: true
+                };
+            case 'ZPR':
+            default:
+                // ZPR 标准销售订单
+                return {
+                    csrfUrl: '/sap/opu/odata/sap/API_SALES_ORDER_SRV/$metadata',
+                    createUrl: '/sap/opu/odata/sap/API_SALES_ORDER_SRV/A_SalesOrder',
+                    responseField: 'SalesOrder',
+                    dateField: 'SalesOrderDate',
+                    itemCategoryField: 'SalesOrderItemCategory',
+                    itemCategory: 'TAN',
+                    plantField: 'ProductionPlant',
+                    hasStorageLocation: true,
+                    hasBatch: true
+                };
+        }
+    }
+
     async execute(inputData) {
         try {
             const { zrfcid, canum, serviceName, readsteps, objkey, zrfcLogid, zdfjy } = inputData;
@@ -44,12 +92,20 @@ class SalesOrderCreateService {
             const businessDataList = businessDataResult.businessData;
             console.log('[SalesOrderCreateService] 业务数据条数:', businessDataList.length);
 
-            // 根据业务表的 SalesOrganization 和 ReceivingPlant 查找 MPTStepConfig 配置
-            const mptStepConfig = await this.getMPTStepConfig(businessDataList, canum);
-            console.log('[SalesOrderCreateService] MPTStepConfig:', mptStepConfig);
+            // 根据 zdfjy 和 canum 查找 MPTStepConfig 配置
+            console.log('[SalesOrderCreateService] 查询 MPTStepConfig, zdfjy:', zdfjy, ', canum:', canum);
+            const mptStepConfig = await this.getMPTStepConfig(businessDataList, canum, zdfjy);
+            console.log('[SalesOrderCreateService] MPTStepConfig 查询结果:', JSON.stringify(mptStepConfig));
+
+            // 获取销售订单类型（从第一条业务数据获取）
+            const salesOrderType = businessDataList[0]?.SalesOrderType;
+            
+            // 根据销售订单类型获取 API 配置
+            const apiConfig = this.getApiConfig(salesOrderType);
+            console.log('[SalesOrderCreateService] 销售订单类型:', salesOrderType, ', API配置:', apiConfig);
 
             // 构建销售订单数据
-            const salesOrderData = this.buildSalesOrderData(businessDataList, mptStepConfig);
+            const salesOrderData = this.buildSalesOrderData(businessDataList, mptStepConfig, apiConfig);
             
             // 调试：打印请求数据
             console.log('[SalesOrderCreateService] 请求数据:', JSON.stringify(salesOrderData, null, 2));
@@ -62,7 +118,7 @@ class SalesOrderCreateService {
                 },
                 {
                     method: 'GET',
-                    url: '/sap/opu/odata/sap/API_SALES_ORDER_SRV/$metadata',
+                    url: apiConfig.csrfUrl,
                     headers: {
                         'X-CSRF-Token': 'Fetch'
                     }
@@ -83,7 +139,7 @@ class SalesOrderCreateService {
                 },
                 {
                     method: 'POST',
-                    url: '/sap/opu/odata/sap/API_SALES_ORDER_SRV/A_SalesOrder',
+                    url: apiConfig.createUrl,
                     data: salesOrderData,
                     headers: {
                         'X-CSRF-Token': csrfToken,
@@ -97,23 +153,18 @@ class SalesOrderCreateService {
                 }
             );
 
-            // 调试：打印响应信息
-            console.log('[SalesOrderCreateService] API 响应状态:', result.status);
-            console.log('[SalesOrderCreateService] API 响应头:', result.headers);
-            console.log('[SalesOrderCreateService] API 响应数据:', JSON.stringify(result.data, null, 2));
-
             if (result.status >= 200 && result.status < 300) {
-                // OData V4 响应格式
-                const salesOrder = result.data.SalesOrder || '';
+                const salesOrder = result.data.d?.SalesOrder || '';
                 
-                // 更新 PISalesOrderRel 表中的 SalesOrder 字段
-                await this.updatePISalesOrderRel(salesOrder, businessDataList);
+                // TODO: 暂时注释，目前场景不需要更新表
+                // await this.updatePISalesOrderRel(salesOrder, businessDataList);
                 
-                return {
+                const returnResult = {
                     code: 'S',
                     message: '销售订单创建成功',
                     objkey: salesOrder
                 };
+                return returnResult;
             } else {
                 let errorMessage = `API 调用失败: ${result.status}`;
                 if (result.data && result.data.error) {
@@ -123,19 +174,15 @@ class SalesOrderCreateService {
                     } else if (error.message) {
                         errorMessage = error.message;
                     }
-                    if (error.code) {
-                        errorMessage = `${errorMessage} (${error.code})`;
-                    }
-                } else if (result.data && result.data.message) {
-                    errorMessage = result.data.message;
                 }
-                console.error('[SalesOrderCreateService] 执行失败:', errorMessage);
+                console.error('[SalesOrderCreateService] API 调用失败:', errorMessage);
                 return {
                     code: 'E',
                     message: errorMessage,
                     objkey: ''
                 };
             }
+
         } catch (error) {
             console.error('[SalesOrderCreateService] 执行失败:', error);
             return {
@@ -147,14 +194,23 @@ class SalesOrderCreateService {
     }
 
     /**
-     * 获取业务流程配置
+     * 获取业务表名
      */
     async getBusinessTable(zrfcid) {
-        const ProcessConfig = cds.entities['com.sap.zictm.ProcessConfig'];
-        const config = await cds.run(
-            SELECT.one.from(ProcessConfig).where({ zrfcid: zrfcid })
-        );
-        return config ? config.businessTable1 : null;
+        try {
+            const ProcessConfig = cds.entities['com.sap.zictm.ProcessConfig'];
+            const config = await cds.run(
+                SELECT.one.from(ProcessConfig)
+                    .where({ zrfcid: zrfcid })
+            );
+            if (config && config.businessTable1) {
+                return config.businessTable1;
+            }
+            return null;
+        } catch (error) {
+            console.error('[SalesOrderCreateService.getBusinessTable] 获取业务表名失败:', error);
+            return null;
+        }
     }
 
     /**
@@ -164,21 +220,22 @@ class SalesOrderCreateService {
         try {
             const entity = cds.entities[`com.sap.zictm.${businessTable}`];
             if (!entity) {
-                return { code: 'E', message: `业务表不存在: ${businessTable}` };
+                return { code: 'E', message: `业务表 ${businessTable} 不存在` };
             }
-            
+
             const businessData = await cds.run(
-                SELECT.from(entity).where({ zrfc_logid: zrfcLogid })
+                SELECT.from(entity)
+                    .where({ zrfc_logid: zrfcLogid })
             );
-            
+
             if (!businessData || businessData.length === 0) {
-                return { code: 'E', message: `未找到业务数据: ${zrfcLogid}` };
+                return { code: 'E', message: `未找到业务数据，zrfcLogid: ${zrfcLogid}` };
             }
-            
-            return { code: 'S', businessData };
+
+            return { code: 'S', businessData: businessData };
         } catch (error) {
-            console.error('[SalesOrderCreateService.getBusinessData] 执行失败:', error);
-            return { code: 'E', message: error.message };
+            console.error('[SalesOrderCreateService.getBusinessData] 获取业务数据失败:', error);
+            return { code: 'E', message: `获取业务数据失败: ${error.message}` };
         }
     }
 
@@ -186,38 +243,40 @@ class SalesOrderCreateService {
      * 获取步骤配置
      * 通过业务表的 SalesOrganization(zxsf) 和 ReceivingPlant(zfcf) 查找
      */
-    async getMPTStepConfig(businessDataList, canum) {
+    async getMPTStepConfig(businessDataList, canum, zdfjy) {
         if (!businessDataList || businessDataList.length === 0 || !canum) {
             return null;
         }
         
         try {
-            const mainData = businessDataList[0];
-            const salesOrganization = mainData.SalesOrganization;
-            const receivingPlant = mainData.ReceivingPlant;
+            let configZdfjy = zdfjy;
             
-            console.log('[SalesOrderCreateService.getMPTStepConfig] SalesOrganization:', salesOrganization, 'ReceivingPlant:', receivingPlant);
-            
-            // 首先通过 SalesOrganization(zxsf) 和 ReceivingPlant(zfcf) 查找 MPTTypeConfig 获取 zdfjy
-            const MPTTypeConfig = cds.entities['com.sap.zictm.MPTTypeConfig'];
-            const mptTypeConfig = await cds.run(
-                SELECT.one.from(MPTTypeConfig)
-                    .where({ zxsf: salesOrganization, zfcf: receivingPlant })
-            );
-            
-            if (!mptTypeConfig) {
-                console.log('[SalesOrderCreateService.getMPTStepConfig] 未找到 MPTTypeConfig 配置');
-                return null;
+            if (!configZdfjy) {
+                const mainData = businessDataList[0];
+                const salesOrganization = mainData.SalesOrganization;
+                const receivingPlant = mainData.ReceivingPlant;
+                
+                console.log('[SalesOrderCreateService.getMPTStepConfig] SalesOrganization:', salesOrganization, 'ReceivingPlant:', receivingPlant);
+                
+                const MPTTypeConfig = cds.entities['com.sap.zictm.MPTTypeConfig'];
+                const mptTypeConfig = await cds.run(
+                    SELECT.one.from(MPTTypeConfig)
+                        .where({ zxsf: salesOrganization, zfcf: receivingPlant })
+                );
+                
+                if (!mptTypeConfig) {
+                    console.log('[SalesOrderCreateService.getMPTStepConfig] 未找到 MPTTypeConfig 配置');
+                    return null;
+                }
+                
+                configZdfjy = mptTypeConfig.zdfjy;
+                console.log('[SalesOrderCreateService.getMPTStepConfig] 找到 zdfjy:', configZdfjy);
             }
             
-            const zdfjy = mptTypeConfig.zdfjy;
-            console.log('[SalesOrderCreateService.getMPTStepConfig] 找到 zdfjy:', zdfjy);
-            
-            // 然后通过 zdfjy 和 canum 查找 MPTStepConfig
             const MPTStepConfig = cds.entities['com.sap.zictm.MPTStepConfig'];
             const config = await cds.run(
                 SELECT.one.from(MPTStepConfig)
-                    .where({ zdfjy: zdfjy, canum: parseInt(canum) })
+                    .where({ zdfjy: configZdfjy, canum: parseInt(canum) })
             );
             
             return config || null;
@@ -230,69 +289,158 @@ class SalesOrderCreateService {
     /**
      * 构建销售订单数据
      */
-    buildSalesOrderData(businessDataList, mptStepConfig) {
+    buildSalesOrderData(businessDataList, mptStepConfig, apiConfig) {
         if (!businessDataList || businessDataList.length === 0) {
             return {};
         }
 
         const mainData = businessDataList[0];
+        const salesOrderType = mainData.SalesOrderType || 'ZPR';
+        
+        // 获取工厂字段值（优先使用业务数据，其次使用配置）
+        const plantValue = mainData.ReceivingPlant || mptStepConfig?.werks;
         
         // 构建行项目
         const salesOrderItems = businessDataList.map((item, index) => {
-            // 使用业务表的 SalesOrderItem 字段，如果为空则使用递增编号
-            const itemNumber = item.SalesOrderItem || ((index + 1) * 10).toString();
+            // 使用业务表的 SalesOrderItem 字段
+            const itemNumber = item.SalesOrderItem;
             
-            return {
+            // 根据销售订单类型使用动态字段名
+            const itemCategoryField = apiConfig.itemCategoryField;
+            const itemCategory = apiConfig.itemCategory;
+            const plantField = apiConfig.plantField;
+            
+            const itemData = {
                 SalesOrderItem: itemNumber,
-                SalesOrderItemCategory: "TAN",
                 Material: item.Product || "",
-                ProductionPlant: item.ReceivingPlant || "",
                 RequestedQuantity: item.RequestedQuantity ? parseFloat(item.RequestedQuantity).toString() : "0",
-                RequestedQuantityUnit: item.RequestedQuantityUnit || "PCS",
+                //RequestedQuantityUnit: item.RequestedQuantityUnit || "",
                 to_PricingElement: {
                     results: [{
-                        ConditionType: "ZB01",
-                        ConditionRateValue: item.PurchasePrice ? parseFloat(item.PurchasePrice).toString() : "0",
+                        ConditionType: "ZP10",
+                        ConditionRateValue: item.NetAmount || "0",
                         ConditionQuantity: "1",
-                        ConditionQuantityUnit: "PCS"
+                        ConditionCurrency: item.ItemTransactionCurrency
                     }]
                 }
             };
+            
+            // 设置工厂字段（使用动态字段名）
+            if (plantValue) {
+                itemData[plantField] = plantValue;
+            }
+            
+            // 设置行项目类别（使用动态字段名）
+            itemData[itemCategoryField] = itemCategory;
+            
+            // ZPR 和 CBRE 添加 StorageLocation
+            if (apiConfig.hasStorageLocation && item.ReceivingStorageLocation) {
+                itemData.StorageLocation = item.ReceivingStorageLocation;
+            }
+            
+            // ZPR 添加 Batch
+            if (apiConfig.hasBatch) {
+                itemData.Batch = "2605130002";
+            }
+            
+            return itemData;
         });
 
         // 构建销售订单主数据
         let salesOrderData = {
-            SalesOrderType: mainData.SalesOrderType || "",
-            SalesOrganization: mptStepConfig?.vkorg || "",
+            SalesOrderType: salesOrderType || "",
+            SalesOrganization: mainData.SalesOrganization || mptStepConfig?.vkorg,
+            SalesOffice: mainData.SalesOffice || "",
             DistributionChannel: mptStepConfig?.vtweg || "",
             OrganizationDivision: mptStepConfig?.spart || "00",
-            SalesOffice: mptStepConfig?.vkbur || "",
-            SalesGroup: mptStepConfig?.vkgrp || "",
-            SoldToParty: mptStepConfig?.kunnr || "",
-            PurchaseOrderByCustomer: mainData.PIOrder || "",
-            TransactionCurrency: mainData.TransactionCurrency || "CNY",
-            CustomerPaymentTerms: mptStepConfig?.zterm || "NT15",
-            SDDocumentReason: "",
+            SoldToParty: mainData.Customer || mptStepConfig?.kunnr,
+            PurchaseOrderByCustomer: mainData.SalesOrder || "",
+            TransactionCurrency: mainData.TransactionCurrency,
+            YY1_FD_ZDFJY_SDH: mptStepConfig?.zdfjy,
             to_Item: {
                 results: salesOrderItems
-            },
-            to_Partner: {
-                results: [{
-                    PartnerFunction: "SE",
-                    Customer: mptStepConfig?.kunnr || ""
-                }]
             }
         };
-
-        // 如果有日期值则添加
-        if (mainData.RequestedDeliveryDate) {
-            salesOrderData.RequestedDeliveryDate = mainData.RequestedDeliveryDate;
+        
+        // 根据销售订单类型设置不同的日期字段
+        if (mainData.SalesOrderDate && apiConfig.dateField) {
+            salesOrderData[apiConfig.dateField] = this.convertDate(mainData.SalesOrderDate);
         }
-        if (mainData.SalesOrderDate) {
-            salesOrderData.CustomerPurchaseOrderDate = mainData.SalesOrderDate;
+
+        // 根据销售订单类型设置不同的交货日期字段
+        if (mainData.DeliveryDate) {
+            if (salesOrderType === 'ZPR') {
+                salesOrderData.RequestedDeliveryDate = this.convertDate(mainData.DeliveryDate);
+            } else if (salesOrderType === 'CBRE') {
+                salesOrderData.PlannedGoodsIssueDate = this.convertDate(mainData.DeliveryDate);
+            }
         }
 
         return salesOrderData;
+    }
+
+    /**
+     * 转换日期格式
+     * 将 /Date(1492041600000)/ 格式转换为 ISO 日期格式
+     * @param {string} dateStr - 日期字符串
+     * @returns {string} ISO 日期格式字符串
+     */
+    convertDate(dateStr) {
+        if (!dateStr) {
+            return null;
+        }
+
+        // 处理 ISO 日期格式 2026-05-13 或 2026-05-13T00:00:00 转换为 /Date(timestamp)/ 格式
+        const date = new Date(dateStr);
+        if (!isNaN(date.getTime())) {
+            return `/Date(${date.getTime()})/`;
+        }
+        
+        // 如果无法识别，直接返回原值
+        return dateStr;
+    }
+
+    /**
+     * 更新或插入 PISalesOrderRel 表
+     */
+    async updatePISalesOrderRel(salesOrder, businessDataList) {
+        try {
+            const PISalesOrderRel = cds.entities['com.sap.zictm.PISalesOrderRel'];
+            
+            for (const item of businessDataList) {
+                const piOrder = item.PIOrder || '';
+                const piOrderItem = item.PIOrderItem || '';
+                
+                if (piOrder && piOrderItem && salesOrder) {
+                    // 先尝试更新
+                    const updateResult = await cds.run(
+                        UPDATE(PISalesOrderRel)
+                            .set({ SalesOrder: salesOrder, SalesOrderItem: item.SalesOrderItem })
+                            .where({ PIOrder: piOrder, PIOrderItem: piOrderItem })
+                    );
+                    
+                    console.log('[SalesOrderCreateService.updatePISalesOrderRel] 更新结果:', updateResult);
+                    
+                    // 如果更新影响行数为0，则执行插入
+                    if (!updateResult || (typeof updateResult === 'number' && updateResult === 0)) {
+                        console.log('[SalesOrderCreateService.updatePISalesOrderRel] 未找到记录，执行插入');
+                        const insertResult = await cds.run(
+                            INSERT.into(PISalesOrderRel)
+                                .entries({
+                                    PIOrder: piOrder,
+                                    PIOrderItem: piOrderItem,
+                                    zrfc_logid: this.zrfcLogid,
+                                    SalesOrder: salesOrder,
+                                    SalesOrderItem: item.SalesOrderItem
+                                })
+                        );
+                        console.log('[SalesOrderCreateService.updatePISalesOrderRel] 插入结果:', insertResult);
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('[SalesOrderCreateService.updatePISalesOrderRel] 更新或插入失败:', error);
+        }
     }
 }
 
