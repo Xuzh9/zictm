@@ -1,10 +1,12 @@
 const cds = require('@sap/cds');
 const { SELECT, UPDATE, INSERT } = cds.ql;
 const { executeHttpRequest } = require('@sap-cloud-sdk/http-client');
+const CommonUtils = require('../handlers/CommonUtils');
 
 class PurchaseOrderService {
     constructor() {
         this.zrfcLogid = null;
+        this.commonUtils = new CommonUtils();
     }
 
     async initService(zrfcLogid, zrfcid, canum) {
@@ -22,7 +24,7 @@ class PurchaseOrderService {
             console.log('[PurchaseOrderService] 开始执行, zrfcid:', zrfcid, 'canum:', canum, 'zdfjy:', zdfjy);
 
             // 读取 ProcessConfig 表获取业务表名
-            const businessTable = await this.getBusinessTable(zrfcid);
+            const businessTable = await this.commonUtils.getBusinessTableName(zrfcid, true);
             if (!businessTable) {
                 return {
                     code: 'E',
@@ -30,7 +32,6 @@ class PurchaseOrderService {
                     objkey: ''
                 };
             }
-            console.log('[PurchaseOrderService] 业务表名:', businessTable);
 
             // 读取业务表数据
             const businessDataResult = await this.getBusinessData(businessTable, zrfcLogid);
@@ -45,17 +46,15 @@ class PurchaseOrderService {
             console.log('[PurchaseOrderService] 业务数据条数:', businessDataList.length);
 
             // 根据 zdfjy 和 canum 查找 MPTStepConfig 配置
-            const mptStepConfig = await this.getMPTStepConfig(zdfjy, canum);
-            console.log('[PurchaseOrderService] MPTStepConfig:', mptStepConfig);
+            const mptStepConfig = await this.commonUtils.getMPTStepConfig(zdfjy, canum);
 
-            // 构建采购订单数据，同时获取行号映射
-            const purchaseOrderData = this.buildPurchaseOrderData(businessDataList, mptStepConfig);
+            // 构建采购订单数据，同时获取行号映射和计算后的价格
+            const { purchaseOrderData, itemPrices } = await this.buildPurchaseOrderData(businessDataList, mptStepConfig, zrfcid, zdfjy);
             
             // 调试：打印请求数据
             console.log('[PurchaseOrderService] 请求数据:', JSON.stringify(purchaseOrderData, null, 2));
  
             // 获取 CSRF token
-            console.log('[PurchaseOrderService] 开始获取 CSRF token...');
             const csrfResult = await executeHttpRequest(
                 {
                     destinationName: 'ES_API'
@@ -84,7 +83,6 @@ class PurchaseOrderService {
             });
             
             // 直接传递对象，跟 MaterialDocumentService 保持一致
-            console.log('[PurchaseOrderService] 开始调用采购订单 API...');
             const result = await executeHttpRequest(
                 {
                     destinationName: 'ES_API'
@@ -105,17 +103,18 @@ class PurchaseOrderService {
                 }
             );
 
-            // 调试：打印响应信息
-            console.log('[PurchaseOrderService] API 响应状态:', result.status);
-            console.log('[PurchaseOrderService] API 响应头:', result.headers);
-            console.log('[PurchaseOrderService] API 响应数据:', JSON.stringify(result.data, null, 2));
-
             if (result.status >= 200 && result.status < 300) {
                 // OData V4 响应格式
                 const purchaseOrder = result.data.PurchaseOrder || '';
                 
-                // 更新 PISalesOrderRel 表中的 PurchaseOrder1 和 PurchaseOrderItem1
-                await this.updatePISalesOrderRel(purchaseOrder, businessDataList);
+                // 根据 zrfcid 执行不同的更新操作
+                if (zrfcid === 'SD01') {
+                    // SD01: 更新 PISalesOrderRel 表
+                    await this.updatePISalesOrderRel(purchaseOrder, businessDataList);
+                } else if (zrfcid === 'SD04') {
+                    // SD04: 更新 OutboundDelivery 的 PurchasePrice（使用之前计算好的价格）
+                    await this.updateOutboundDeliveryPurchasePrice(itemPrices);
+                }
                 
                 return {
                     code: 'S',
@@ -192,30 +191,6 @@ class PurchaseOrderService {
         }
     }
 
-    async getBusinessTable(zrfcid) {
-        const ProcessConfig = cds.entities['com.sap.zictm.ProcessConfig'];
-        const config = await cds.run(SELECT.one.from(ProcessConfig).where({ zrfcid }));
-        return config ? config.businessTable1 : null;
-    }
-
-    async getMPTStepConfig(zdfjy, canum) {
-        if (!zdfjy || !canum) {
-            return null;
-        }
-        
-        try {
-            const MPTStepConfig = cds.entities['com.sap.zictm.MPTStepConfig'];
-            const config = await cds.run(
-                SELECT.one.from(MPTStepConfig)
-                    .where({ zdfjy: zdfjy, canum: parseInt(canum) })
-            );
-            return config || null;
-        } catch (error) {
-            console.error('获取 MPTStepConfig 失败:', error);
-            return null;
-        }
-    }
-
     async getBusinessData(businessTable, objkey) {
         try {
             const BusinessEntity = cds.entities[businessTable];
@@ -255,28 +230,70 @@ class PurchaseOrderService {
         }
     }
 
-    buildPurchaseOrderData(businessDataList, mptStepConfig) {
+    async buildPurchaseOrderData(businessDataList, mptStepConfig, zrfcid, zdfjy) {
+        console.log('[PurchaseOrderService] buildPurchaseOrderData - 开始执行');
+        console.log('[PurchaseOrderService] buildPurchaseOrderData - zdfjy 参数值:', zdfjy);
+        console.log('[PurchaseOrderService] buildPurchaseOrderData - zrfcid:', zrfcid);
+        console.log('[PurchaseOrderService] buildPurchaseOrderData - mptStepConfig:', JSON.stringify(mptStepConfig));
+        
         // 获取第一行数据作为主数据
         const mainData = businessDataList[0];
         
-        // 构建采购订单行项目数据（直接使用 PIOrderItem 作为行项目号）
-        const purchaseOrderItems = businessDataList.map((item) => {
-            const poItemNumber = item.PIOrderItem;
+        // 存储计算后的价格映射，用于后续更新 OutboundDelivery 表
+        const itemPrices = [];
+        
+        // 构建采购订单行项目数据（根据 zrfcid 使用不同的字段映射）
+        const purchaseOrderItems = [];
+        for (const item of businessDataList) {
+            // 根据 zrfcid 选择不同的字段映射
+            let poItemNumber, material, netPriceAmount, unitOfMeasure;
+            switch (zrfcid) {
+                case 'SD01':
+                    poItemNumber = item.PIOrderItem;
+                    material = item.Material || "";
+                    netPriceAmount = item.PurchasePrice ? parseFloat(item.PurchasePrice) : 0;
+                    unitOfMeasure = item.RequestedQuantityUnit;
+                    break;
+                case 'SD04':
+                    poItemNumber = item.SalesOrderItem;
+                    material = item.Product || "";
+                    const netAmount = item.NetAmount ? parseFloat(item.NetAmount) : 0;
+                    const requestedQty = item.RequestedQuantity ? parseFloat(item.RequestedQuantity) : 1;
+                    const zjgbl = mptStepConfig?.zjgbl ? parseFloat(mptStepConfig.zjgbl) : 100;
+                    netPriceAmount = requestedQty > 0 ? (netAmount / requestedQty) * (zjgbl / 100) : 0;
+                    // SD04 需要通过物料主数据 API 获取单位
+                    const baseUnit = await this.getMaterialBaseUnit(material);
+                    unitOfMeasure = baseUnit || "EA";
+                    break;
+                default:
+                    // 默认使用 SD01 的字段映射
+                    poItemNumber = item.PIOrderItem;
+                    material = item.Material || "";
+                    netPriceAmount = item.PurchasePrice ? parseFloat(item.PurchasePrice) : 0;
+                    unitOfMeasure = item.RequestedQuantityUnit;
+                    break;
+            }
 
-            return {
+            // 保存计算后的价格映射（用于后续更新）
+            itemPrices.push({
+                SalesOrder: item.SalesOrder,
+                SalesOrderItem: item.SalesOrderItem,
+                PurchasePrice: netPriceAmount
+            });
+
+            purchaseOrderItems.push({
                 PurchaseOrderItem: poItemNumber,
-                Material: item.Material || "",
+                Material: material,
                 Plant: mptStepConfig?.umwrk || "",
-                StorageLocation: mptStepConfig?.lgort || "",
-                PurchaseOrderQuantityUnit: item.RequestedQuantityUnit,
+                PurchaseOrderQuantityUnit: unitOfMeasure,
                 TaxCode: mptStepConfig?.mwskz || "",
                 OrderQuantity: item.RequestedQuantity ? parseFloat(item.RequestedQuantity) : 0,
-                NetPriceAmount: item.PurchasePrice ? parseFloat(item.PurchasePrice) : 0,
+                NetPriceAmount: netPriceAmount,
                 DocumentCurrency: item.TransactionCurrency || "",
                 _PurchaseOrderScheduleLineTP: [{
                     PurchaseOrderItem: poItemNumber,
                     ScheduleLine: "1",
-                    ScheduleLineDeliveryDate: item.ConfirmedDeliveryDate || ""
+                    ScheduleLineDeliveryDate: zrfcid === 'SD04' ? (item.DeliveryDate || "") : (item.ConfirmedDeliveryDate || "")
                 }],
                 _PurOrdPricingElement: [{
                     PurchaseOrderItem: poItemNumber,
@@ -291,19 +308,22 @@ class PurchaseOrderService {
                     ConditionCurrency: item.TransactionCurrency || "",
                     FreightSupplier: "600000"
                 }]
-            };
-        });
+            });
+        }
 
         // 构建采购订单主数据（包含行项目）
+        console.log('[PurchaseOrderService] buildPurchaseOrderData - 即将使用 zdfjy:', zdfjy);
+        console.log('[PurchaseOrderService] buildPurchaseOrderData - zdfjy 类型:', typeof zdfjy);
+        
         let purchaseOrderData = {
-            PurchaseOrderType: 'Z09',
-            CompanyCode: mainData.SalesDistrict || "",
+            PurchaseOrderType: "Z09",
+            CompanyCode: mptStepConfig?.ekorg || "",
             PurchasingOrganization: mptStepConfig?.ekorg || "",
             PurchasingGroup: mptStepConfig?.ekgrp || "",
-            Supplier: mainData.ProductionPlant,
+            Supplier: mptStepConfig?.lifnr || "",
             DocumentCurrency: mainData.TransactionCurrency || "",
-            YY1_FD_ZDFJY2_PDH: mainData.YY1_FD_ZDFJY,
-            SupplyingPlant: mainData.ProductionPlant,
+            YY1_FD_ZDFJY2_PDH: zdfjy,
+            SupplyingPlant: zrfcid === 'SD04' ? (mptStepConfig?.lifnr || "") : mainData.ProductionPlant,
             _PurchaseOrderItem: purchaseOrderItems
         };
 
@@ -327,7 +347,8 @@ class PurchaseOrderService {
             }
         }
 
-        return purchaseOrderData;
+        // 返回采购订单数据和计算后的价格映射
+        return { purchaseOrderData, itemPrices };
     }
 
     async updatePISalesOrderRel(purchaseOrder, businessDataList) {
@@ -336,8 +357,8 @@ class PurchaseOrderService {
             const { INSERT, UPDATE } = cds.ql;
             
             for (const item of businessDataList) {
-                // 直接使用 PIOrderItem 作为采购订单行项目号
-                const poItemNumber = item.PIOrderItem;
+                // 使用 PIOrderItem 作为采购订单行项目号，添加前导零使其长度为5位
+                const poItemNumber = String(item.PIOrderItem).padStart(5, '0');
                 
                 // 先尝试更新
                 const updateResult = await cds.run(
@@ -369,6 +390,61 @@ class PurchaseOrderService {
             console.log(`已更新/插入 PISalesOrderRel 表: ${businessDataList.length} 条记录`);
         } catch (error) {
             console.error('更新 PISalesOrderRel 表失败:', error);
+        }
+    }
+
+    async updateOutboundDeliveryPurchasePrice(itemPrices) {
+        try {
+            const OutboundDelivery = cds.entities['com.sap.zictm.OutboundDelivery'];
+            
+            for (const item of itemPrices) {
+                // 直接使用之前计算好的价格，避免重复计算导致小数差异
+                const purchasePrice = item.PurchasePrice;
+                
+                // 按表主键（SalesOrder + SalesOrderItem）更新 OutboundDelivery 表的 PurchasePrice 字段
+                const affectedRows = await cds.run(
+                    UPDATE(OutboundDelivery)
+                        .set({ PurchasePrice: purchasePrice })
+                        .where({ 
+                            SalesOrder: item.SalesOrder,
+                            SalesOrderItem: item.SalesOrderItem
+                        })
+                );
+                
+                console.log(`更新 OutboundDelivery: SalesOrder=${item.SalesOrder}, SalesOrderItem=${item.SalesOrderItem}, PurchasePrice=${purchasePrice}, 更新行数: ${affectedRows}`);
+            }
+        } catch (error) {
+            console.error('更新 OutboundDelivery 表失败:', error);
+        }
+    }
+
+    // 查询物料主数据 API 获取 BaseUnit
+    async getMaterialBaseUnit(materialNumber) {
+        if (!materialNumber) {
+            return null;
+        }
+        
+        try {
+            const url = `/sap/opu/odata/sap/API_PRODUCT_SRV/A_Product('${materialNumber}')`;
+            console.log('[PurchaseOrderCreateService] 查询物料主数据:', url);
+            
+            const response = await executeHttpRequest({
+                destinationName: 'ES_API'
+            }, {
+                method: 'GET',
+                url: url,
+                headers: {
+                    'sap-language': 'ZH',
+                    'Accept': 'application/json'
+                }
+            });
+            
+            const baseUnit = response.data?.d?.BaseUnit;
+            console.log('[PurchaseOrderCreateService] 物料主数据查询结果:', materialNumber, 'BaseUnit:', baseUnit);
+            return baseUnit;
+        } catch (error) {
+            console.warn('[PurchaseOrderCreateService] 获取物料主数据失败:', materialNumber, error.message);
+            return null;
         }
     }
 }

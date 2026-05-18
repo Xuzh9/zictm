@@ -46,23 +46,25 @@ class CommonUtils {
     /**
      * 根据 zdfjy 和 canum 查找 MPTStepConfig 配置
      * @param {string} zdfjy - 多方交易类型ID
-     * @param {string} canum - 步骤编号
+     * @param {number} canum - 步骤编号
      * @returns {Promise<Object|null>} 配置对象
      */
     async getMPTStepConfig(zdfjy, canum) {
+        
         if (!zdfjy || !canum) {
             return null;
         }
         
         try {
             const MPTStepConfig = cds.entities['com.sap.zictm.MPTStepConfig'];
+            
             const config = await cds.run(
                 SELECT.one.from(MPTStepConfig)
                     .where({ zdfjy, canum })
             );
+            
             return config || null;
         } catch (error) {
-            console.error('CommonUtils.getMPTStepConfig 执行失败:', error);
             return null;
         }
     }
@@ -85,7 +87,6 @@ class CommonUtils {
             );
             return config || null;
         } catch (error) {
-            console.error('CommonUtils.getMPTTypeConfig 执行失败:', error);
             return null;
         }
     }
@@ -96,18 +97,14 @@ class CommonUtils {
      * @returns {Promise<Object|null>} 配置对象
      */
     async getProcessConfig(zrfcid) {
-        console.log('[CommonUtils.getProcessConfig] 开始查询, zrfcid:', zrfcid);
         try {
             const ProcessConfig = cds.entities['com.sap.zictm.ProcessConfig'];
-            console.log('[CommonUtils.getProcessConfig] 获取实体成功');
-            console.log('[CommonUtils.getProcessConfig] 准备执行查询 SELECT.one.from(ProcessConfig).where({ zrfcid })');
             const config = await cds.run(
                 SELECT.one.from(ProcessConfig)
                     .where({ zrfcid })
             );
             return config || null;
         } catch (error) {
-            console.error('CommonUtils.getProcessConfig 执行失败:', error);
             return null;
         }
     }

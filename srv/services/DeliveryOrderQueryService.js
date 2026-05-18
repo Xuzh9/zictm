@@ -1,9 +1,11 @@
 const cds = require('@sap/cds');
 const { executeHttpRequest } = require('@sap-cloud-sdk/http-client');
+const CommonUtils = require('../handlers/CommonUtils');
 
-class InboundDeliveryQueryService {
+class DeliveryOrderQueryService {
     constructor() {
         this.zrfcLogid = null;
+        this.commonUtils = new CommonUtils();
     }
 
     async initService(zrfcLogid, zrfcid, canum) {
@@ -15,13 +17,20 @@ class InboundDeliveryQueryService {
     async execute(inputData) {
         try {
             const { zrfcid, canum, serviceName, readsteps, objkey, zrfcLogid, zdfjy } = inputData;
-
+            
             this.zrfcLogid = zrfcLogid;
 
-            return await this.queryInboundDeliveryByReference(objkey);
+            // 使用通用工具类读取之前步骤的 objkey
+            let referenceSDDocument = objkey;
+            const previousObjkey = await this.commonUtils.getPreviousStepObjkey(zrfcLogid, zrfcid, readsteps, canum);
+            if (previousObjkey) {
+                referenceSDDocument = previousObjkey;
+            }
+
+            return await this.queryInboundDeliveryByReference(referenceSDDocument);
 
         } catch (error) {
-            console.error('InboundDeliveryQueryService 执行失败:', error);
+            console.error('DeliveryOrderQueryService 执行失败:', error);
             return {
                 code: 'E',
                 message: error.message || '查询内向交货单失败',
@@ -142,4 +151,4 @@ class InboundDeliveryQueryService {
     }
 }
 
-module.exports = InboundDeliveryQueryService;
+module.exports = DeliveryOrderQueryService;

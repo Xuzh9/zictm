@@ -1,10 +1,12 @@
 const cds = require('@sap/cds');
 const { SELECT, UPDATE, INSERT } = cds.ql;
 const { executeHttpRequest } = require('@sap-cloud-sdk/http-client');
+const CommonUtils = require('../handlers/CommonUtils');
 
 class SalesOrderCreateService {
     constructor() {
         this.zrfcLogid = null;
+        this.commonUtils = new CommonUtils();
     }
 
     async initService(zrfcLogid, zrfcid, canum) {
@@ -41,8 +43,7 @@ class SalesOrderCreateService {
                     dateField: 'CustomerReturnDate',
                     itemCategoryField: 'CustomerReturnItemCategory',
                     itemCategory: 'CBEN',
-                    plantField: 'ProductionPlant',
-                    hasStorageLocation: true
+                    plantField: 'ProductionPlant'
                 };
             case 'ZPR':
             default:
@@ -54,9 +55,7 @@ class SalesOrderCreateService {
                     dateField: 'SalesOrderDate',
                     itemCategoryField: 'SalesOrderItemCategory',
                     itemCategory: 'TAN',
-                    plantField: 'ProductionPlant',
-                    hasStorageLocation: true,
-                    hasBatch: true
+                    plantField: 'ProductionPlant'
                 };
         }
     }
@@ -105,7 +104,7 @@ class SalesOrderCreateService {
             console.log('[SalesOrderCreateService] 销售订单类型:', salesOrderType, ', API配置:', apiConfig);
 
             // 构建销售订单数据
-            const salesOrderData = this.buildSalesOrderData(businessDataList, mptStepConfig, apiConfig);
+            const salesOrderData = this.buildSalesOrderData(businessDataList, mptStepConfig, apiConfig, zrfcid);
             
             // 调试：打印请求数据
             console.log('[SalesOrderCreateService] 请求数据:', JSON.stringify(salesOrderData, null, 2));
@@ -273,13 +272,8 @@ class SalesOrderCreateService {
                 console.log('[SalesOrderCreateService.getMPTStepConfig] 找到 zdfjy:', configZdfjy);
             }
             
-            const MPTStepConfig = cds.entities['com.sap.zictm.MPTStepConfig'];
-            const config = await cds.run(
-                SELECT.one.from(MPTStepConfig)
-                    .where({ zdfjy: configZdfjy, canum: parseInt(canum) })
-            );
-            
-            return config || null;
+            const config = await this.commonUtils.getMPTStepConfig(configZdfjy, canum);
+            return config;
         } catch (error) {
             console.error('获取 MPTStepConfig 失败:', error);
             return null;
@@ -289,7 +283,7 @@ class SalesOrderCreateService {
     /**
      * 构建销售订单数据
      */
-    buildSalesOrderData(businessDataList, mptStepConfig, apiConfig) {
+    buildSalesOrderData(businessDataList, mptStepConfig, apiConfig, zrfcid) {
         if (!businessDataList || businessDataList.length === 0) {
             return {};
         }
@@ -297,8 +291,13 @@ class SalesOrderCreateService {
         const mainData = businessDataList[0];
         const salesOrderType = mainData.SalesOrderType || 'ZPR';
         
-        // 获取工厂字段值（优先使用业务数据，其次使用配置）
-        const plantValue = mainData.ReceivingPlant || mptStepConfig?.werks;
+        // 根据 zrfcid 获取工厂字段值
+        let plantValue;
+        if (zrfcid === 'SD02') {
+            plantValue = mainData.ReceivingPlant;
+        } else if (zrfcid === 'SD04') {
+            plantValue = mptStepConfig?.werks;
+        }
         
         // 构建行项目
         const salesOrderItems = businessDataList.map((item, index) => {
@@ -314,7 +313,6 @@ class SalesOrderCreateService {
                 SalesOrderItem: itemNumber,
                 Material: item.Product || "",
                 RequestedQuantity: item.RequestedQuantity ? parseFloat(item.RequestedQuantity).toString() : "0",
-                //RequestedQuantityUnit: item.RequestedQuantityUnit || "",
                 to_PricingElement: {
                     results: [{
                         ConditionType: "ZP10",
@@ -332,16 +330,6 @@ class SalesOrderCreateService {
             
             // 设置行项目类别（使用动态字段名）
             itemData[itemCategoryField] = itemCategory;
-            
-            // ZPR 和 CBRE 添加 StorageLocation
-            if (apiConfig.hasStorageLocation && item.ReceivingStorageLocation) {
-                itemData.StorageLocation = item.ReceivingStorageLocation;
-            }
-            
-            // ZPR 添加 Batch
-            if (apiConfig.hasBatch) {
-                itemData.Batch = "2605130002";
-            }
             
             return itemData;
         });

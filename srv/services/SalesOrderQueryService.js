@@ -19,6 +19,7 @@ class SalesOrderQueryService {
             const { zrfcid, canum, serviceName, readsteps, objkey, zrfcLogid, zdfjy } = inputData;
             
             this.zrfcLogid = zrfcLogid;
+            this.zrfcid = zrfcid;
 
             // 使用通用工具类读取之前步骤的 objkey
             let purchaseOrderByCustomer = objkey;
@@ -28,7 +29,7 @@ class SalesOrderQueryService {
             }
 
             // 根据条件查询销售订单
-            return await this.querySalesOrderByCondition(purchaseOrderByCustomer);
+            return await this.querySalesOrderByCondition(purchaseOrderByCustomer, zrfcid);
 
         } catch (error) {
             console.error('SalesOrderQueryService 执行失败:', error);
@@ -40,7 +41,7 @@ class SalesOrderQueryService {
         }
     }
 
-    async querySalesOrderByCondition(purchaseOrderByCustomer) {
+    async querySalesOrderByCondition(purchaseOrderByCustomer, zrfcid) {
         const maxRetries = 10;
         const retryDelay = 1000; // 1秒
         
@@ -107,7 +108,7 @@ class SalesOrderQueryService {
                     console.log('销售订单行项目数量:', salesOrderItems.length);
 
                     // 更新 PISalesOrderRel 表
-                    if (salesOrderItems.length > 0) {
+                    if (zrfcid === 'SD01' && salesOrderItems.length > 0) {
                         await this.updatePISalesOrderRel(purchaseOrderByCustomer, salesOrderItems);
                     }
 
@@ -162,7 +163,6 @@ class SalesOrderQueryService {
                     // 格式化字段值以匹配数据库存储格式
                     // PurchaseOrder1: 10位, PurchaseOrderItem1: 5位, SalesOrderItem1: 6位
                     const formattedPurchaseOrder = String(itemPurchaseOrderByCustomer).padStart(10, '0');
-                    const formattedPurchaseOrderItem = String(underlyingPurchaseOrderItem).padStart(5, '0');
                     const formattedSalesOrderItem = String(item.SalesOrderItem).padStart(6, '0');
                     
                     // 根据 to_Item.PurchaseOrderByCustomer = PurchaseOrder1 和 to_Item.UnderlyingPurchaseOrderItem = PurchaseOrderItem1 更新记录
@@ -174,11 +174,11 @@ class SalesOrderQueryService {
                             })
                             .where({
                                 PurchaseOrder1: formattedPurchaseOrder,
-                                PurchaseOrderItem1: formattedPurchaseOrderItem
+                                PurchaseOrderItem1: String(item.UnderlyingPurchaseOrderItem).padStart(5, '0')
                             })
                     );
                     
-                    console.log(`更新 PISalesOrderRel: PurchaseOrder1=${formattedPurchaseOrder}, PurchaseOrderItem1=${formattedPurchaseOrderItem} -> SalesOrder1=${salesOrderNumber}, SalesOrderItem1=${formattedSalesOrderItem}, 更新行数: ${affectedRows}`);
+                    console.log(`更新 PISalesOrderRel: PurchaseOrder1=${formattedPurchaseOrder}, PurchaseOrderItem1=${String(item.UnderlyingPurchaseOrderItem).padStart(5, '0')} -> SalesOrder1=${salesOrderNumber}, SalesOrderItem1=${formattedSalesOrderItem}, 更新行数: ${affectedRows}`);
                 }
             }
         } catch (error) {

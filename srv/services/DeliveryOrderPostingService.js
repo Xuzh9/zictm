@@ -19,7 +19,7 @@ class DeliveryOrderPostingService {
     async execute(inputData) {
         try {
             const { zrfcid, canum, serviceName, readsteps, objkey, zrfcLogid, zdfjy } = inputData;
-            
+
             this.zrfcLogid = zrfcLogid;
             this.zrfcid = zrfcid;
 
@@ -74,18 +74,23 @@ class DeliveryOrderPostingService {
             }
 
             console.log(`[DeliveryOrderPostingService] 开始执行交货单过账, 交货单号: ${deliveryDocument}`);
+            console.log(`[DeliveryOrderPostingService] 判断条件 - zrfcid: ${zrfcid}, canum: ${canum}, 类型 - zrfcid: ${typeof zrfcid}, canum: ${typeof canum}`);
 
             // 根据订单类型获取 API 配置
-            const apiConfig = this.getApiConfig(salesOrderType);
+            const apiConfig = this.getApiConfig(salesOrderType, zrfcid, canum);
 
-            // 获取 CSRF token
+            // 构建获取 CSRF token 和 ETag 的 URL（包含具体交货单号）
+            const csrfUrl = apiConfig.csrfUrl.replace('{DeliveryDocument}', deliveryDocument);
+            console.log(`[DeliveryOrderPostingService] 获取 CSRF token URL: ${csrfUrl}`);
+
+            // 获取 CSRF token（同时获取 ETag）
             const csrfResult = await executeHttpRequest(
                 {
                     destinationName: 'ES_API'
                 },
                 {
                     method: 'GET',
-                    url: apiConfig.csrfUrl,
+                    url: csrfUrl,
                     headers: {
                         'X-CSRF-Token': 'Fetch'
                     }
@@ -131,18 +136,25 @@ class DeliveryOrderPostingService {
 
             if (result.status >= 200 && result.status < 300) {
                 const responseData = typeof result.data === 'string' ? JSON.parse(result.data) : result.data;
-                
+
                 // 提取过账结果信息
-                let message = salesOrderType === 'CBRE' ? '退货交货单过账成功' : '交货单过账成功';
+                let message;
+                if (zrfcid === 'SD04' && canum === 130) {
+                    message = '内向交货单过账成功';
+                } else if (salesOrderType === 'CBRE') {
+                    message = '退货交货单过账成功';
+                } else {
+                    message = '交货单过账成功';
+                }
                 if (responseData?.d?.PostingConfirmation) {
                     const confirmation = responseData.d.PostingConfirmation;
                     if (confirmation.MaterialDocument) {
                         message = `${message}，物料凭证号: ${confirmation.MaterialDocument}`;
                     }
                 }
-                
+
                 console.log(message);
-                
+
                 const returnResult = {
                     code: 'S',
                     message: message,
@@ -153,6 +165,7 @@ class DeliveryOrderPostingService {
             } else {
                 const errorMessage = this.parseError(result.data);
                 console.error('交货单过账失败:', errorMessage);
+                console.error('交货单过账失败 - 完整错误数据:', JSON.stringify(result.data));
                 const returnResult = {
                     code: 'E',
                     message: errorMessage,
@@ -228,19 +241,28 @@ class DeliveryOrderPostingService {
     /**
      * 根据订单类型获取 API 配置
      * @param {string} salesOrderType - 销售订单类型
+     * @param {string} zrfcid - 业务流程ID
+     * @param {number} canum - 步骤编号
      * @returns {Object} API 配置
      */
-    getApiConfig(salesOrderType) {
-        if (salesOrderType === 'CBRE') {
+    getApiConfig(salesOrderType, zrfcid, canum) {
+        console.log(`[DeliveryOrderPostingService.getApiConfig] 入参 - salesOrderType: ${salesOrderType}, zrfcid: ${zrfcid}, canum: ${canum}, 类型 - zrfcid: ${typeof zrfcid}, canum: ${typeof canum}`);
+        if (zrfcid === 'SD04' && canum === 130) {
+            // SD04 130 内向交货单过账 - 使用 PostGoodsReceipt（收货）
+            return {
+                csrfUrl: '/sap/opu/odata/sap/API_INBOUND_DELIVERY_SRV;v=0002/A_InbDeliveryHeader(\'{DeliveryDocument}\')',
+                postingUrl: '/sap/opu/odata/sap/API_INBOUND_DELIVERY_SRV;v=0002/PostGoodsReceipt?DeliveryDocument='
+            };
+        } else if (salesOrderType === 'CBRE') {
             // CBRE 退货订单 - 使用收货 API
             return {
-                csrfUrl: '/sap/opu/odata/sap/API_CUSTOMER_RETURNS_DELIVERY_SRV;v=0002/',
+                csrfUrl: '/sap/opu/odata/sap/API_CUSTOMER_RETURNS_DELIVERY_SRV;v=0002/A_CustomerReturnsDeliveryHeader(\'{DeliveryDocument}\')',
                 postingUrl: '/sap/opu/odata/sap/API_CUSTOMER_RETURNS_DELIVERY_SRV;v=0002/PostGoodsReceipt?DeliveryDocument='
             };
         } else {
             // ZPR 标准订单 - 使用发货 API
             return {
-                csrfUrl: '/sap/opu/odata/sap/API_OUTBOUND_DELIVERY_SRV;v=0002/',
+                csrfUrl: '/sap/opu/odata/sap/API_OUTBOUND_DELIVERY_SRV;v=0002/A_OutbDeliveryHeader(\'{DeliveryDocument}\')',
                 postingUrl: '/sap/opu/odata/sap/API_OUTBOUND_DELIVERY_SRV;v=0002/PostGoodsIssue?DeliveryDocument='
             };
         }
@@ -253,7 +275,7 @@ class DeliveryOrderPostingService {
      */
     parseError(errorData) {
         if (!errorData) return '未知错误';
-        
+
         if (typeof errorData === 'string') {
             try {
                 errorData = JSON.parse(errorData);

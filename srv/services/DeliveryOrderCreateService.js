@@ -94,7 +94,7 @@ class DeliveryOrderCreateService {
             const csrfToken = csrfResult.headers['x-csrf-token'];
 
             // 构建交货单创建数据（传入整个 businessDataList 数组，一次性创建一张交货单）
-            const deliveryOrderData = await this.buildDeliveryOrderData(businessDataList, mptStepConfig, zrfcid, salesOrderType, sourceDocument);
+            const deliveryOrderData = await this.buildDeliveryOrderData(businessDataList, mptStepConfig, zrfcid, canum, salesOrderType, sourceDocument);
             
             console.log('交货单数据:', JSON.stringify(deliveryOrderData, null, 2));
 
@@ -192,12 +192,22 @@ class DeliveryOrderCreateService {
      * @param {string} sourceDocument - 上一步的 objkey（销售订单号）
      * @returns {Object} 交货单创建数据
      */
-    async buildDeliveryOrderData(businessDataList, mptStepConfig, zrfcid, salesOrderType, sourceDocument) {
+    async buildDeliveryOrderData(businessDataList, mptStepConfig, zrfcid, canum, salesOrderType, sourceDocument) {
         // 构建行项目
-        const deliveryItems = businessDataList.map((item) => ({
-            ReferenceSDDocument: sourceDocument,
-            ReferenceSDDocumentItem: this.padLeft(item.SalesOrderItem, 6, '0')
-        }));
+        const deliveryItems = businessDataList.map((item) => {
+            // SD02、SD04 使用 SalesOrderItem，其他使用 PIOrderItem
+            const referenceItem = (zrfcid === 'SD02' || zrfcid === 'SD04') 
+                ? item.SalesOrderItem 
+                : item.PIOrderItem;
+            
+            // SD04 且 canum = 50 (STO) 使用 5 位数，其他情况使用 6 位数
+            const digitCount = (zrfcid === 'SD04' && canum === 50) ? 5 : 6;
+            
+            return {
+                ReferenceSDDocument: sourceDocument,
+                ReferenceSDDocumentItem: this.padLeft(referenceItem, digitCount, '0')
+            };
+        });
 
         // 构建基本数据
         const deliveryOrderData = {

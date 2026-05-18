@@ -42,8 +42,8 @@ class MaterialDocumentService {
             }
             const businessDataList = businessDataResult.businessData;
 
-            // 构建物料凭证数据
-            const materialDocData = this.buildMaterialDocumentData(businessDataList);
+            // 构建物料凭证数据（MM02 需要异步查询批次库存）
+            const materialDocData = await this.buildMaterialDocumentData(businessDataList, zrfcid);
  
             // 使用 SAP Cloud SDK 的 executeHttpRequest 方法获取 CSRF token
             const csrfResult = await executeHttpRequest(
@@ -66,6 +66,8 @@ class MaterialDocumentService {
             // 构建 cookie 字符串
             const cookieString = cookies.map(cookie => cookie.split(';')[0]).join('; ');
             
+            console.log('[MaterialDocumentService] 物料凭证API调用请求JSON:', JSON.stringify(materialDocData, null, 2));
+            
             const result = await executeHttpRequest(
                 {
                     destinationName: 'ES_API'
@@ -86,6 +88,9 @@ class MaterialDocumentService {
                     }
                 }
             );
+
+            console.log('[MaterialDocumentService] 物料凭证API调用结果:', JSON.stringify(result.data, null, 2));
+            console.log('[MaterialDocumentService] 物料凭证API状态码:', result.status);
 
             if (result.status >= 200 && result.status < 300) {
                 // 从响应数据中提取物料凭证号和年度
@@ -178,38 +183,13 @@ class MaterialDocumentService {
                         businessData = await cds.run(SELECT.from(BusinessEntity).where({ zrfc_logid: this.zrfcLogid }));
                     }
                     break;
-                case 'OutboundDelivery':
-                    // OutboundDelivery 表优先使用 DeliveryDocument 作为查询条件
+                case 'PITransfer':
+                    // PITransfer 表使用 zrfc_logid 查询
                     if (objkey) {
-                        businessData = await cds.run(SELECT.from(BusinessEntity).where({ DeliveryDocument: objkey }));
+                        businessData = await cds.run(SELECT.from(BusinessEntity).where({ PIOrder: objkey }));
                     } else {
                         businessData = await cds.run(SELECT.from(BusinessEntity).where({ zrfc_logid: this.zrfcLogid }));
                     }
-                    break;
-                case 'PaymentReceipt':
-                    // PaymentReceipt 表优先使用 PaymentDocument 作为查询条件
-                    if (objkey) {
-                        businessData = await cds.run(SELECT.from(BusinessEntity).where({ PaymentDocument: objkey }));
-                    } else {
-                        businessData = await cds.run(SELECT.from(BusinessEntity).where({ zrfc_logid: this.zrfcLogid }));
-                    }
-                    break;
-                case 'SalesOrder':
-                    // SalesOrder 表优先使用 SalesOrder 作为查询条件
-                    if (objkey) {
-                        businessData = await cds.run(SELECT.from(BusinessEntity).where({ SalesOrder: objkey }));
-                    } else {
-                        businessData = await cds.run(SELECT.from(BusinessEntity).where({ zrfc_logid: this.zrfcLogid }));
-                    }
-                    break;
-                case 'DeliveryActualInfo':
-                    // DeliveryActualInfo 表优先使用 DeliveryDocument 作为查询条件
-                    if (objkey) {
-                        businessData = await cds.run(SELECT.from(BusinessEntity).where({ DeliveryDocument: objkey }));
-                    } else {
-                        businessData = await cds.run(SELECT.from(BusinessEntity).where({ zrfc_logid: this.zrfcLogid }));
-                    }
-                    break;
                 default:
                     // 默认使用 zrfc_logid 查询
                     businessData = await cds.run(SELECT.from(BusinessEntity).where({ zrfc_logid: this.zrfcLogid }));
@@ -238,7 +218,7 @@ class MaterialDocumentService {
         }
     }
 
-    buildMaterialDocumentData(businessDataList) {
+    async buildMaterialDocumentData(businessDataList, zrfcid) {
         // 构建物料凭证头部数据（使用第一条记录的数据）
         const firstBusinessData = businessDataList[0];
         
@@ -250,31 +230,33 @@ class MaterialDocumentService {
         } else {
             formattedPostingDate = `/Date(${new Date().getTime()})/`;
         }
+
+        // 根据 zrfcid 选择 ReferenceDocument 字段
+        // MM01 使用 TransferOrder
+        // MM02 使用 PIOrder
+        let referenceDocument = '';
+        if (zrfcid === 'MM02') {
+            referenceDocument = firstBusinessData.PIOrder || '';
+        } else {
+            referenceDocument = firstBusinessData.TransferOrder || '';
+        }
         
         const header = {
             PostingDate: formattedPostingDate,
-            MaterialDocumentHeaderText: firstBusinessData.Customer || '',
-            ReferenceDocument: firstBusinessData.TransferOrder || '',
+            MaterialDocumentHeaderText: zrfcid === 'MM01' ? (firstBusinessData.Customer || '') : '',
+            ReferenceDocument: referenceDocument,
             GoodsMovementCode: firstBusinessData.GoodsMovementCode || ''
         };
 
-        // 构建物料凭证行项目（循环处理每条记录）
-        const items = [];
-        for (const businessData of businessDataList) {
-            if (businessData.Material || businessData.Product) {
-                const item = {
-                    Material: businessData.Material || '',
-                    Plant: businessData.Plant || '',
-                    StorageLocation: businessData.StorageLocation || '',
-                    IssuingOrReceivingStorageLoc: businessData.IssuingOrReceivingStorageLoc || '',
-                    GoodsMovementType: businessData.GoodsMovementType || '',
-                    QuantityInEntryUnit: businessData.QuantityInBaseUnit || 0,
-                    Batch: '0000000017',
-                    MaterialDocumentItemText: businessData.TransferOrder && businessData.TransferOrderItem ? `${businessData.TransferOrder}-${businessData.TransferOrderItem}` : ''
-                };
-
-                items.push(item);
-            }
+        // 构建物料凭证行项目
+        let items = [];
+        
+        if (zrfcid === 'MM02') {
+            // MM02: 需要调用批次库存 API 查询批次，按数量分配
+            items = await this.buildItemsWithBatchAllocation(businessDataList);
+        } else {
+            // MM01: 使用硬编码批次 '2025'
+            items = this.buildItemsWithFixedBatch(businessDataList);
         }
 
         if (items.length > 0) {
@@ -284,6 +266,183 @@ class MaterialDocumentService {
         }
 
         return header;
+    }
+
+    /**
+     * MM01 使用硬编码批次
+     */
+    buildItemsWithFixedBatch(businessDataList) {
+        const items = [];
+        for (const businessData of businessDataList) {
+            if (businessData.Material || businessData.Product) {
+                const itemText = businessData.TransferOrder && businessData.TransferOrderItem 
+                    ? `${businessData.TransferOrder}-${businessData.TransferOrderItem}` : '';
+
+                const item = {
+                    Material: businessData.Material || '',
+                    Plant: businessData.Plant || '',
+                    StorageLocation: businessData.StorageLocation || '',
+                    IssuingOrReceivingStorageLoc: businessData.IssuingOrReceivingStorageLoc || '',
+                    GoodsMovementType: businessData.GoodsMovementType || '',
+                    QuantityInEntryUnit: businessData.QuantityInBaseUnit || 0,
+                    Batch: '2025',
+                    MaterialDocumentItemText: itemText
+                };
+
+                items.push(item);
+            }
+        }
+        return items;
+    }
+
+    /**
+     * MM02 查询批次库存并按数量分配批次
+     */
+    async buildItemsWithBatchAllocation(businessDataList) {
+        console.log('[MaterialDocumentService] buildItemsWithBatchAllocation - 开始执行');
+        console.log('[MaterialDocumentService] buildItemsWithBatchAllocation - businessDataList 长度:', businessDataList.length);
+        console.log('[MaterialDocumentService] buildItemsWithBatchAllocation - businessDataList:', JSON.stringify(businessDataList, null, 2));
+        
+        const items = [];
+
+        // 按物料+工厂+库位分组查询
+        const materialPlantStorageMap = new Map();
+        for (const businessData of businessDataList) {
+            if (businessData.Material && businessData.Plant) {
+                const key = `${businessData.Material}-${businessData.Plant}-${businessData.StorageLocation || ''}`;
+                if (!materialPlantStorageMap.has(key)) {
+                    materialPlantStorageMap.set(key, {
+                        Material: businessData.Material,
+                        Plant: businessData.Plant,
+                        StorageLocation: businessData.StorageLocation || ''
+                    });
+                }
+            }
+        }
+        
+        console.log('[MaterialDocumentService] buildItemsWithBatchAllocation - materialPlantStorageMap:', JSON.stringify(Array.from(materialPlantStorageMap.values()), null, 2));
+
+        // 批量查询批次库存
+        const batchStockMap = await this.queryBatchStockForMaterials(Array.from(materialPlantStorageMap.values()));
+       
+        // 为每条业务数据分配批次
+        for (const businessData of businessDataList) {
+            if (!businessData.Material || !businessData.Plant) {
+                continue;
+            }
+
+            const requiredQty = businessData.QuantityInBaseUnit || 0;
+            const key = `${businessData.Material}-${businessData.Plant}-${businessData.StorageLocation || ''}`;
+            const batchStocks = batchStockMap.get(key) || [];
+            
+            console.log('[MaterialDocumentService] buildItemsWithBatchAllocation - 处理物料:', businessData.Material, '工厂:', businessData.Plant, '库位:', businessData.StorageLocation);
+            console.log('[MaterialDocumentService] buildItemsWithBatchAllocation - 需求数量:', requiredQty);
+            console.log('[MaterialDocumentService] buildItemsWithBatchAllocation - 可用批次库存:', JSON.stringify(batchStocks, null, 2));
+
+            // 按库存数量降序排序，优先使用库存多的批次
+            const sortedStocks = [...batchStocks].sort((a, b) => (b.StockQty || 0) - (a.StockQty || 0));
+
+            let remainingQty = requiredQty;
+            let allocatedBatches = [];
+
+            // 分配批次
+            for (const stock of sortedStocks) {
+                if (remainingQty <= 0) {
+                    break;
+                }
+
+                const stockQty = stock.StockQty || 0;
+                const allocateQty = Math.min(remainingQty, stockQty);
+
+                if (allocateQty > 0) {
+                    allocatedBatches.push({
+                        Batch: stock.Batch || '',
+                        Quantity: allocateQty
+                    });
+                    remainingQty -= allocateQty;
+                }
+            }
+
+            // 生成行项目（可能多条）
+            const itemText = businessData.PIOrder && businessData.PIOrderItem 
+                ? `${businessData.PIOrder}-${businessData.PIOrderItem}` : '';
+
+            for (const batchItem of allocatedBatches) {
+                const item = {
+                    Material: businessData.Material || '',
+                    Plant: businessData.Plant || '',
+                    StorageLocation: businessData.StorageLocation || '',
+                    IssuingOrReceivingStorageLoc: businessData.IssuingOrReceivingStorageLoc || '',
+                    GoodsMovementType: businessData.GoodsMovementType || '',
+                    QuantityInEntryUnit: String(batchItem.Quantity),
+                    Batch: batchItem.Batch,
+                    MaterialDocumentItemText: itemText
+                };
+                items.push(item);
+            }
+
+            // 如果批次库存不足，报错并停止执行
+            if (remainingQty > 0) {
+                const shortage = remainingQty;
+                const errorMsg = `物料 ${businessData.Material} 在工厂 ${businessData.Plant} 批次库存不足，需求 ${requiredQty}，可用库存不足，缺少 ${shortage}`;
+                console.error(`[MaterialDocumentService] ${errorMsg}`);
+                throw new Error(errorMsg);
+            }
+        }
+
+        return items;
+    }
+
+    /**
+     * 调用批次库存 API 查询多个物料的批次库存
+     */
+    async queryBatchStockForMaterials(materialPlantStorageList) {
+        const batchStockMap = new Map();
+
+        for (const { Material, Plant, StorageLocation } of materialPlantStorageList) {
+            try {
+                // 构建 $filter 参数
+                const filter = `Material eq '${Material}' and Plant eq '${Plant}' and StorageLocation eq '${StorageLocation || ''}'`;
+                const url = `/sap/opu/odata/sap/API_MATERIAL_STOCK_SRV/A_MatlStkInAcctMod?$filter=${encodeURIComponent(filter)}&$select=Material,Plant,Batch,StorageLocation,MatlWrhsStkQtyInMatlBaseUnit`;
+                
+                console.log('[MaterialDocumentService] queryBatchStockForMaterials - 查询URL:', url);
+
+                const result = await executeHttpRequest(
+                    {
+                        destinationName: 'ES_API'
+                    },
+                    {
+                        method: 'GET',
+                        url: url,
+                        headers: {
+                            'Accept': 'application/json'
+                        },
+                        validateStatus: function (status) {
+                            return status >= 200 && status < 300;
+                        }
+                    }
+                );
+
+                const stockData = result.data.d || result.data;
+                const stocks = Array.isArray(stockData.results) ? stockData.results : [];
+
+                // 过滤出有库存的批次
+                const validStocks = stocks
+                    .filter(stock => stock.Batch && (stock.MatlWrhsStkQtyInMatlBaseUnit || 0) > 0)
+                    .map(stock => ({
+                        Batch: stock.Batch,
+                        StockQty: parseFloat(stock.MatlWrhsStkQtyInMatlBaseUnit) || 0,
+                        StorageLocation: stock.StorageLocation
+                    }));
+
+                batchStockMap.set(`${Material}-${Plant}-${StorageLocation}`, validStocks);
+            } catch (error) {
+                console.error(`[MaterialDocumentService] 查询物料 ${Material} 批次库存失败:`, error.message);
+                batchStockMap.set(`${Material}-${Plant}-${StorageLocation}`, []);
+            }
+        }
+
+        return batchStockMap;
     }
 }
 

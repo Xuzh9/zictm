@@ -3,7 +3,7 @@ const { SELECT } = cds.ql;
 const { executeHttpRequest } = require('@sap-cloud-sdk/http-client');
 const CommonUtils = require('../handlers/CommonUtils');
 
-class DeliveryOrderUpdateService {
+class DeliveryOrderHeaderUpdateService {
     constructor() {
         this.zrfcLogid = null;
         this.zrfcid = null;
@@ -52,7 +52,7 @@ class DeliveryOrderUpdateService {
             const mainData = businessDataList[0];
 
             // 获取销售订单类型
-            const salesOrderType = mainData.SalesOrderType || 'ZPR';
+            const salesOrderType = mainData.SalesOrderType;
             console.log(`[DeliveryOrderUpdateService] 销售订单类型: ${salesOrderType}`);
 
             // 使用通用工具类读取之前步骤的 objkey（交货单号）
@@ -87,17 +87,21 @@ class DeliveryOrderUpdateService {
 
             console.log(`[DeliveryOrderUpdateService] 开始修改交货单, 交货单号: ${deliveryDocument}, ActualGoodsMovementDate: ${deliveryDate}`);
 
-            // 根据订单类型获取 API 配置
-            const apiConfig = this.getApiConfig(salesOrderType);
+            // 根据 zrfcid、canum 和订单类型获取 API 配置
+            const apiConfig = this.getApiConfig(zrfcid, canum, salesOrderType);
 
-            // 获取 CSRF token
+            // 构建获取 CSRF token 和 ETag 的 URL（包含具体交货单号）
+            const csrfUrl = apiConfig.csrfUrl.replace('{DeliveryDocument}', deliveryDocument);
+            console.log(`[DeliveryOrderUpdateService] 获取 CSRF token URL: ${csrfUrl}`);
+
+            // 获取 CSRF token（同时获取 ETag）
             const csrfResult = await executeHttpRequest(
                 {
                     destinationName: 'ES_API'
                 },
                 {
                     method: 'GET',
-                    url: apiConfig.csrfUrl,
+                    url: csrfUrl,
                     headers: {
                         'X-CSRF-Token': 'Fetch'
                     }
@@ -232,21 +236,31 @@ class DeliveryOrderUpdateService {
     }
 
     /**
-     * 根据订单类型获取 API 配置
+     * 根据 zrfcid、canum 和订单类型获取 API 配置
+     * @param {string} zrfcid - 业务流程ID
+     * @param {number} canum - 步骤号
      * @param {string} salesOrderType - 销售订单类型
      * @returns {Object} API 配置
      */
-    getApiConfig(salesOrderType) {
+    getApiConfig(zrfcid, canum, salesOrderType) {
+        // SD04 且 canum = 100 时使用内向交货单 API
+        if (zrfcid === 'SD04' && canum === 100) {
+            return {
+                csrfUrl: '/sap/opu/odata/sap/API_INBOUND_DELIVERY_SRV;v=0002/A_InbDeliveryHeader(\'{DeliveryDocument}\')',
+                updateUrl: "/sap/opu/odata/sap/API_INBOUND_DELIVERY_SRV;v=0002/A_InbDeliveryHeader('{DeliveryDocument}')"
+            };
+        }
+        
         if (salesOrderType === 'CBRE') {
             // CBRE 退货订单 - 使用退货交货单 API
             return {
-                csrfUrl: '/sap/opu/odata/sap/API_CUSTOMER_RETURNS_DELIVERY_SRV;v=0002/',
+                csrfUrl: '/sap/opu/odata/sap/API_CUSTOMER_RETURNS_DELIVERY_SRV;v=0002/A_ReturnsDeliveryHeader(\'{DeliveryDocument}\')',
                 updateUrl: "/sap/opu/odata/sap/API_CUSTOMER_RETURNS_DELIVERY_SRV;v=0002/A_ReturnsDeliveryHeader(DeliveryDocument='{DeliveryDocument}')"
             };
         } else {
             // ZPR 标准订单 - 使用发货交货单 API
             return {
-                csrfUrl: '/sap/opu/odata/sap/API_OUTBOUND_DELIVERY_SRV;v=0002/',
+                csrfUrl: '/sap/opu/odata/sap/API_OUTBOUND_DELIVERY_SRV;v=0002/A_OutbDeliveryHeader(\'{DeliveryDocument}\')',
                 updateUrl: "/sap/opu/odata/sap/API_OUTBOUND_DELIVERY_SRV;v=0002/A_OutbDeliveryHeader('{DeliveryDocument}')"
             };
         }
@@ -310,4 +324,4 @@ class DeliveryOrderUpdateService {
     }
 }
 
-module.exports = DeliveryOrderUpdateService;
+module.exports = DeliveryOrderHeaderUpdateService;

@@ -12,6 +12,11 @@ service PIService {
     entity SalesOrderChange as projection on db.SalesOrderChange;
 
     /**
+     * 销售订单修改表
+     */
+    entity PITransfer as projection on db.PITransfer;
+
+    /**
      * PI销售订单关系表
      * code: S-成功, E-失败
      * message: 失败时返回最小失败步骤的message
@@ -29,4 +34,5 @@ service PIService {
 
     action SOCreate(data: array of SalesOrderCreate) returns array of SalesOrderCreate;
     action SOChange(data: array of SalesOrderChange) returns array of SalesOrderChange;
+    action Transfer(data: array of PITransfer) returns array of PITransfer;
 }

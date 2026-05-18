@@ -127,44 +127,6 @@ class MultiStepProcessor {
     }
 
     /**
-     * 初始化所有步骤 - 首次调用时预插入所有步骤（状态为空）
-     * @param {string} zrfcLogid - 多步ID
-     * @param {string} zrfcid - 业务流程ID
-     * @param {Array} steps - 步骤配置列表
-     */
-    async initAllSteps(zrfcLogid, zrfcid, steps) {
-        const MultistepLog = cds.entities['com.sap.zictm.MultistepLog'];
-        
-        // 检查是否已有日志记录
-        const existingLogs = await cds.run(
-            SELECT.from(MultistepLog).where({ zrfc_logid: zrfcLogid })
-        );
-        
-        // 如果已有记录，说明不是首次调用，跳过初始化
-        if (existingLogs && existingLogs.length > 0) {
-            return;
-        }
-        
-        // 预插入所有步骤，状态为空
-        const entries = steps.map(step => ({
-            zrfc_logid: zrfcLogid,
-            zrfcid,
-            canum: step.canum.toString(),
-            code: '',  // 状态为空
-            message: '',
-            objkey: '',
-            objtype: step.objtype || '',
-            description: step.description || '',
-            executionTime: 0,
-            executionAt: null,
-            lastExecutionAt: null,
-            lastExecutionTime: 0
-        }));
-        
-        await cds.run(INSERT.into(MultistepLog).entries(entries));
-    }
-
-    /**
      * 获取步骤配置
      * @param {string} zrfcid - 业务流程ID
      * @returns {Promise<Array>} 步骤配置列表

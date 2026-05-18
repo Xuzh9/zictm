@@ -49,7 +49,7 @@ entity ApiInputLog {
 entity MultistepLog {
     key zrfc_logid      : UUID @title: '多步ID';           // 多步ID
     key zrfcid          : String(10) @title: '业务流程ID';     // 业务流程ID
-    key canum           : String(10) @title: '步骤编号';     // 步骤编号（如10、20、30）
+    key canum           : Integer @title: '步骤编号';     // 步骤编号（如10、20、30）
     description         : String(50) @title: '步骤描述';      // 步骤描述
     code                : String(2) @title: '消息状态';      // 消息状态(S成功/E失败)
     message             : String(255) @title: '消息文本';    // 消息文本
@@ -137,6 +137,7 @@ entity OutboundDelivery{
     ReceivingPlant           : String(4) @title: '库存组织';          // 库存组织
     ReceivingStorageLocation : String(4) @title: '库存地点';          // 库存地点
     DeliveryDate             : Date @title: '发货日期';               // 发货日期
+    PurchasePrice                 : Decimal(15,2) @title: '采购单价'; // 采购单价
     zrfcid                   : String(10) @title: '业务流程ID';         // 业务流程ID
     zrfc_logid               : UUID @title: '多步ID';               // 多步ID
     zdfjy                    : String(10) @title: '多方交易类型ID';     // 多方交易类型ID
@@ -315,6 +316,22 @@ entity DeliveryActualInfo {
     RefDocItem                : String(6) @title: '参考行项目号';       // 参考行项目号
     zrfcid                    : String(10) @title: '业务流程ID';      // 业务流程ID
     zrfc_logid                : UUID @title: '多步ID';            // 多步ID
+}
+
+//调拨单
+entity PITransfer {
+    key PIOrder                  : String(10) @title: 'PI单号';    // PI单号
+    key PIOrderItem              : String(6) @title: 'PI项目号';     // PI项目号
+    PostingDate                  : Date @title: '过账日期';               // 过账日期
+    GoodsMovementCode            : String(3) @title: '移动类型代码';          // 移动类型代码
+    Material                     : String(40) @title: '物料编号';         // 物料编号
+    Plant                        : String(4) @title: '发出工厂';          // 发出工厂
+    StorageLocation              : String(4) @title: '库存地点';          // 库存地点
+    GoodsMovementType            : String(3) @title: '移动类型' ;         // 移动类型
+    QuantityInBaseUnit           : Decimal(13,3) @title: '数量';      // 数量
+    IssuingOrReceivingStorageLoc : String(4) @title: '收货/发货库存地点';          // 收货/发货库存地点
+    zrfcid                       : String(10) @title: '业务流程ID';         // 业务流程ID
+    zrfc_logid                   : UUID @title: '多步ID';               // 多步ID
 }
 
 //PI销售订单关系表
