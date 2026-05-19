@@ -2,7 +2,7 @@ const cds = require('@sap/cds');
 const { executeHttpRequest } = require('@sap-cloud-sdk/http-client');
 const CommonUtils = require('../handlers/CommonUtils');
 
-class ProductionOrderUpdateService {
+class ProductionOrderCreateService {
     constructor() {
         this.zrfcLogid = null;
         this.commonUtils = new CommonUtils();
@@ -20,6 +20,13 @@ class ProductionOrderUpdateService {
             
             this.zrfcLogid = zrfcLogid;
 
+            // 使用通用工具类读取之前步骤的 objkey（销售订单号或采购订单号）
+            let sourceDocument = objkey;
+            const previousObjkey = await this.commonUtils.getPreviousStepObjkey(zrfcLogid, zrfcid, readsteps, canum);
+            if (previousObjkey) {
+                sourceDocument = previousObjkey;
+            }
+
             // 读取 ProcessConfig 表获取业务表名（使用业务表1）
             const businessTable = await this.commonUtils.getBusinessTableName(zrfcid, true);
             if (!businessTable) {
@@ -30,85 +37,55 @@ class ProductionOrderUpdateService {
                 };
             }
 
-            // 读取业务表数据（使用 zrfc_logid 查询）
-            const businessDataList = await this.commonUtils.getBusinessData(businessTable, zrfcLogid, 'zrfc_logid');
-            if (!businessDataList || businessDataList.length === 0) {
-                return {
-                    code: 'E',
-                    message: `未找到业务数据`,
-                    objkey: ''
-                };
-            }
-
             // 根据 zdfjy 和 canum 查找 MPTStepConfig 配置
             const mptStepConfig = await this.commonUtils.getMPTStepConfig(zdfjy, canum);
 
-            // 从 PISalesOrderRel 表获取所有生产工单号映射
-            const poMapping = await this.getProductionOrderMapping(businessDataList);
-
-            if (poMapping.length === 0) {
-                console.log('所有业务数据都没有找到对应的生产工单，步骤跳过');
-                return {
-                    code: 'S',
-                    message: '所有业务数据都没有找到对应的生产工单，步骤跳过',
-                    objkey: ''
-                };
-            }
-
-            // 获取第一个生产工单号用于后续返回
-            const firstProductionOrder = poMapping[0].productionOrder;
-            
-            // 循环修改每个生产工单
-            const updateResults = [];
-            for (const mapping of poMapping) {
-                const { productionOrder, businessData } = mapping;
-                
-                // 构建生产工单修改数据
-                const updateData = this.buildUpdateData(businessData, mptStepConfig);
-                
-                // 如果没有需要更新的字段，跳过该工单
-                if (Object.keys(updateData).length === 0) {
-                    console.log(`生产工单 ${productionOrder} 没有需要更新的字段，跳过`);
-                    continue;
-                }
-                
-                // 获取 CSRF token 和 ETag（为每个工单单独获取）
-                const csrfResult = await executeHttpRequest(
-                    {
-                        destinationName: 'ES_API'
-                    },
-                    {
-                        method: 'GET',
-                        url: `/sap/opu/odata/sap/API_PRODUCTION_ORDER_2_SRV/A_ProductionOrder_2('${productionOrder}')`,
-                        headers: {
-                            'X-CSRF-Token': 'Fetch'
-                        }
+            // 获取 CSRF token（使用 OData V2 格式）
+            const csrfResult = await executeHttpRequest(
+                {
+                    destinationName: 'ES_API'
+                },
+                {
+                    method: 'GET',
+                    url: '/sap/opu/odata/sap/API_PRODUCTION_ORDER_2_SRV/',
+                    headers: {
+                        'X-CSRF-Token': 'Fetch'
                     }
-                );
-                
-                const cookies = csrfResult.headers['set-cookie'] || [];
-                const cookieString = cookies.map(cookie => cookie.split(';')[0]).join('; ');
-                const csrfToken = csrfResult.headers['x-csrf-token'];
-                const etag = csrfResult.headers['etag'] || csrfResult.headers['ETag'];
-                
-                console.log(`开始修改生产工单: ${productionOrder}`);
-                console.log('修改数据:', JSON.stringify(updateData, null, 2));
+                }
+            );
 
-                // 调用生产工单修改 API（OData V2 格式，使用 PATCH）
+            // 提取 cookie 和 CSRF token
+            const cookies = csrfResult.headers['set-cookie'] || [];
+            const cookieString = cookies.map(cookie => cookie.split(';')[0]).join('; ');
+            const csrfToken = csrfResult.headers['x-csrf-token'];
+
+            // 为每一行业务数据创建一张独立的生产工单
+            const createResults = [];
+            const createdOrderNumbers = [];
+            
+            for (let index = 0; index < businessDataList.length; index++) {
+                const businessData = businessDataList[index];
+                
+                // 构建生产工单创建数据（单行）
+                const productionOrderData = await this.buildProductionOrderData(businessData, mptStepConfig, zrfcid);
+                
+                console.log(`开始创建生产工单 ${index + 1}/${businessDataList.length}`);
+                console.log('生产工单数据:', JSON.stringify(productionOrderData, null, 2));
+
+                // 调用生产工单创建 API（OData V2 格式）
                 const result = await executeHttpRequest(
                     {
                         destinationName: 'ES_API'
                     },
                     {
-                        method: 'PATCH',
-                        url: `/sap/opu/odata/sap/API_PRODUCTION_ORDER_2_SRV/A_ProductionOrder_2('${productionOrder}')`,
-                        data: updateData,
+                        method: 'POST',
+                        url: '/sap/opu/odata/sap/API_PRODUCTION_ORDER_2_SRV/A_ProductionOrder_2',
+                        data: productionOrderData,
                         headers: {
                             'X-CSRF-Token': csrfToken,
                             'Content-Type': 'application/json',
                             'Cookie': cookieString,
-                            'sap-language': 'ZH',
-                            'If-Match': etag || '*'
+                            'sap-language': 'ZH'
                         },
                         validateStatus: function (status) {
                             return true;
@@ -116,142 +93,260 @@ class ProductionOrderUpdateService {
                     }
                 );
 
-                // 解析SAP返回的错误信息
-                let errorMessage = '';
-                if (result.status >= 400 && result.data) {
-                    // 处理JSON格式错误
-                    if (result.data?.error) {
-                        errorMessage = result.data.error.message?.value || result.data.error.message || JSON.stringify(result.data.error);
-                    }
-                    // 处理XML格式错误（SAP API可能返回XML）
-                    else if (typeof result.data === 'string' && result.data.startsWith('<?xml')) {
-                        const messageMatch = result.data.match(/<message[^>]*>([^<]+)<\/message>/);
-                        errorMessage = messageMatch ? messageMatch[1] : 'XML格式错误';
-                    }
-                    else {
-                        errorMessage = typeof result.data === 'string' ? result.data : JSON.stringify(result.data);
-                    }
+                console.log('创建生产工单位状态码:', result.status);
+
+                if (result.status >= 200 && result.status < 300) {
+                    const responseData = typeof result.data === 'string' ? JSON.parse(result.data) : result.data;
+                    const productionOrder = responseData?.d?.ManufacturingOrder || '';
+                    
+                    console.log('生产工单创建成功:', productionOrder);
+                    
+                    // 将生产工单号更新到 PISalesOrderRel 表
+                    await this.updatePISalesOrderRel(productionOrder, businessData);
+                    
+                    createResults.push({
+                        success: true,
+                        productionOrder: productionOrder,
+                        index: index
+                    });
+                    createdOrderNumbers.push(productionOrder);
+                } else {
+                    const errorMessage = this.parseError(result.data);
+                    console.error(`生产工单 ${index + 1} 创建失败:`, errorMessage);
+                    createResults.push({
+                        success: false,
+                        errorMessage: errorMessage,
+                        index: index
+                    });
                 }
-                
-                // 打印详细错误信息
-                if (!(result.status >= 200 && result.status < 300)) {
-                    console.error(`生产工单修改失败: ${productionOrder}, 状态码: ${result.status}, 错误信息: ${errorMessage}`);
-                }
-                
-                updateResults.push({
-                    productionOrder: productionOrder,
-                    status: result.status,
-                    success: result.status >= 200 && result.status < 300,
-                    error: result.status >= 400,
-                    message: errorMessage
-                });
             }
 
-            // 检查所有工单修改结果
-            // 如果没有任何工单需要更新，返回跳过状态
-            if (updateResults.length === 0) {
-                console.log('所有生产工单都没有需要更新的字段，步骤跳过');
-                return {
-                    code: 'S',
-                    message: '所有生产工单都没有需要更新的字段，步骤跳过',
-                    objkey: firstProductionOrder
-                };
-            }
-
-            const allSuccess = updateResults.every(r => r.success);
-            const failedOrders = updateResults.filter(r => !r.success);
+            // 检查所有工单创建结果
+            const allSuccess = createResults.every(r => r.success);
+            const failedCount = createResults.filter(r => !r.success).length;
             
             if (allSuccess) {
-                console.log('所有生产工单修改成功');
                 return {
                     code: 'S',
-                    message: '生产工单修改成功',
-                    objkey: firstProductionOrder
+                    message: '生产工单创建成功',
+                    objkey: createdOrderNumbers[createdOrderNumbers.length - 1] || ''  // 返回最后一张工单号
                 };
             } else {
-                // 构建包含详细错误信息的消息
-                const errorDetails = failedOrders.map(i => {
-                    if (i.message) {
-                        return `${i.productionOrder} (${i.message})`;
-                    }
-                    return `${i.productionOrder} (状态码: ${i.status})`;
-                });
-                const errorMessage = `生产工单修改失败: ${errorDetails.join(', ')}`;
-                console.error(errorMessage);
+                // 只返回失败的消息文本
+                const failedResults = createResults.filter(r => !r.success);
+                const errorMessage = failedResults.map(r => r.errorMessage).join('; ');
+                console.error('生产工单创建失败:', errorMessage);
                 return {
                     code: 'E',
                     message: errorMessage,
-                    objkey: ''
+                    objkey: createdOrderNumbers[createdOrderNumbers.length - 1] || ''  // 返回最后成功创建的工单号
                 };
             }
 
         } catch (error) {
-            console.error('ProductionOrderUpdateService 执行失败:', error);
+            console.error('ProductionOrderCreateService 执行失败:', error);
             return {
                 code: 'E',
-                message: error.message || '生产工单修改失败',
+                message: error.message || '生产工单创建失败',
                 objkey: ''
             };
         }
     }
 
-    async getProductionOrderMapping(businessDataList) {
-        const PISalesOrderRel = cds.entities['com.sap.zictm.PISalesOrderRel'];
-        const mappings = [];
-        
-        for (const businessData of businessDataList) {
+    /**
+     * 构建生产工单创建数据
+     * @param {Object} businessData - 单行业务数据
+     * @param {Object} mptStepConfig - MPTStepConfig 配置
+     * @param {string} zrfcid - 业务流程ID
+     * @returns {Object} 生产工单创建数据
+     */
+    async buildProductionOrderData(businessData, mptStepConfig, zrfcid) {
+        // 构建基本数据（单行）
+        const productionOrderData = {
+            // 生产订单类型
+            ManufacturingOrderType: 'ZS01',
+            // 工厂（从 MPTStepConfig 获取 werks）
+            ProductionPlant: mptStepConfig?.werks,
+            // 物料
+            Material: businessData.Material,
+            // 数量
+            TotalQuantity: businessData.RequestedQuantity,
+            // 计划开始日期（格式：/Date(timestamp)/）
+            MfgOrderPlannedStartDate: this.formatDateForSAP(businessData.ProductionStartDate),
+            // 计划结束日期（格式：/Date(timestamp)/）
+            MfgOrderPlannedEndDate: this.formatDateForSAP(businessData.ConfirmedDeliveryDate),
+            //箱唛要求
+            YY1_FD_PP_XMYQ_ORD: businessData.YY1_FD_XMYQ,
+            //打包要求
+            YY1_FD_PP_FHYQ_ORD: businessData.YY1_FD_FHYQ,
+            //条码标签
+            YY1_FD_PP_TMBQ_ORD: businessData.YY1_FD_TMBQ,
+            //粘贴美文纸
+            YY1_FD_PP_ZTMWZ_ORD: businessData.YY1_FD_ZTMWZ,
+            //定制卡板
+            YY1_FD_PP_DZKB_ORD: businessData.YY1_FD_DZKB,
+            //要求的交货日期（格式：/Date(timestamp)/）
+            YY1_FD_REQDATE_ORD: this.formatDateForSAP(businessData.RequestedDeliveryDate),
+            //箱唛要求
+            YY1_FD_PP_XMYQ_ORD: businessData.YY1_FD_XMYQ,
+            //备注（去除换行符和特殊字符，SAP API不接受）
+            YY1_FD_REMARK_ORD: this.cleanRemark(businessData.Remark),
+        };
+
+        // 根据 zrfcid 添加不同的字段
+        if (zrfcid === 'SD01') {
+            // SD01 业务流程：从 PISalesOrderRel 表获取内部交易1相关字段
+            const PISalesOrderRel = cds.entities['com.sap.zictm.PISalesOrderRel'];
             const piOrder = businessData.PIOrder || '';
             const piOrderItem = businessData.PIOrderItem || '';
             
             if (piOrder && piOrderItem) {
-                const record = await cds.run(
+                const relRecord = await cds.run(
                     SELECT.one.from(PISalesOrderRel)
-                        .columns(['ProductionOrder'])
                         .where({ PIOrder: piOrder, PIOrderItem: piOrderItem })
                 );
                 
-                if (record && record.ProductionOrder) {
-                    mappings.push({
-                        piOrder: piOrder,
-                        piOrderItem: piOrderItem,
-                        productionOrder: record.ProductionOrder,
-                        businessData: businessData
-                    });
-                } else {
-                    console.warn(`未找到 PISalesOrderRel 记录或缺少生产工单信息: PIOrder=${piOrder}, PIOrderItem=${piOrderItem}`);
+                if (relRecord) {
+                    productionOrderData.YY1_FD_SO3_ORD = relRecord.PurchaseOrder1;
+                    productionOrderData.YY1_FD_SOITEM3_ORD = relRecord.PurchaseOrderItem1;
+                }
+            }
+        } else if (zrfcid === 'SD05') {
+            // SD05 业务流程：从 PISalesOrderRel 表获取销售订单相关字段
+            const PISalesOrderRel = cds.entities['com.sap.zictm.PISalesOrderRel'];
+            const piOrder = businessData.PIOrder || '';
+            const piOrderItem = businessData.PIOrderItem || '';
+            
+            if (piOrder && piOrderItem) {
+                const relRecord = await cds.run(
+                    SELECT.one.from(PISalesOrderRel)
+                        .where({ PIOrder: piOrder, PIOrderItem: piOrderItem })
+                );
+                
+                if (relRecord) {
+                    productionOrderData.YY1_FD_SO2_ORD = relRecord.SalesOrder;
+                    productionOrderData.YY1_FD_SOITEM2_ORD = relRecord.SalesOrderItem;
+                }
+            }
+        } else if (zrfcid === 'SD06') {
+            // SD06 业务流程：从 PISalesOrderRel 表获取销售订单和采购订单相关字段
+            const PISalesOrderRel = cds.entities['com.sap.zictm.PISalesOrderRel'];
+            const piOrder = businessData.PIOrder || '';
+            const piOrderItem = businessData.PIOrderItem || '';
+            
+            if (piOrder && piOrderItem) {
+                const relRecord = await cds.run(
+                    SELECT.one.from(PISalesOrderRel)
+                        .where({ PIOrder: piOrder, PIOrderItem: piOrderItem })
+                );
+                
+                if (relRecord) {
+                    productionOrderData.YY1_FD_SO2_ORD = relRecord.SalesOrder;
+                    productionOrderData.YY1_FD_SOITEM2_ORD = relRecord.SalesOrderItem;
+                    productionOrderData.YY1_FD_SO3_ORD = relRecord.PurchaseOrder1;
+                    productionOrderData.YY1_FD_SOITEM3_ORD = relRecord.PurchaseOrderItem1;
                 }
             }
         }
-        
-        return mappings;
+
+        return productionOrderData;
     }
 
-    buildUpdateData(businessData, mptStepConfig) {
-        const updateData = {};
-
-        // 只有当字段有值时才添加到更新对象中
-        if (businessData.RequestedDeliveryDate) {
-            updateData.YY1_FD_REQDATE_ORD = this.formatDateForSAP(businessData.RequestedDeliveryDate);
+    /**
+     * 将生产工单号更新到 PISalesOrderRel 表
+     * @param {string} productionOrder - 生产工单号
+     * @param {Object} businessData - 业务数据
+     */
+    async updatePISalesOrderRel(productionOrder, businessData) {
+        try {
+            const PISalesOrderRel = cds.entities['com.sap.zictm.PISalesOrderRel'];
+            const { INSERT, UPDATE } = cds.ql;
+            
+            const piOrder = businessData.PIOrder || '';
+            const piOrderItem = businessData.PIOrderItem || '';
+            
+            console.log(`[updatePISalesOrderRel] 开始更新 PISalesOrderRel, piOrder=${piOrder}, piOrderItem=${piOrderItem}, productionOrder=${productionOrder}`);
+            
+            if (piOrder && piOrderItem && productionOrder) {
+                // 先尝试更新（参考 PurchaseOrderService 的逻辑）
+                const updateResult = await cds.run(
+                    UPDATE(PISalesOrderRel)
+                        .set({ ProductionOrder: productionOrder })
+                        .where({ PIOrder: piOrder, PIOrderItem: piOrderItem })
+                );
+                
+                console.log(`[updatePISalesOrderRel] 更新结果:`, updateResult);
+                
+                // 如果没有更新到数据（表中没有该记录），则插入新记录
+                if (updateResult?.affectedRows === 0 || !updateResult) {
+                    console.log(`[updatePISalesOrderRel] 更新未影响任何行，尝试插入新记录`);
+                    await cds.run(
+                        INSERT.into(PISalesOrderRel).entries({
+                            zrfc_logid: this.zrfcLogid,
+                            PIOrder: piOrder,
+                            PIOrderItem: piOrderItem,
+                            ProductionOrder: productionOrder
+                        })
+                    );
+                    console.log(`PISalesOrderRel 插入成功: PIOrder=${piOrder}, PIOrderItem=${piOrderItem}, ProductionOrder=${productionOrder}`);
+                } else {
+                    console.log(`PISalesOrderRel 更新成功: PIOrder=${piOrder}, PIOrderItem=${piOrderItem}, ProductionOrder=${productionOrder}`);
+                }
+            }
+        } catch (error) {
+            console.error(`PISalesOrderRel 更新/插入失败:`, error);
         }
-        if (businessData.RequestedQuantity) {
-            updateData.TotalQuantity = businessData.RequestedQuantity;
-        }
-        if (businessData.ConfirmedDeliveryDate) {
-            updateData.MfgOrderPlannedStartDate = this.formatDateForSAP(businessData.ConfirmedDeliveryDate);
-            updateData.MfgOrderPlannedEndDate = this.formatDateForSAP(businessData.ConfirmedDeliveryDate);
-        }
-        if (businessData.Material) {
-            updateData.Material = businessData.Material;
-        }        
-        return updateData;
     }
 
-    formatDateForSAP(dateString) {
-        if (!dateString) return '';
+    /**
+     * 格式化日期为 SAP OData 格式（/Date(timestamp)/）
+     * @param {string|Date} dateValue - 日期值
+     * @returns {string} 格式化后的日期字符串
+     */
+    formatDateForSAP(dateValue) {
+        let dateObj;
+        if (dateValue) {
+            dateObj = new Date(dateValue);
+        } else {
+            dateObj = new Date();
+        }
         
-        const date = new Date(dateString);
-        const timestamp = date.getTime();
-        return `/Date(${timestamp})/`;
+        // 格式：/Date(timestamp)/
+        return `/Date(${dateObj.getTime()})/`;
+    }
+
+    /**
+     * 清理备注字段，去除换行符和特殊字符（SAP API不接受这些字符）
+     * @param {string} remark - 原始备注内容
+     * @returns {string} 清理后的备注内容
+     */
+    cleanRemark(remark) {
+        if (!remark) return '';
+        
+        // 第一步：去除换行符、制表符和多余空格
+        let cleaned = remark
+            .replace(/\r\n/g, ' ')    // 替换 Windows 换行符
+            .replace(/\n/g, ' ')      // 替换 Unix 换行符
+            .replace(/\r/g, ' ')      // 替换 Mac 换行符
+            .replace(/\t/g, ' ')      // 替换制表符
+            .replace(/\s+/g, ' ')     // 合并多个空格为一个
+            .trim();                  // 去除首尾空格
+        
+        // 第二步：移除SAP不支持的特殊字符（使用正则表达式一次性匹配）
+        // 包含：特殊符号、数学符号、中文标点、特殊Unicode字符等
+        const specialChars = /[\*\/\\@#\$%&<>=\|\^~`'"()（）【】「」『』《》：；！？、。·×÷＋－＝＜＞≠≤≥∞∑∏√π°℃℉㎡㎏㎝㎜μΩ℧∪∩∈∉⊂⊃⊆⊇⊄⊅∅∀∃∴∵∶∷]/g;
+        cleaned = cleaned.replace(specialChars, '');
+        
+        // 第三步：再次合并空格并去除首尾空格
+        cleaned = cleaned.replace(/\s+/g, ' ').trim();
+        
+        // 第四步：限制长度（ES字段长度为255）
+        const maxLength = 255;
+        if (cleaned.length > maxLength) {
+            cleaned = cleaned.substring(0, maxLength);
+        }
+        
+        return cleaned;
     }
 
     parseError(errorData) {
@@ -271,10 +366,10 @@ class ProductionOrderUpdateService {
             return errorData.error.message;
         } else if (errorData?.message) {
             return errorData.message;
+        } else {
+            return JSON.stringify(errorData);
         }
-        
-        return JSON.stringify(errorData);
     }
 }
 
-module.exports = ProductionOrderUpdateService;
+module.exports = ProductionOrderCreateService;

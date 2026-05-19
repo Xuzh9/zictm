@@ -108,7 +108,7 @@ class SalesOrderQueryService {
                     console.log('销售订单行项目数量:', salesOrderItems.length);
 
                     // 更新 PISalesOrderRel 表
-                    if (zrfcid === 'SD01' && salesOrderItems.length > 0) {
+                    if ((zrfcid === 'SD01' || zrfcid === 'SD06') && salesOrderItems.length > 0) {
                         await this.updatePISalesOrderRel(purchaseOrderByCustomer, salesOrderItems);
                     }
 

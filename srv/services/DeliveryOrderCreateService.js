@@ -173,8 +173,8 @@ class DeliveryOrderCreateService {
                     responseField: 'ReturnsDeliveryDocument'
                 };
             case 'ZPR':
-            default:
-                // ZOR 标准外向交货单
+            case 'OR':
+                // ZPR/OR 标准外向交货单
                 return {
                     csrfUrl: '/sap/opu/odata/sap/API_OUTBOUND_DELIVERY_SRV;v=0002/',
                     createUrl: '/sap/opu/odata/sap/API_OUTBOUND_DELIVERY_SRV;v=0002/A_OutbDeliveryHeader',

@@ -178,7 +178,7 @@ entity PaymentReceipt {
 
 //销售订单创建表
 entity SalesOrderCreate {
-    key PIOrder                   : String(10) @title: 'PI单号';    // PI单号
+    key PIOrder                   : String(16) @title: 'PI单号';    // PI单号
     key PIOrderItem               : String(6) @title: 'PI项目号';     // PI项目号
     SalesOrderType                : String(4) @title: '销售订单类型';     // 销售订单类型
     SalesOrganization             : String(4) @title: '销售组织';     // 销售组织
@@ -259,7 +259,7 @@ entity SalesOrderCreate {
 
 // 销售订单修改表
 entity SalesOrderChange {
-    key PIOrder                   : String(10) @title: 'PI单号';    // PI单号
+    key PIOrder                   : String(16) @title: 'PI单号';    // PI单号
     key PIOrderItem               : String(6) @title: 'PI项目号';     // PI项目号
     SalesOrderItemCategory        : String(4) @title: '销售订单项目类别';      // 销售订单项目类别
     Material                      : String(40) @title: '物料号';     // 物料号
@@ -303,7 +303,7 @@ entity SalesOrderChange {
 
 //交货单表
 entity DeliveryActualInfo {
-    key DeliveryDocument      : String(10) @title: '交货单';      // 交货单
+    key DeliveryDocument      : String(16) @title: '交货单';      // 交货单
     key DeliveryDocumentItem  : String(6) @title: '交货行项目';       // 交货行项目
     ActualGoodsMovementDate   : Date @title: '实际发货日期';            // 实际发货日期
     YY1_FD_SPZT               : String(2) @title: '财务审批状态';       // 财务审批状态
@@ -320,7 +320,7 @@ entity DeliveryActualInfo {
 
 //调拨单
 entity PITransfer {
-    key PIOrder                  : String(10) @title: 'PI单号';    // PI单号
+    key PIOrder                  : String(16) @title: 'PI单号';    // PI单号
     key PIOrderItem              : String(6) @title: 'PI项目号';     // PI项目号
     PostingDate                  : Date @title: '过账日期';               // 过账日期
     GoodsMovementCode            : String(3) @title: '移动类型代码';          // 移动类型代码
@@ -336,7 +336,7 @@ entity PITransfer {
 
 //PI销售订单关系表
 entity PISalesOrderRel {
-  key PIOrder                   : String(10) @title: 'PI单号';    // PI单号
+  key PIOrder                   : String(16) @title: 'PI单号';    // PI单号
   key PIOrderItem               : String(6) @title: 'PI项目号';     // PI项目号
       zrfc_logid                : UUID @title: '多步ID';           // 多步ID
       SalesOrder                : String(10) @title: '销售订单号';    // 对外销售订单号
@@ -354,7 +354,7 @@ entity PISalesOrderRel {
 
 //PI交货单关系表
 entity PIDeliveryRel {
-  key PIOrder                   : String(10) @title: 'PI单号';    // PI单号
+  key PIOrder                   : String(16) @title: 'PI单号';    // PI单号
   key PIOrderItem               : String(6) @title: 'PI项目号';     // PI项目号
       zrfc_logid                : UUID @title: '多步ID';           // 多步ID
       DeliveryNo1               : String(10) @title: '外向交货单号1';    // 外向交货单号1

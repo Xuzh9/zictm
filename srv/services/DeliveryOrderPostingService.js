@@ -259,8 +259,8 @@ class DeliveryOrderPostingService {
                 csrfUrl: '/sap/opu/odata/sap/API_CUSTOMER_RETURNS_DELIVERY_SRV;v=0002/A_CustomerReturnsDeliveryHeader(\'{DeliveryDocument}\')',
                 postingUrl: '/sap/opu/odata/sap/API_CUSTOMER_RETURNS_DELIVERY_SRV;v=0002/PostGoodsReceipt?DeliveryDocument='
             };
-        } else {
-            // ZPR 标准订单 - 使用发货 API
+        } else if (salesOrderType === 'ZPR' || salesOrderType === 'OR' ){
+            // ZPR/OR 标准订单 - 使用发货 API
             return {
                 csrfUrl: '/sap/opu/odata/sap/API_OUTBOUND_DELIVERY_SRV;v=0002/A_OutbDeliveryHeader(\'{DeliveryDocument}\')',
                 postingUrl: '/sap/opu/odata/sap/API_OUTBOUND_DELIVERY_SRV;v=0002/PostGoodsIssue?DeliveryDocument='

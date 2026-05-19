@@ -46,8 +46,8 @@ class SalesOrderCreateService {
                     plantField: 'ProductionPlant'
                 };
             case 'ZPR':
-            default:
-                // ZPR 标准销售订单
+            case 'OR':
+                // OR/ZPR 标准销售订单
                 return {
                     csrfUrl: '/sap/opu/odata/sap/API_SALES_ORDER_SRV/$metadata',
                     createUrl: '/sap/opu/odata/sap/API_SALES_ORDER_SRV/A_SalesOrder',
@@ -155,8 +155,10 @@ class SalesOrderCreateService {
             if (result.status >= 200 && result.status < 300) {
                 const salesOrder = result.data.d?.SalesOrder || '';
                 
-                // TODO: 暂时注释，目前场景不需要更新表
-                // await this.updatePISalesOrderRel(salesOrder, businessDataList);
+                // SD05/SD06 需要更新 PISalesOrderRel 表
+                if (zrfcid === 'SD05' || zrfcid === 'SD06') {
+                    await this.updatePISalesOrderRel(salesOrder, businessDataList);
+                }
                 
                 const returnResult = {
                     code: 'S',
@@ -301,25 +303,51 @@ class SalesOrderCreateService {
         
         // 构建行项目
         const salesOrderItems = businessDataList.map((item, index) => {
-            // 使用业务表的 SalesOrderItem 字段
-            const itemNumber = item.SalesOrderItem;
+            // 使用业务表的行项目号字段
+            const itemNumber = (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') ? item.PIOrderItem : item.SalesOrderItem;
             
             // 根据销售订单类型使用动态字段名
             const itemCategoryField = apiConfig.itemCategoryField;
             const itemCategory = apiConfig.itemCategory;
             const plantField = apiConfig.plantField;
             
+            // 构建定价元素
+            const pricingElements = [];
+            
+            if (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') {
+                // SD01/SD05/SD06: 根据 VALUE 字段动态构建定价元素
+                const conditionTypes = ['ZB01', 'ZB02', 'ZB03', 'ZB04', 'ZC01', 'ZC02', 'ZP00'];
+                
+                console.log(`[SalesOrderCreateService] 构建定价元素 - zrfcid: ${zrfcid}, item.ZP00_Value: ${item.ZP00_Value}`);
+                
+                for (const conditionType of conditionTypes) {
+                    const valueField = `${conditionType}_Value`;
+                    if (item[valueField]) {
+                        console.log(`[SalesOrderCreateService] 添加定价元素: ${conditionType}, 值: ${item[valueField]}`);
+                        pricingElements.push({
+                            ConditionType: conditionType,
+                            ConditionRateValue: String(item[valueField]),
+                            ConditionQuantity: String(item[`${conditionType}_UnitOfMeasure`]) || "1",
+                            ConditionCurrency: item[`${conditionType}_CurrencyCode`] || item.ItemTransactionCurrency
+                        });
+                    }
+                }
+            } else {
+                // 其他流程：使用默认的 ZP10 定价元素
+                pricingElements.push({
+                    ConditionType: "ZP10",
+                    ConditionRateValue: String(item.NetAmount) || "0",
+                    ConditionQuantity: "1",
+                    ConditionCurrency: item.ItemTransactionCurrency
+                });
+            }
+            
             const itemData = {
                 SalesOrderItem: itemNumber,
-                Material: item.Product || "",
+                Material: (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') ? (item.Material || "") : (item.Product || ""),
                 RequestedQuantity: item.RequestedQuantity ? parseFloat(item.RequestedQuantity).toString() : "0",
                 to_PricingElement: {
-                    results: [{
-                        ConditionType: "ZP10",
-                        ConditionRateValue: item.NetAmount || "0",
-                        ConditionQuantity: "1",
-                        ConditionCurrency: item.ItemTransactionCurrency
-                    }]
+                    results: pricingElements
                 }
             };
             
@@ -339,25 +367,37 @@ class SalesOrderCreateService {
             SalesOrderType: salesOrderType || "",
             SalesOrganization: mainData.SalesOrganization || mptStepConfig?.vkorg,
             SalesOffice: mainData.SalesOffice || "",
-            DistributionChannel: mptStepConfig?.vtweg || "",
-            OrganizationDivision: mptStepConfig?.spart || "00",
-            SoldToParty: mainData.Customer || mptStepConfig?.kunnr,
-            PurchaseOrderByCustomer: mainData.SalesOrder || "",
+            DistributionChannel: (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') ? (mainData.DistributionChannel) : (mptStepConfig?.vtweg),
+            OrganizationDivision: (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') ? (mainData.OrganizationDivision || "00") : (mptStepConfig?.spart || "00"),
+            SoldToParty: (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') ? (mainData.SalesDistrict || mptStepConfig?.kunnr) : (mainData.Customer || mptStepConfig?.kunnr),
+            PurchaseOrderByCustomer: (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') ? (mainData.PIOrder || "") : (mainData.SalesOrder || ""),
             TransactionCurrency: mainData.TransactionCurrency,
-            YY1_FD_ZDFJY_SDH: mptStepConfig?.zdfjy,
+            YY1_FD_ZDFJY_SDH: (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') ? mainData.YY1_FD_ZDFJY : mptStepConfig?.zdfjy,
             to_Item: {
                 results: salesOrderItems
             }
         };
         
-        // 根据销售订单类型设置不同的日期字段
-        if (mainData.SalesOrderDate && apiConfig.dateField) {
-            salesOrderData[apiConfig.dateField] = this.convertDate(mainData.SalesOrderDate);
+        // 根据业务流程设置销售订单日期
+        if (apiConfig.dateField) {
+            if (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') {
+                salesOrderData[apiConfig.dateField] = this.convertDate(new Date());
+            } else if (mainData.SalesOrderDate) {
+                salesOrderData[apiConfig.dateField] = this.convertDate(mainData.SalesOrderDate);
+            }
         }
 
-        // 根据销售订单类型设置不同的交货日期字段
-        if (mainData.DeliveryDate) {
-            if (salesOrderType === 'ZPR') {
+        // 根据业务流程设置交货日期字段
+        if (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') {
+            if (mainData.ConfirmedDeliveryDate) {
+                if (salesOrderType === 'ZPR' || salesOrderType === 'OR') {
+                    salesOrderData.RequestedDeliveryDate = this.convertDate(mainData.ConfirmedDeliveryDate);
+                } else if (salesOrderType === 'CBRE') {
+                    salesOrderData.PlannedGoodsIssueDate = this.convertDate(mainData.ConfirmedDeliveryDate);
+                }
+            }
+        } else if (mainData.DeliveryDate) {
+            if (salesOrderType === 'ZPR' || salesOrderType === 'OR') {
                 salesOrderData.RequestedDeliveryDate = this.convertDate(mainData.DeliveryDate);
             } else if (salesOrderType === 'CBRE') {
                 salesOrderData.PlannedGoodsIssueDate = this.convertDate(mainData.DeliveryDate);
@@ -403,7 +443,7 @@ class SalesOrderCreateService {
                     // 先尝试更新
                     const updateResult = await cds.run(
                         UPDATE(PISalesOrderRel)
-                            .set({ SalesOrder: salesOrder, SalesOrderItem: item.SalesOrderItem })
+                            .set({ SalesOrder: salesOrder, SalesOrderItem: String(piOrderItem).padStart(6, '0') })
                             .where({ PIOrder: piOrder, PIOrderItem: piOrderItem })
                     );
                     
@@ -419,7 +459,7 @@ class SalesOrderCreateService {
                                     PIOrderItem: piOrderItem,
                                     zrfc_logid: this.zrfcLogid,
                                     SalesOrder: salesOrder,
-                                    SalesOrderItem: item.SalesOrderItem
+                                    SalesOrderItem: String(piOrderItem).padStart(6, '0')
                                 })
                         );
                         console.log('[SalesOrderCreateService.updatePISalesOrderRel] 插入结果:', insertResult);

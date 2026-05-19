@@ -257,8 +257,8 @@ class DeliveryOrderHeaderUpdateService {
                 csrfUrl: '/sap/opu/odata/sap/API_CUSTOMER_RETURNS_DELIVERY_SRV;v=0002/A_ReturnsDeliveryHeader(\'{DeliveryDocument}\')',
                 updateUrl: "/sap/opu/odata/sap/API_CUSTOMER_RETURNS_DELIVERY_SRV;v=0002/A_ReturnsDeliveryHeader(DeliveryDocument='{DeliveryDocument}')"
             };
-        } else {
-            // ZPR 标准订单 - 使用发货交货单 API
+        } else if (salesOrderType === 'ZPR' || salesOrderType === 'OR'){
+            // ZPR/OR 标准订单 - 使用发货交货单 API
             return {
                 csrfUrl: '/sap/opu/odata/sap/API_OUTBOUND_DELIVERY_SRV;v=0002/A_OutbDeliveryHeader(\'{DeliveryDocument}\')',
                 updateUrl: "/sap/opu/odata/sap/API_OUTBOUND_DELIVERY_SRV;v=0002/A_OutbDeliveryHeader('{DeliveryDocument}')"

@@ -108,9 +108,9 @@ class PurchaseOrderService {
                 const purchaseOrder = result.data.PurchaseOrder || '';
                 
                 // 根据 zrfcid 执行不同的更新操作
-                if (zrfcid === 'SD01') {
-                    // SD01: 更新 PISalesOrderRel 表
-                    await this.updatePISalesOrderRel(purchaseOrder, businessDataList);
+                if (zrfcid === 'SD01' || zrfcid === 'SD06') {
+                    // SD01/SD06: 更新 PISalesOrderRel 表
+                    await this.updatePISalesOrderRel(purchaseOrder, businessDataList, itemPrices, zrfcid);
                 } else if (zrfcid === 'SD04') {
                     // SD04: 更新 OutboundDelivery 的 PurchasePrice（使用之前计算好的价格）
                     await this.updateOutboundDeliveryPurchasePrice(itemPrices);
@@ -265,11 +265,12 @@ class PurchaseOrderService {
                     const baseUnit = await this.getMaterialBaseUnit(material);
                     unitOfMeasure = baseUnit || "EA";
                     break;
-                default:
-                    // 默认使用 SD01 的字段映射
+                case 'SD06':
                     poItemNumber = item.PIOrderItem;
                     material = item.Material || "";
-                    netPriceAmount = item.PurchasePrice ? parseFloat(item.PurchasePrice) : 0;
+                    const zp00Value = item.ZP00_Value ? parseFloat(item.ZP00_Value) : 0;
+                    const sd06Zjgbl = mptStepConfig?.zjgbl ? parseFloat(mptStepConfig.zjgbl) : 100;
+                    netPriceAmount = zp00Value * (sd06Zjgbl / 100);
                     unitOfMeasure = item.RequestedQuantityUnit;
                     break;
             }
@@ -278,6 +279,8 @@ class PurchaseOrderService {
             itemPrices.push({
                 SalesOrder: item.SalesOrder,
                 SalesOrderItem: item.SalesOrderItem,
+                PIOrder: item.PIOrder,
+                PIOrderItem: item.PIOrderItem,
                 PurchasePrice: netPriceAmount
             });
 
@@ -323,7 +326,7 @@ class PurchaseOrderService {
             Supplier: mptStepConfig?.lifnr || "",
             DocumentCurrency: mainData.TransactionCurrency || "",
             YY1_FD_ZDFJY2_PDH: zdfjy,
-            SupplyingPlant: zrfcid === 'SD04' ? (mptStepConfig?.lifnr || "") : mainData.ProductionPlant,
+            SupplyingPlant: (zrfcid === 'SD04' || zrfcid === 'SD06') ? (mptStepConfig?.lifnr || "") : mainData.ProductionPlant,
             _PurchaseOrderItem: purchaseOrderItems
         };
 
@@ -351,7 +354,7 @@ class PurchaseOrderService {
         return { purchaseOrderData, itemPrices };
     }
 
-    async updatePISalesOrderRel(purchaseOrder, businessDataList) {
+    async updatePISalesOrderRel(purchaseOrder, businessDataList, itemPrices, zrfcid) {
         try {
             const PISalesOrderRel = cds.entities['com.sap.zictm.PISalesOrderRel'];
             const { INSERT, UPDATE } = cds.ql;
@@ -360,13 +363,35 @@ class PurchaseOrderService {
                 // 使用 PIOrderItem 作为采购订单行项目号，添加前导零使其长度为5位
                 const poItemNumber = String(item.PIOrderItem).padStart(5, '0');
                 
+                // 构建更新数据
+                const updateData = {
+                    PurchaseOrder1: purchaseOrder,
+                    PurchaseOrderItem1: poItemNumber
+                };
+                
+                // 更新 SalesOrderCreate 表的 PurchasePrice
+                if (zrfcid === 'SD06' && itemPrices) {
+                    const SalesOrderCreate = cds.entities['com.sap.zictm.SalesOrderCreate'];
+                    const priceItem = itemPrices.find(p => 
+                        p.PIOrder === item.PIOrder && p.PIOrderItem === item.PIOrderItem
+                    );
+                    if (priceItem) {
+                        await cds.run(
+                            UPDATE(SalesOrderCreate)
+                                .set({ PurchasePrice: priceItem.PurchasePrice })
+                                .where({
+                                    PIOrder: item.PIOrder,
+                                    PIOrderItem: item.PIOrderItem
+                                })
+                        );
+                        console.log(`更新 SalesOrderCreate: PIOrder=${item.PIOrder}, PIOrderItem=${item.PIOrderItem}, PurchasePrice=${priceItem.PurchasePrice}`);
+                    }
+                }
+                
                 // 先尝试更新
                 const updateResult = await cds.run(
                     UPDATE(PISalesOrderRel)
-                        .set({
-                            PurchaseOrder1: purchaseOrder,
-                            PurchaseOrderItem1: poItemNumber
-                        })
+                        .set(updateData)
                         .where({
                             PIOrder: item.PIOrder,
                             PIOrderItem: item.PIOrderItem

@@ -37,18 +37,20 @@ class ProductionOrderCreateService {
                 };
             }
 
-            // 读取业务表数据（使用 zrfc_logid 查询）
-            const businessDataList = await this.commonUtils.getBusinessData(businessTable, zrfcLogid, 'zrfc_logid');
-            if (!businessDataList || businessDataList.length === 0) {
+            // 根据 zdfjy 和 canum 查找 MPTStepConfig 配置
+            const mptStepConfig = await this.commonUtils.getMPTStepConfig(zdfjy, canum);
+
+            // 读取业务表数据
+            const businessDataResult = await this.getBusinessData(businessTable, zrfcLogid);
+            if (businessDataResult.code === 'E') {
                 return {
                     code: 'E',
-                    message: `未找到业务数据，销售订单号: ${sourceDocument}`,
+                    message: businessDataResult.message,
                     objkey: ''
                 };
             }
-
-            // 根据 zdfjy 和 canum 查找 MPTStepConfig 配置
-            const mptStepConfig = await this.commonUtils.getMPTStepConfig(zdfjy, canum);
+            const businessDataList = businessDataResult.businessData;
+            console.log('[ProductionOrderCreateService] 业务数据条数:', businessDataList.length);
 
             // 获取 CSRF token（使用 OData V2 格式）
             const csrfResult = await executeHttpRequest(
@@ -182,7 +184,7 @@ class ProductionOrderCreateService {
             // 数量
             TotalQuantity: businessData.RequestedQuantity,
             // 计划开始日期（格式：/Date(timestamp)/）
-            MfgOrderPlannedStartDate: this.formatDateForSAP(businessData.ProductionStartDate),
+            MfgOrderPlannedStartDate: this.formatDateForSAP(businessData.ConfirmedDeliveryDate),
             // 计划结束日期（格式：/Date(timestamp)/）
             MfgOrderPlannedEndDate: this.formatDateForSAP(businessData.ConfirmedDeliveryDate),
             //箱唛要求
@@ -205,7 +207,7 @@ class ProductionOrderCreateService {
 
         // 根据 zrfcid 添加不同的字段
         if (zrfcid === 'SD01') {
-            // SD01 业务流程：从 PISalesOrderRel 表获取内部交易1相关字段
+            // 从 PISalesOrderRel 表获取内部交易1相关字段
             const PISalesOrderRel = cds.entities['com.sap.zictm.PISalesOrderRel'];
             const piOrder = businessData.PIOrder || '';
             const piOrderItem = businessData.PIOrderItem || '';
@@ -221,16 +223,26 @@ class ProductionOrderCreateService {
                     productionOrderData.YY1_FD_SOITEM3_ORD = relRecord.PurchaseOrderItem1;
                 }
             }
-        } 
-        // 预留其他 zrfcid 的判断条件
-        // else if (zrfcid === 'PP01') {
-        //     // PP01 业务流程：添加其他字段
-        //     productionOrderData.XXX_FIELD = mptStepConfig?.XXX;
-        // }
-        // else if (zrfcid === 'MM01') {
-        //     // MM01 业务流程：添加其他字段
-        //     productionOrderData.YYY_FIELD = mptStepConfig?.YYY;
-        // }
+        } else if (zrfcid === 'SD06') {
+            // 从 PISalesOrderRel 表获取销售订单和采购订单相关字段
+            const PISalesOrderRel = cds.entities['com.sap.zictm.PISalesOrderRel'];
+            const piOrder = businessData.PIOrder || '';
+            const piOrderItem = businessData.PIOrderItem || '';
+            
+            if (piOrder && piOrderItem) {
+                const relRecord = await cds.run(
+                    SELECT.one.from(PISalesOrderRel)
+                        .where({ PIOrder: piOrder, PIOrderItem: piOrderItem })
+                );
+                
+                if (relRecord) {
+                    productionOrderData.YY1_FD_SO2_ORD = relRecord.SalesOrder;
+                    productionOrderData.YY1_FD_SOITEM2_ORD = relRecord.SalesOrderItem;
+                    productionOrderData.YY1_FD_SO3_ORD = relRecord.PurchaseOrder1;
+                    productionOrderData.YY1_FD_SOITEM3_ORD = relRecord.PurchaseOrderItem1;
+                }
+            }
+        }
 
         return productionOrderData;
     }
@@ -351,6 +363,32 @@ class ProductionOrderCreateService {
             return errorData.message;
         } else {
             return JSON.stringify(errorData);
+        }
+    }
+
+    /**
+     * 读取业务表数据
+     */
+    async getBusinessData(businessTable, zrfcLogid) {
+        try {
+            const entity = cds.entities[`com.sap.zictm.${businessTable}`];
+            if (!entity) {
+                return { code: 'E', message: `业务表 ${businessTable} 不存在` };
+            }
+
+            const businessData = await cds.run(
+                SELECT.from(entity)
+                        .where({ zrfc_logid: zrfcLogid })
+            );
+
+            if (!businessData || businessData.length === 0) {
+                return { code: 'E', message: `未找到业务数据，zrfcLogid: ${zrfcLogid}` };
+            }
+
+            return { code: 'S', businessData: businessData };
+        } catch (error) {
+            console.error('[ProductionOrderCreateService.getBusinessData] 获取业务数据失败:', error);
+            return { code: 'E', message: `获取业务数据失败: ${error.message}` };
         }
     }
 }

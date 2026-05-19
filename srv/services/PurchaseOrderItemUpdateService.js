@@ -236,6 +236,9 @@ class PurchaseOrderItemUpdateService {
         }
         if (businessData.PurchasePrice) {
             item.NetPriceAmount = parseFloat(businessData.PurchasePrice);
+        } else if (businessData.ZP00_Value && mptStepConfig?.zjgbl) {
+            // 如果 PurchasePrice 没有值，则根据 ZP00_Value * (zjgbl / 100) 计算
+            item.NetPriceAmount = parseFloat(businessData.ZP00_Value) * (parseFloat(mptStepConfig.zjgbl) / 100);
         }
 
         return item;

@@ -16,6 +16,11 @@
 
             let results = await cds.run(req.query);
 
+            // 确保 results 是数组
+            if (!Array.isArray(results)) {
+                results = results ? [results] : [];
+            }
+
             // 先按日志ID排序，再按步骤编号排序
             results.sort((a, b) => {
                 if (a.zrfc_logid !== b.zrfc_logid) {

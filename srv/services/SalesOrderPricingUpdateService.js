@@ -52,8 +52,8 @@ class SalesOrderPricingUpdateService {
 
             // 根据 zrfcid 获取销售订单行项目数据
             let piSalesOrderRelRecords = [];
-            if (zrfcid === 'SD01' || zrfcid === 'SD03') {
-                // SD01、SD03: 查询 PISalesOrderRel 表获取销售订单号和行号
+            if (zrfcid === 'SD01' || zrfcid === 'SD03' || zrfcid === 'SD06') {
+                // 查询 PISalesOrderRel 表获取销售订单号和行号
                 piSalesOrderRelRecords = await this.getPISalesOrderRelRecords(businessDataList);
 
                 // 检查是否需要跳过此步骤
@@ -293,8 +293,8 @@ class SalesOrderPricingUpdateService {
     getPricingTypes(zrfcid, canum) {
         const step = parseInt(canum);
         
-        // SD01、SD04或 SD03（步骤为 50）：更新 PMP0（当 PurchasePrice 有值时）
-        if (zrfcid === 'SD01' || zrfcid === 'SD04' || (zrfcid === 'SD03' && step === 50)) {
+        // SD01、SD04、SD06 或 SD03（步骤为 50）：更新 PMP0（当 PurchasePrice 有值时）
+        if (zrfcid === 'SD01' || zrfcid === 'SD04' || zrfcid === 'SD06' || (zrfcid === 'SD03' && step === 50)) {
             return [{
                 conditionType: 'PMP0',
                 valueField: 'PurchasePrice',
@@ -316,13 +316,8 @@ class SalesOrderPricingUpdateService {
             ];
         }
         
-        // 默认：更新 PMP0
-        return [{
-            conditionType: 'PMP0',
-            valueField: 'PurchasePrice',
-            currencyField: null,
-            quantityField: null
-        }];
+        // 默认：不更新任何定价类型
+        return [];
     }
 
     /**
@@ -335,8 +330,8 @@ class SalesOrderPricingUpdateService {
     async checkSkipCondition(zrfcid, canum, piSalesOrderRelRecords) {
         const step = parseInt(canum);
         
-        // SD01 或 SD03 且步骤为 50：检查 SalesOrder1 是否有值
-        if ((zrfcid === 'SD01' || zrfcid === 'SD03') && step === 50) {
+        // SD01 或 SD06 或 SD03 且步骤为 50：检查 SalesOrder1 是否有值
+        if (zrfcid === 'SD01' || zrfcid === 'SD06' || (zrfcid === 'SD03' && step === 50)) {
             for (const record of piSalesOrderRelRecords) {
                 if (!record || !record.SalesOrder1) {
                     console.log(`PISalesOrderRel 中 SalesOrder1 为空，步骤跳过: PIOrder=${record?.PIOrder}, PIOrderItem=${record?.PIOrderItem}`);
@@ -407,19 +402,20 @@ class SalesOrderPricingUpdateService {
      * @returns {Array} 行项目号映射列表
      */
     buildItemMappingFromRecords(businessDataList, piSalesOrderRelRecords, zrfcid, canum) {
-        console.log('[SalesOrderPricingUpdateService] buildItemMappingFromRecords - 开始执行');
-        console.log('[SalesOrderPricingUpdateService] buildItemMappingFromRecords - zrfcid:', zrfcid, 'canum:', canum);
-        console.log('[SalesOrderPricingUpdateService] buildItemMappingFromRecords - businessDataList 长度:', businessDataList.length);
-        console.log('[SalesOrderPricingUpdateService] buildItemMappingFromRecords - piSalesOrderRelRecords 长度:', piSalesOrderRelRecords.length);
-        console.log('[SalesOrderPricingUpdateService] buildItemMappingFromRecords - piSalesOrderRelRecords:', JSON.stringify(piSalesOrderRelRecords, null, 2));
         
         const mappings = [];
         const step = parseInt(canum);
         
+        // 调试日志
+        console.log(`[buildItemMappingFromRecords] zrfcid: ${zrfcid}, canum: ${canum}`);
+        console.log(`[buildItemMappingFromRecords] businessDataList 长度: ${businessDataList.length}`);
+        console.log(`[buildItemMappingFromRecords] piSalesOrderRelRecords 长度: ${piSalesOrderRelRecords.length}`);
+        console.log(`[buildItemMappingFromRecords] piSalesOrderRelRecords: ${JSON.stringify(piSalesOrderRelRecords)}`);
+        
         for (const businessData of businessDataList) {
             let salesOrder, salesOrderItem;
             
-            // SD04: 使用业务数据中的 SalesOrderItem 从 API 获取的数据中查找对应记录
+            // 使用业务数据中的 SalesOrderItem 从 API 获取的数据中查找对应记录
             if (zrfcid === 'SD04') {
                 const businessSalesOrderItem = String(businessData.SalesOrderItem || '');
                 
@@ -439,13 +435,17 @@ class SalesOrderPricingUpdateService {
                     });
                 }
             } else {
-                // SD01、SD03: 使用 PIOrder 和 PIOrderItem 从 PISalesOrderRel 表查找
+                // 使用 PIOrder 和 PIOrderItem 从 PISalesOrderRel 表查找
                 const piOrder = businessData.PIOrder || '';
                 const piOrderItem = String(businessData.PIOrderItem || '');
+                
+                console.log(`[buildItemMappingFromRecords] 查找条件: PIOrder=${piOrder}, PIOrderItem=${piOrderItem}`);
                 
                 const record = piSalesOrderRelRecords.find(
                     r => r.PIOrder === piOrder && r.PIOrderItem === piOrderItem
                 );
+                
+                console.log(`[buildItemMappingFromRecords] 查找结果: ${record ? JSON.stringify(record) : 'null'}`);
                 
                 if (!record) {
                     console.warn(`未找到 PISalesOrderRel 记录: PIOrder=${piOrder}, PIOrderItem=${piOrderItem}`);
@@ -453,13 +453,13 @@ class SalesOrderPricingUpdateService {
                 }
                 
                 // 根据业务类型选择不同的销售订单字段组
-                // SD03 步骤 10：对外销售订单，使用 SalesOrder/SalesOrderItem
+                // 对外销售订单，使用 SalesOrder/SalesOrderItem
                 if (zrfcid === 'SD03' && step === 10) {
                     salesOrder = record.SalesOrder;
                     salesOrderItem = record.SalesOrderItem;
                 }
-                // SD01（任意步骤）或 SD03 步骤 30：公司间销售订单，使用 SalesOrder1/SalesOrderItem1
-                else if (zrfcid === 'SD01' || (zrfcid === 'SD03' && step === 30)) {
+                // 公司间销售订单，使用 SalesOrder1/SalesOrderItem1
+                else if (zrfcid === 'SD01' || (zrfcid === 'SD03' && step === 30) || zrfcid === 'SD06' ) {
                     salesOrder = record.SalesOrder1;
                     salesOrderItem = record.SalesOrderItem1;
                 }

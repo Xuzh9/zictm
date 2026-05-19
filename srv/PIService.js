@@ -316,6 +316,9 @@ module.exports = cds.service.impl(async function () {
       if (!item.SalesOrganization) {
         errors.push(`第 ${rowNum} 条数据缺少必填字段：SalesOrganization`);
       }
+      if (!item.SalesOffice) {
+        errors.push(`第 ${rowNum} 条数据缺少必填字段：SalesOffice`);
+      }
       if (!item.DistributionChannel) {
         errors.push(`第 ${rowNum} 条数据缺少必填字段：DistributionChannel`);
       }
