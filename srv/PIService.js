@@ -41,36 +41,29 @@ module.exports = cds.service.impl(async function () {
       return results;
     }
 
-    // 批量查询 MultistepLog，获取所有失败步骤
-    const failedSteps = await cds.run(
-      SELECT.from(MultistepLog).columns([
-        'zrfc_logid', 'canum', 'code', 'message'
+    // 批量查询 MultistepHeadLog，获取执行状态
+    const MultistepHeadLog = cds.entities['com.sap.zictm.MultistepHeadLog'];
+    const headLogs = await cds.run(
+      SELECT.from(MultistepHeadLog).columns([
+        'zrfc_logid', 'code', 'message'
       ]).where({
-        zrfc_logid: { in: zrfcLogids },
-        code: 'E'
+        zrfc_logid: { in: zrfcLogids }
       })
     );
 
-    // 按 zrfc_logid 分组失败步骤
-    const failedStepsByLogId = new Map();
-    for (const step of failedSteps) {
-      if (!failedStepsByLogId.has(step.zrfc_logid)) {
-        failedStepsByLogId.set(step.zrfc_logid, []);
-      }
-      failedStepsByLogId.get(step.zrfc_logid).push(step);
+    // 按 zrfc_logid 映射
+    const headLogsByLogId = new Map();
+    for (const log of headLogs) {
+      headLogsByLogId.set(log.zrfc_logid, { code: log.code, message: log.message });
     }
 
     // 计算每个 PISalesOrderRel 的 code 和 message
     results.forEach(r => {
-      const logFailedSteps = failedStepsByLogId.get(r.zrfc_logid) || [];
-
-      if (logFailedSteps.length > 0) {
-        // 有失败步骤，按 canum 排序取最小
-        logFailedSteps.sort((a, b) => parseInt(a.canum) - parseInt(b.canum));
-        r.code = 'E';
-        r.message = logFailedSteps[0].message;
+      const headLog = headLogsByLogId.get(r.zrfc_logid);
+      if (headLog) {
+        r.code = headLog.code;
+        r.message = headLog.message || '执行成功';
       } else {
-        // 没有失败步骤
         r.code = 'S';
         r.message = '执行成功';
       }
@@ -187,23 +180,22 @@ module.exports = cds.service.impl(async function () {
     const firstBusinessData = businessDataList[0];
     console.log('[PISalesOrderRel] 找到业务数据，zrfc_logid:', firstBusinessData.zrfc_logid);
 
-    // 查询 MultistepLog 获取失败步骤
-    const failedSteps = await cds.run(
-      SELECT.from(MultistepLog)
-        .columns(['canum', 'code', 'message'])
+    // 查询 MultistepHeadLog 获取执行状态
+    const MultistepHeadLog = cds.entities['com.sap.zictm.MultistepHeadLog'];
+    const headLog = await cds.run(
+      SELECT.one(MultistepHeadLog)
+        .columns(['code', 'message'])
         .where({
-          zrfc_logid: firstBusinessData.zrfc_logid,
-          code: 'E'
+          zrfc_logid: firstBusinessData.zrfc_logid
         })
     );
 
     let code = 'S';
     let message = '执行成功';
 
-    if (failedSteps && failedSteps.length > 0) {
-      failedSteps.sort((a, b) => parseInt(a.canum) - parseInt(b.canum));
-      code = 'E';
-      message = failedSteps[0].message;
+    if (headLog) {
+      code = headLog.code;
+      message = headLog.message || '执行成功';
     }
 
     // 如果指定了 PIOrderItem，只返回匹配的那一行
@@ -264,18 +256,17 @@ module.exports = cds.service.impl(async function () {
   this.on('SOCreate', async (req) => {
     console.log('[SOCreate] 开始处理请求');
     const { data } = req.data;
-    console.log('[SOCreate] 请求数据:', JSON.stringify(data));
     const ApiInputLogHelper = require('./handlers/ApiInputLogHelper');
     
     // --------------------------
     // 检查数据格式是否正确（必须是数组）
     // --------------------------
     if (!data || !Array.isArray(data)) {
-      const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, '数据格式错误：data 必须是数组');
+      const id = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, '数据格式错误：data 必须是数组');
       return {
         code: 400,
         message: '数据格式错误：data 必须是数组',
-        id: logId
+        id: id
       };
     }
     
@@ -283,11 +274,11 @@ module.exports = cds.service.impl(async function () {
     // 检查数据是否为空
     // --------------------------
     if (data.length === 0) {
-      const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, '数据不能为空');
+      const id = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, '数据不能为空');
       return {
         code: 400,
         message: '数据不能为空',
-        id: logId
+        id: id
       };
     }
 
@@ -370,27 +361,46 @@ module.exports = cds.service.impl(async function () {
     // --------------------------
     if (errors.length > 0) {
       const errorMessages = errors.join('; ');
-      const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, errorMessages);
+      const id = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, errorMessages);
       return {
         code: 400,
         message: errorMessages,
-        id: logId
+        id: id
       };
     }
 
     // --------------------------
     // 数据库已存在校验
     // --------------------------
-    const existingKeys = await service.run(SELECT.from(SalesOrderCreate)
-      .columns(['PIOrder', 'PIOrderItem'])
+    const existingRecords = await service.run(SELECT.from(SalesOrderCreate)
+      .columns(['PIOrder', 'PIOrderItem', 'zrfc_logid'])
       .where({
         PIOrder: { in: data.map(p => p.PIOrder) }
       }));
     
-    existingKeys.forEach(existing => {
+    // 获取需要查询的 zrfc_logid 列表
+    const zrfcLogids = existingRecords
+      .filter(r => r.zrfc_logid)
+      .map(r => r.zrfc_logid);
+    
+    // 查询 MultistepHeadLog 获取执行状态
+    const headLogs = {};
+    if (zrfcLogids.length > 0) {
+      const logs = await service.run(SELECT.from('MultistepHeadLog')
+        .columns(['zrfc_logid', 'code'])
+        .where({ zrfc_logid: { in: zrfcLogids } }));
+      logs.forEach(log => {
+        headLogs[log.zrfc_logid] = log.code;
+      });
+    }
+    
+    existingRecords.forEach(existing => {
       const key = `${existing.PIOrder}-${existing.PIOrderItem}`;
       if (keyMap.has(key)) {
-        errors.push(`主键 [${key}] 已在数据库中存在，无法重复创建`);
+        const headLogCode = headLogs[existing.zrfc_logid];
+        if (headLogCode === 'S') {
+          errors.push(`主键 [${key}] 已成功推送，无法重复推送`);
+        }
       }
     });
 
@@ -408,18 +418,18 @@ module.exports = cds.service.impl(async function () {
     // --------------------------
     if (errors.length > 0) {
       const errorMessages = errors.join('; ');
-      const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, errorMessages);
+      const id = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, errorMessages);
       return {
         code: 400,
         message: errorMessages,
-        id: logId
+        id: id
       };
     }
 
     // --------------------------
     // 保存 ApiInputLog（在调用 MultiStepInvoker 之前）
     // --------------------------
-    const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, null);
+    const id = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, null);
     
     // --------------------------
     // 调用 MultiStepInvoker 处理多步流程
@@ -428,8 +438,8 @@ module.exports = cds.service.impl(async function () {
     const MultiStepInvoker = require('./handlers/MultiStepInvoker');
     const invoker = new MultiStepInvoker();
     
-    // 调用 MultiStepInvoker，传入查询到的业务流程ID和 zdfjy
-    const invokerResult = await invoker.process(mptConfig.zrfcid, data, null, null, mptConfig.zdfjy);
+    // 调用 MultiStepInvoker，传入查询到的业务流程ID、zdfjy 和 id
+    const invokerResult = await invoker.process(mptConfig.zrfcid, data, null, null, mptConfig.zdfjy, id);
     
     // --------------------------
     // 返回创建成功的数据
@@ -440,14 +450,14 @@ module.exports = cds.service.impl(async function () {
       result.message = invokerResult.message ? invokerResult.message.substring(0, 500) : '处理成功';
       result.zrfc_logid = invokerResult.zrfcLogid;
       result.zrfcid = invokerResult.zrfcid;
-      result.id = logId;
+      result.id = id;
       if (invokerResult.objkey) {
         result.objkey = invokerResult.objkey;
       }
     } else {
       result.code = 200;
       result.message = '没有数据需要处理';
-      result.id = logId;
+      result.id = id;
     }
     
     return result;
@@ -457,18 +467,17 @@ module.exports = cds.service.impl(async function () {
   this.on('Transfer', async (req) => {
     console.log('[Transfer] 开始处理请求');
     const { data } = req.data;
-    console.log('[Transfer] 请求数据:', JSON.stringify(data));
     const ApiInputLogHelper = require('./handlers/ApiInputLogHelper');
     
     // --------------------------
     // 检查数据格式是否正确（必须是数组）
     // --------------------------
     if (!data || !Array.isArray(data)) {
-      const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, '数据格式错误：data 必须是数组');
+      const id = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, '数据格式错误：data 必须是数组');
       return {
         code: 400,
         message: '数据格式错误：data 必须是数组',
-        id: logId
+        id: id
       };
     }
     
@@ -476,11 +485,11 @@ module.exports = cds.service.impl(async function () {
     // 检查数据是否为空
     // --------------------------
     if (data.length === 0) {
-      const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, '数据不能为空');
+      const id = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, '数据不能为空');
       return {
         code: 400,
         message: '数据不能为空',
-        id: logId
+        id: id
       };
     }
 
@@ -542,18 +551,66 @@ module.exports = cds.service.impl(async function () {
     // --------------------------
     if (errors.length > 0) {
       const errorMessages = errors.join('; ');
-      const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, errorMessages);
+      const id = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, errorMessages);
       return {
         code: 400,
         message: errorMessages,
-        id: logId
+        id: id
+      };
+    }
+
+    // --------------------------
+    // 数据库已存在校验
+    // --------------------------
+    const existingRecords = await service.run(SELECT.from(PISalesOrderRel)
+      .columns(['PIOrder', 'PIOrderItem', 'zrfc_logid'])
+      .where({
+        PIOrder: { in: data.map(p => p.PIOrder) }
+      }));
+    
+    // 获取需要查询的 zrfc_logid 列表
+    const zrfcLogids = existingRecords
+      .filter(r => r.zrfc_logid)
+      .map(r => r.zrfc_logid);
+    
+    // 查询 MultistepHeadLog 获取执行状态
+    const headLogs = {};
+    if (zrfcLogids.length > 0) {
+      const logs = await service.run(SELECT.from('MultistepHeadLog')
+        .columns(['zrfc_logid', 'code'])
+        .where({ zrfc_logid: { in: zrfcLogids } }));
+      logs.forEach(log => {
+        headLogs[log.zrfc_logid] = log.code;
+      });
+    }
+    
+    existingRecords.forEach(existing => {
+      const key = `${existing.PIOrder}-${existing.PIOrderItem}`;
+      if (keyMap.has(key)) {
+        const headLogCode = headLogs[existing.zrfc_logid];
+        if (headLogCode === 'S') {
+          errors.push(`主键 [${key}] 已成功推送，无法重复推送`);
+        }
+      }
+    });
+
+    // --------------------------
+    // 如果有任何错误，保存错误日志并返回（不调用 MultiStepInvoker）
+    // --------------------------
+    if (errors.length > 0) {
+      const errorMessages = errors.join('; ');
+      const id = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, errorMessages);
+      return {
+        code: 400,
+        message: errorMessages,
+        id: id
       };
     }
 
     // --------------------------
     // 保存 ApiInputLog（在调用 MultiStepInvoker 之前）
     // --------------------------
-    const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, null);
+    const id = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, null);
     
     // --------------------------
     // 调用 MultiStepInvoker 处理多步流程
@@ -563,7 +620,7 @@ module.exports = cds.service.impl(async function () {
     const invoker = new MultiStepInvoker();
     
     // 调用 MultiStepInvoker，传入业务流程ID和业务表数据
-    const invokerResult = await invoker.process('MM02', data, null, null);
+    const invokerResult = await invoker.process('MM02', data, null, null, null, id);
 
     // --------------------------
     // 返回创建成功的数据
@@ -574,14 +631,14 @@ module.exports = cds.service.impl(async function () {
       result.message = invokerResult.message ? invokerResult.message.substring(0, 500) : '处理成功';
       result.zrfc_logid = invokerResult.zrfcLogid;
       result.zrfcid = invokerResult.zrfcid;
-      result.id = logId;
+      result.id = id;
       if (invokerResult.objkey) {
         result.objkey = invokerResult.objkey;
       }
     } else {
       result.code = 200;
       result.message = '没有数据需要处理';
-      result.id = logId;
+      result.id = id;
     }
     
     return result;
@@ -596,11 +653,11 @@ module.exports = cds.service.impl(async function () {
     // 检查数据格式是否正确（必须是数组）
     // --------------------------
     if (!data || !Array.isArray(data)) {
-      const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, '数据格式错误：data 必须是数组');
+      const id = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, '数据格式错误：data 必须是数组');
       return {
         code: 400,
         message: '数据格式错误：data 必须是数组',
-        id: logId
+        id: id
       };
     }
     
@@ -608,11 +665,11 @@ module.exports = cds.service.impl(async function () {
     // 检查数据是否为空
     // --------------------------
     if (data.length === 0) {
-      const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, '数据不能为空');
+      const id = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, '数据不能为空');
       return {
         code: 400,
         message: '数据不能为空',
-        id: logId
+        id: id
       };
     }
 
@@ -653,27 +710,46 @@ module.exports = cds.service.impl(async function () {
     // --------------------------
     if (errors.length > 0) {
       const errorMessages = errors.join('; ');
-      const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, errorMessages);
+      const id = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, errorMessages);
       return {
         code: 400,
         message: errorMessages,
-        id: logId
+        id: id
       };
     }
 
     // --------------------------
     // 数据库已存在校验
     // --------------------------
-    const existingKeys = await service.run(SELECT.from(SalesOrderChange)
-      .columns(['PIOrder', 'PIOrderItem'])
+    const existingRecords = await service.run(SELECT.from(SalesOrderChange)
+      .columns(['PIOrder', 'PIOrderItem', 'zrfc_logid'])
       .where({
         PIOrder: { in: data.map(p => p.PIOrder) }
       }));
-
-    existingKeys.forEach(existing => {
+    
+    // 获取需要查询的 zrfc_logid 列表
+    const zrfcLogids = existingRecords
+      .filter(r => r.zrfc_logid)
+      .map(r => r.zrfc_logid);
+    
+    // 查询 MultistepHeadLog 获取执行状态
+    const headLogs = {};
+    if (zrfcLogids.length > 0) {
+      const logs = await service.run(SELECT.from('MultistepHeadLog')
+        .columns(['zrfc_logid', 'code'])
+        .where({ zrfc_logid: { in: zrfcLogids } }));
+      logs.forEach(log => {
+        headLogs[log.zrfc_logid] = log.code;
+      });
+    }
+    
+    existingRecords.forEach(existing => {
       const key = `${existing.PIOrder}-${existing.PIOrderItem}`;
       if (keyMap.has(key)) {
-        errors.push(`主键 [${key}] 已在数据库中存在，无法重复创建`);
+        const headLogCode = headLogs[existing.zrfc_logid];
+        if (headLogCode === 'S') {
+          errors.push(`主键 [${key}] 已成功推送，无法重复推送`);
+        }
       }
     });
 
@@ -702,18 +778,18 @@ module.exports = cds.service.impl(async function () {
     // --------------------------
     if (errors.length > 0) {
       const errorMessages = errors.join('; ');
-      const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, errorMessages);
+      const id = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, errorMessages);
       return {
         code: 400,
         message: errorMessages,
-        id: logId
+        id: id
       };
     }
 
     // --------------------------
     // 保存 ApiInputLog（在调用 MultiStepInvoker 之前）
     // --------------------------
-    const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, null);
+    const id = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, null);
     
     // --------------------------
     // 调用 MultiStepInvoker 处理多步流程
@@ -723,7 +799,7 @@ module.exports = cds.service.impl(async function () {
     const invoker = new MultiStepInvoker();
     
     // 调用 MultiStepInvoker，传入 SD03 作为固定的业务流程ID
-    const invokerResult = await invoker.process('SD03', data, null, null, null);
+    const invokerResult = await invoker.process('SD03', data, null, null, null, id);
     
     // --------------------------
     // 返回创建成功的数据
@@ -734,14 +810,14 @@ module.exports = cds.service.impl(async function () {
       result.message = invokerResult.message ? invokerResult.message.substring(0, 500) : '处理成功';
       result.zrfc_logid = invokerResult.zrfcLogid;
       result.zrfcid = invokerResult.zrfcid;
-      result.id = logId;
+      result.id = id;
       if (invokerResult.objkey) {
         result.objkey = invokerResult.objkey;
       }
     } else {
       result.code = 200;
       result.message = '没有数据需要处理';
-      result.id = logId;
+      result.id = id;
     }
     
     return result;

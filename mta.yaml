@@ -10,7 +10,7 @@ build-parameters:
   #     commands:
   #       - npm install
   #       - npm run build
-modules:
+modules:  
   - name: zictm-srv
     type: nodejs
     path: gen/srv

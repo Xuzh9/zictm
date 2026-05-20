@@ -7,6 +7,7 @@ annotate service.MPTTypeConfig with @(
             TypeName: '多方交易类型配置',
             TypeNamePlural: '多方交易类型配置列表'
         },
+        SelectionFields: [zdfjy, zrfcid, zxsf, zfcf],
         LineItem: [
             { $Type: 'UI.DataField', Label: '交易类型ID', Value: zdfjy },
             { $Type: 'UI.DataField', Label: '类型描述', Value: description },

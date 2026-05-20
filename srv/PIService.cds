@@ -32,7 +32,7 @@ service PIService {
      */
     entity PIDeliveryRel as projection on db.PIDeliveryRel;
 
-    action SOCreate(data: array of SalesOrderCreate) returns array of SalesOrderCreate;
-    action SOChange(data: array of SalesOrderChange) returns array of SalesOrderChange;
-    action Transfer(data: array of PITransfer) returns array of PITransfer;
+    action SOCreate(data: array of SalesOrderCreate, environment: String(20)) returns array of SalesOrderCreate;
+    action SOChange(data: array of SalesOrderChange, environment: String(20)) returns array of SalesOrderChange;
+    action Transfer(data: array of PITransfer, environment: String(20)) returns array of PITransfer;
 }

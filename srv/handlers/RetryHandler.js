@@ -81,7 +81,7 @@ class RetryHandler {
             // 返回结果
             return {
                 code: result.code,
-                message: result.code === 'S' ? (isAsync ? '重推请求已提交，正在异步处理中' : '重推成功') : result.message,
+                message: result.code === 'S' ? (isAsync ? '主键已存在' : '重推成功') : result.message,
                 zrfcLogid
             };
         } catch (error) {

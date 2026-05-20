@@ -11,7 +11,7 @@ class ApiInputLogHelper {
         const ApiInputLog = cds.entities['com.sap.zictm.ApiInputLog'];
         
         // 生成 UUID 作为日志 ID
-        const logId = cds.utils.uuid();
+        const id = cds.utils.uuid();
         
         let inputDataStr = JSON.stringify(inputData);
         if (inputDataStr.length > 1000) {
@@ -20,7 +20,7 @@ class ApiInputLogHelper {
         
         await cds.run(
             INSERT.into(ApiInputLog).entries({
-                id: logId,
+                id: id,
                 inputData: inputDataStr,
                 code: errorMessage ? 'E' : 'S',
                 message: errorMessage || '入参处理成功',
@@ -28,7 +28,7 @@ class ApiInputLogHelper {
             })
         );
         
-        return logId;
+        return id;
     }
 }
 

@@ -14,9 +14,11 @@ class MultiStepProcessor {
      * @param {number|null} startStepNum - 起始步骤编号（可选，用于重推时从失败步骤开始）
      * @param {boolean} isRetry - 是否为重推操作
      * @param {string} zdfjy - 多方交易类型ID
+     * @param {string} id - ApiInputLog的ID，用于与MultistepHeadLog关联（可选）
      * @returns {Promise<Object>} 处理结果
      */
-    async processWithLogId(zrfcLogid, zrfcid, startStepNum = null, isRetry = false, zdfjy = null) {
+    async processWithLogId(zrfcLogid, zrfcid, startStepNum = null, isRetry = false, zdfjy = null, id = null) {
+        console.log('[MultiStepProcessor.processWithLogId] 开始处理, zrfcLogid:', zrfcLogid, ', zrfcid:', zrfcid, ', id:', id);
         let lastObjKey = '';
         let lastMessage = '';
         let lastCode = '';
@@ -78,7 +80,7 @@ class MultiStepProcessor {
                 const executionAt = new Date();
                 
                 // 执行步骤
-                const executionResult = await this.executeStep(zrfcLogid, zrfcid, step, lastObjKey, zdfjy);
+                const executionResult = await this.executeStep(zrfcLogid, zrfcid, step, lastObjKey, zdfjy, environment);
                 console.log('[MultiStepProcessor] 步骤执行结果:', step.canum, 'code:', executionResult.code);
                 
                 const endTime = Date.now();
@@ -150,7 +152,7 @@ class MultiStepProcessor {
      * @param {string} zdfjy - 多方交易类型ID
      * @returns {Promise<Object>} 执行结果
      */
-    async executeStep(zrfcLogid, zrfcid, step, lastObjKey, zdfjy = null) {
+    async executeStep(zrfcLogid, zrfcid, step, lastObjKey, zdfjy = null, environment = null) {
         try {
             // 使用工厂模式获取服务实例
             const service = this.stepServiceFactory.getService(step.serviceName);
@@ -174,7 +176,8 @@ class MultiStepProcessor {
                 readsteps: step.readsteps,
                 objkey: lastObjKey,
                 zrfcLogid,
-                zdfjy
+                zdfjy,
+                environment
             };
             
             // 执行服务
@@ -209,11 +212,12 @@ class MultiStepProcessor {
      */
     async saveLog(zrfcLogid, zrfcid, canum, executionResult, executionTime, executionAt, isRetry = false, objtype = null, description = null) {
         const MultistepLog = cds.entities['com.sap.zictm.MultistepLog'];
+        const MultistepHeadLog = cds.entities['com.sap.zictm.MultistepHeadLog'];
         
-        // 检查日志是否已存在
+        // 检查日志是否已存在（主键为 zrfc_logid + canum）
         const existingLog = await cds.run(
             SELECT.one.from(MultistepLog)
-                .where({ zrfc_logid: zrfcLogid, zrfcid, canum: canum.toString() })
+                .where({ zrfc_logid: zrfcLogid, canum: canum })
         );
 
         if (existingLog) {
@@ -222,6 +226,7 @@ class MultiStepProcessor {
             await cds.run(
                 UPDATE(MultistepLog)
                     .set({
+                        zrfcid: zrfcid,
                         code: executionResult.code,
                         message: executionResult.message,
                         objkey: executionResult.objkey,
@@ -232,20 +237,75 @@ class MultiStepProcessor {
                         lastExecutionAt: executionAt,
                         lastExecutionTime: executionTime
                     })
-                    .where({ zrfc_logid: zrfcLogid, zrfcid, canum: canum.toString() })
+                    .where({ zrfc_logid: zrfcLogid, canum: canum })
             );
         } else {
             // 如果日志不存在，插入新记录（首次执行）
             await cds.run(
                 INSERT.into(MultistepLog).entries({
                     zrfc_logid: zrfcLogid,
-                    zrfcid,
-                    canum: canum.toString(),
+                    canum: canum,
+                    zrfcid: zrfcid,
                     code: executionResult.code,
                     message: executionResult.message,
                     objkey: executionResult.objkey,
                     objtype: objtype || '',
                     description: description || '',
+                    executionTime,
+                    executionAt,
+                    lastExecutionAt: executionAt,
+                    lastExecutionTime: executionTime
+                })
+            );
+        }
+        
+        // 同时更新 MultistepHeadLog 表
+        await this.updateMultistepHeadLog(zrfcLogid, zrfcid, executionResult, executionTime, executionAt, id);
+    }
+    
+    /**
+     * 更新多步执行日志抬头表
+     * @param {string} zrfcLogid - 多步ID
+     * @param {string} zrfcid - 业务流程ID
+     * @param {Object} executionResult - 执行结果
+     * @param {number} executionTime - 执行时间（秒）
+     * @param {Date} executionAt - 执行时间戳
+     * @param {string} id - ApiInputLog的ID，用于与MultistepHeadLog关联（可选）
+     */
+    async updateMultistepHeadLog(zrfcLogid, zrfcid, executionResult, executionTime, executionAt, id = null) {
+        const MultistepHeadLog = cds.entities['com.sap.zictm.MultistepHeadLog'];
+        
+        // 检查抬头日志是否已存在
+        const existingHeadLog = await cds.run(
+            SELECT.one.from(MultistepHeadLog)
+                .where({ zrfc_logid: zrfcLogid })
+        );
+        
+        if (existingHeadLog) {
+            // 如果抬头日志已存在，更新执行结果（保留原有的id）
+            await cds.run(
+                UPDATE(MultistepHeadLog)
+                    .set({
+                        id: existingHeadLog.id, // 保留原有的id（与ApiInputLog的关联不变）
+                        zrfcid: zrfcid,
+                        code: executionResult.code,
+                        message: executionResult.message,
+                        executionTime: existingHeadLog.executionTime + executionTime,
+                        executionAt: executionAt,
+                        lastExecutionAt: executionAt,
+                        lastExecutionTime: executionTime
+                    })
+                    .where({ zrfc_logid: zrfcLogid })
+            );
+        } else {
+            // 如果抬头日志不存在，插入新记录（使用传入的id作为id）
+            await cds.run(
+                INSERT.into(MultistepHeadLog).entries({
+                    zrfc_logid: zrfcLogid,
+                    id: id, // 使用传入的id
+                    zrfcid: zrfcid,
+                    code: executionResult.code,
+                    message: executionResult.message,
                     executionTime,
                     executionAt,
                     lastExecutionAt: executionAt,

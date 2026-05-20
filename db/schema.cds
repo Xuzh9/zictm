@@ -45,11 +45,24 @@ entity ApiInputLog {
     executionAt    : Timestamp @title: '执行时间';      // 执行时间
 }
 
+//多步执行日志抬头表
+entity MultistepHeadLog {
+    key zrfc_logid      : UUID @title: '多步ID';           // 多步ID
+    id                  : UUID @title: 'ID';                // ID
+    zrfcid              : String(10) @title: '业务流程ID';     // 业务流程ID
+    code                : String(2) @title: '消息状态';      // 消息状态(S成功/E失败)
+    message             : String(255) @title: '消息文本';    // 消息文本
+    executionAt         : Timestamp @title: '执行时间';      // 执行时间
+    executionTime       : Decimal(10,2) @title: '运行时间';  // 运行时间（秒）
+    lastExecutionAt     : Timestamp @title: '最新执行时间';      // 最新执行时间
+    lastExecutionTime   : Decimal(10,2) @title: '最新运行时间';  // 最新运行时间（秒）
+}
+
 // 多步执行日志表
 entity MultistepLog {
     key zrfc_logid      : UUID @title: '多步ID';           // 多步ID
-    key zrfcid          : String(10) @title: '业务流程ID';     // 业务流程ID
     key canum           : Integer @title: '步骤编号';     // 步骤编号（如10、20、30）
+    zrfcid              : String(10) @title: '业务流程ID';     // 业务流程ID
     description         : String(50) @title: '步骤描述';      // 步骤描述
     code                : String(2) @title: '消息状态';      // 消息状态(S成功/E失败)
     message             : String(255) @title: '消息文本';    // 消息文本

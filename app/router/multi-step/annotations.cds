@@ -7,6 +7,7 @@ annotate service.ProcessConfig with @(
             TypeName: '业务流程配置',
             TypeNamePlural: '业务流程配置列表'
         },
+        SelectionFields: [zrfcid],
         LineItem: [
             { $Type: 'UI.DataField', Label: '业务流程ID', Value: zrfcid },
             { $Type: 'UI.DataField', Label: '流程描述', Value: description },

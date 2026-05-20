@@ -14,11 +14,11 @@ module.exports = cds.service.impl(async function () {
     // 检查数据格式是否正确（必须是数组）
     // --------------------------
     if (!data || !Array.isArray(data)) {
-      const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, '数据格式错误：data 必须是数组');
+      const id = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, '数据格式错误：data 必须是数组');
       return {
         code: 400,
         message: '数据格式错误：data 必须是数组',
-        id: logId
+        id: id
       };
     }
     
@@ -26,11 +26,11 @@ module.exports = cds.service.impl(async function () {
     // 检查数据是否为空
     // --------------------------
     if (data.length === 0) {
-      const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, '数据不能为空');
+      const id = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, '数据不能为空');
       return {
         code: 400,
         message: '数据不能为空',
-        id: logId
+        id: id
       };
     }
 
@@ -71,11 +71,11 @@ module.exports = cds.service.impl(async function () {
     // --------------------------
     if (errors.length > 0) {
       const errorMessages = errors.join('; ');
-      const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, errorMessages);
+      const id = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, errorMessages);
       return {
         code: 400,
         message: errorMessages,
-        id: logId
+        id: id
       };
     }
 
@@ -100,18 +100,18 @@ module.exports = cds.service.impl(async function () {
     // --------------------------
     if (errors.length > 0) {
       const errorMessages = errors.join('; ');
-      const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, errorMessages);
+      const id = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, errorMessages);
       return {
         code: 400,
         message: errorMessages,
-        id: logId
+        id: id
       };
     }
 
     // --------------------------
     // 保存 ApiInputLog（在调用 MultiStepInvoker 之前）
     // --------------------------
-    const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, null);
+    const id = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, null);
     
     // --------------------------
     // 调用 MultiStepInvoker 处理多步流程
@@ -121,7 +121,7 @@ module.exports = cds.service.impl(async function () {
     const invoker = new MultiStepInvoker();
     
     // 调用 MultiStepInvoker，传入业务流程ID和三个业务表的数据
-    const invokerResult = await invoker.process('MM01', data, null, null);
+    const invokerResult = await invoker.process('MM01', data, null, null, null, id);
 
     // --------------------------
     // 返回创建成功的数据
@@ -132,14 +132,14 @@ module.exports = cds.service.impl(async function () {
       result.message = invokerResult.message ? invokerResult.message.substring(0, 500) : '处理成功';
       result.zrfc_logid = invokerResult.zrfcLogid;
       result.zrfcid = invokerResult.zrfcid;
-      result.id = logId;
+      result.id = id;
       if (invokerResult.objkey) {
         result.objkey = invokerResult.objkey;
       }
     } else {
       result.code = 200;
       result.message = '没有数据需要处理';
-      result.id = logId;
+      result.id = id;
     }
     
     return result;
@@ -153,11 +153,11 @@ module.exports = cds.service.impl(async function () {
     // 检查数据格式是否正确（必须是数组）
     // --------------------------
     if (!data || !Array.isArray(data)) {
-      const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, '数据格式错误：data 必须是数组');
+      const id = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, '数据格式错误：data 必须是数组');
       return {
         code: 400,
         message: '数据格式错误：data 必须是数组',
-        id: logId
+        id: id
       };
     }
     
@@ -165,11 +165,11 @@ module.exports = cds.service.impl(async function () {
     // 检查数据是否为空
     // --------------------------
     if (data.length === 0) {
-      const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, '数据不能为空');
+      const id = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, '数据不能为空');
       return {
         code: 400,
         message: '数据不能为空',
-        id: logId
+        id: id
       };
     }
 
@@ -210,11 +210,11 @@ module.exports = cds.service.impl(async function () {
     // --------------------------
     if (errors.length > 0) {
       const errorMessages = errors.join('; ');
-      const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, errorMessages);
+      const id = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, errorMessages);
       return {
         code: 400,
         message: errorMessages,
-        id: logId
+        id: id
       };
     }
 
@@ -239,18 +239,18 @@ module.exports = cds.service.impl(async function () {
     // --------------------------
     if (errors.length > 0) {
       const errorMessages = errors.join('; ');
-      const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, errorMessages);
+      const id = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, errorMessages);
       return {
         code: 400,
         message: errorMessages,
-        id: logId
+        id: id
       };
     }
 
     // --------------------------
     // 保存 ApiInputLog（在调用 MultiStepInvoker 之前）
     // --------------------------
-    const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, null);
+    const id = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, null);
     
     // --------------------------
     // 调用 MultiStepInvoker 处理多步流程
@@ -260,7 +260,7 @@ module.exports = cds.service.impl(async function () {
     const invoker = new MultiStepInvoker();
     
     // 调用 MultiStepInvoker，传入业务流程ID和三个业务表的数据
-    const invokerResult = await invoker.process('FI01', data, null, null);
+    const invokerResult = await invoker.process('FI01', data, null, null, null, id);
 
     // --------------------------
     // 返回创建成功的数据
@@ -271,14 +271,14 @@ module.exports = cds.service.impl(async function () {
       result.message = invokerResult.message ? invokerResult.message.substring(0, 500) : '处理成功';
       result.zrfc_logid = invokerResult.zrfcLogid;
       result.zrfcid = invokerResult.zrfcid;
-      result.id = logId;
+      result.id = id;
       if (invokerResult.objkey) {
         result.objkey = invokerResult.objkey;
       }
     } else {
       result.code = 200;
       result.message = '没有数据需要处理';
-      result.id = logId;
+      result.id = id;
     }
     
     return result;
@@ -292,11 +292,11 @@ module.exports = cds.service.impl(async function () {
     // 检查数据格式是否正确（必须是数组）
     // --------------------------
     if (!data || !Array.isArray(data)) {
-      const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, '数据格式错误：data 必须是数组');
+      const id = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, '数据格式错误：data 必须是数组');
       return {
         code: 400,
         message: '数据格式错误：data 必须是数组',
-        id: logId
+        id: id
       };
     }
     
@@ -304,11 +304,11 @@ module.exports = cds.service.impl(async function () {
     // 检查数据是否为空
     // --------------------------
     if (data.length === 0) {
-      const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, '数据不能为空');
+      const id = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, '数据不能为空');
       return {
         code: 400,
         message: '数据不能为空',
-        id: logId
+        id: id
       };
     }
 
@@ -379,11 +379,11 @@ module.exports = cds.service.impl(async function () {
     // --------------------------
     if (errors.length > 0) {
       const errorMessages = errors.join('; ');
-      const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, errorMessages);
+      const id = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, errorMessages);
       return {
         code: 400,
         message: errorMessages,
-        id: logId
+        id: id
       };
     }
 
@@ -404,11 +404,11 @@ module.exports = cds.service.impl(async function () {
         }
       });
     } catch (error) {
-      const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, `数据库查询失败: ${error.message}`);
+      const id = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, `数据库查询失败: ${error.message}`);
       return {
         code: 500,
         message: `数据库查询失败: ${error.message}`,
-        id: logId
+        id: id
       };
     }
 
@@ -423,22 +423,22 @@ module.exports = cds.service.impl(async function () {
     if (!firstData.SalesOrganization) {
       errors.push('缺少必填字段：SalesOrganization');
       const errorMessages = errors.join('; ');
-      const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, errorMessages);
+      const id = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, errorMessages);
       return {
         code: 400,
         message: errorMessages,
-        id: logId
+        id: id
       };
     }
     
     if (!firstData.ReceivingPlant) {
       errors.push('缺少必填字段：ReceivingPlant');
       const errorMessages = errors.join('; ');
-      const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, errorMessages);
+      const id = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, errorMessages);
       return {
         code: 400,
         message: errorMessages,
-        id: logId
+        id: id
       };
     }
     
@@ -456,11 +456,11 @@ module.exports = cds.service.impl(async function () {
         errors.push(`未找到多方交易类型配置：SalesOrganization=${firstData.SalesOrganization}, ReceivingPlant=${firstData.ReceivingPlant}`);
       }
     } catch (error) {
-      const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, `MPTTypeConfig 查询失败: ${error.message}`);
+      const id = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, `MPTTypeConfig 查询失败: ${error.message}`);
       return {
         code: 500,
         message: `MPTTypeConfig 查询失败: ${error.message}`,
-        id: logId
+        id: id
       };
     }
 
@@ -469,18 +469,18 @@ module.exports = cds.service.impl(async function () {
     // --------------------------
     if (errors.length > 0) {
       const errorMessages = errors.join('; ');
-      const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, errorMessages);
+      const id = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, errorMessages);
       return {
         code: 400,
         message: errorMessages,
-        id: logId
+        id: id
       };
     }
 
     // --------------------------
     // 保存 ApiInputLog（在调用 MultiStepInvoker 之前）
     // --------------------------
-    const logId = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, null);
+    const id = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, null);
     
     // --------------------------
     // 调用 MultiStepInvoker 处理多步流程
@@ -490,7 +490,7 @@ module.exports = cds.service.impl(async function () {
     const invoker = new MultiStepInvoker();
     
     // 调用 MultiStepInvoker，传入业务流程ID、数据和 zdfjy
-    const invokerResult = await invoker.process(mptConfig.zrfcid, data, null, null, mptConfig.zdfjy);
+    const invokerResult = await invoker.process(mptConfig.zrfcid, data, null, null, mptConfig.zdfjy, id);
 
     // --------------------------
     // 返回创建成功的数据
@@ -501,14 +501,14 @@ module.exports = cds.service.impl(async function () {
       result.message = invokerResult.message ? invokerResult.message.substring(0, 500) : '处理成功';
       result.zrfc_logid = invokerResult.zrfcLogid;
       result.zrfcid = invokerResult.zrfcid;
-      result.id = logId;
+      result.id = id;
       if (invokerResult.objkey) {
         result.objkey = invokerResult.objkey;
       }
     } else {
       result.code = 200;
       result.message = '没有数据需要处理';
-      result.id = logId;
+      result.id = id;
     }
     
     return result;
