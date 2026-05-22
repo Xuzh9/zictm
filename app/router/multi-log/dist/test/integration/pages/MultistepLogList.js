@@ -1,2 +1,0 @@
-sap.ui.define(["sap/fe/test/ListReport"],function(t){"use strict";var e={actions:{},assertions:{}};return new t({appId:"multilog",componentId:"MultistepLogList",contextPath:"/MultistepLog"},e)});
-//# sourceMappingURL=MultistepLogList.js.map

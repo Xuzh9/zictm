@@ -9,19 +9,17 @@ sap.ui.define([
 
         opaTest("Start application", function (Given, When, Then) {
             Given.iStartMyApp();
-
-            Then.onTheMultistepLogList.iSeeThisPage();
-
+            Then.onTheMultistepHeadLogList.iSeeThisPage();
         });
 
 
         opaTest("Navigate to ObjectPage", function (Given, When, Then) {
             // Note: this test will fail if the ListReport page doesn't show any data
             
-            Then.onTheMultistepLogList.onTable().iCheckRows();
+            Then.onTheMultistepHeadLogList.onTable().iCheckRows();
 
-            When.onTheMultistepLogList.onTable().iPressRow(0);
-            Then.onTheMultistepLogObjectPage.iSeeThisPage();
+            When.onTheMultistepHeadLogList.onTable().iPressRow(0);
+            Then.onTheMultistepHeadLogObjectPage.iSeeThisPage();
 
         });
 

@@ -8,14 +8,14 @@
     "sapui5"
   ],
   "main": "webapp/index.html",
+  "dependencies": {},
   "devDependencies": {
-    "@sap-ux/eslint-plugin-fiori-tools": "^9.0.0",
-    "@sap/ux-ui5-tooling": "^1.23.0",
     "@ui5/cli": "^4.0.33",
-    "eslint": "^9"
+    "@sap/ux-ui5-tooling": "1",
+    "@sap-ux/eslint-plugin-fiori-tools": "^10.0.0",
+    "eslint": "^10"
   },
   "scripts": {
-    "build": "ui5 build",
     "deploy-config": "npx -p @sap/ux-ui5-tooling fiori add deploy-config cf"
   }
 }

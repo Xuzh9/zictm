@@ -31,7 +31,7 @@ class MultiStepProcessor {
                 await this.saveLog(zrfcLogid, zrfcid, '0', {
                     code: 'E',
                     message: errorMsg
-                }, 0, new Date(), isRetry, null, '');
+                }, 0, new Date(), isRetry, null, '', id);
                 return {
                     code: 'E',
                     message: errorMsg,
@@ -80,7 +80,7 @@ class MultiStepProcessor {
                 const executionAt = new Date();
                 
                 // 执行步骤
-                const executionResult = await this.executeStep(zrfcLogid, zrfcid, step, lastObjKey, zdfjy, environment);
+                const executionResult = await this.executeStep(zrfcLogid, zrfcid, step, lastObjKey, zdfjy);
                 console.log('[MultiStepProcessor] 步骤执行结果:', step.canum, 'code:', executionResult.code);
                 
                 const endTime = Date.now();
@@ -91,7 +91,7 @@ class MultiStepProcessor {
                 await this.saveLog(zrfcLogid, zrfcid, step.canum, {
                     ...executionResult,
                     message: logMessage
-                }, executionTime, executionAt, isRetry, step.objtype, step.description);
+                }, executionTime, executionAt, isRetry, step.objtype, step.description, id);
 
                 // 更新上一步对象号、消息和代码
                 lastObjKey = executionResult.objkey || lastObjKey;
@@ -117,7 +117,7 @@ class MultiStepProcessor {
             await this.saveLog(zrfcLogid, zrfcid, '0', {
                 code: 'E',
                 message: errorMessage
-            }, 0, new Date(), isRetry, null, '');
+            }, 0, new Date(), isRetry, null, '', id);
 
             return {
                 code: 'E',
@@ -152,7 +152,7 @@ class MultiStepProcessor {
      * @param {string} zdfjy - 多方交易类型ID
      * @returns {Promise<Object>} 执行结果
      */
-    async executeStep(zrfcLogid, zrfcid, step, lastObjKey, zdfjy = null, environment = null) {
+    async executeStep(zrfcLogid, zrfcid, step, lastObjKey, zdfjy = null) {
         try {
             // 使用工厂模式获取服务实例
             const service = this.stepServiceFactory.getService(step.serviceName);
@@ -176,8 +176,7 @@ class MultiStepProcessor {
                 readsteps: step.readsteps,
                 objkey: lastObjKey,
                 zrfcLogid,
-                zdfjy,
-                environment
+                zdfjy
             };
             
             // 执行服务
@@ -209,17 +208,18 @@ class MultiStepProcessor {
      * @param {boolean} isRetry - 是否为重推操作
      * @param {string} objtype - 对象类型（从StepConfig获取）
      * @param {string} description - 步骤描述（从StepConfig获取）
+     * @param {string} id - ApiInputLog的ID，用于与MultistepHeadLog关联
      */
-    async saveLog(zrfcLogid, zrfcid, canum, executionResult, executionTime, executionAt, isRetry = false, objtype = null, description = null) {
+    async saveLog(zrfcLogid, zrfcid, canum, executionResult, executionTime, executionAt, isRetry = false, objtype = null, description = null, id = null) {
         const MultistepLog = cds.entities['com.sap.zictm.MultistepLog'];
         const MultistepHeadLog = cds.entities['com.sap.zictm.MultistepHeadLog'];
-        
+         
         // 检查日志是否已存在（主键为 zrfc_logid + canum）
         const existingLog = await cds.run(
             SELECT.one.from(MultistepLog)
                 .where({ zrfc_logid: zrfcLogid, canum: canum })
         );
-
+ 
         if (existingLog) {
             // 如果日志已存在，更新执行结果
             // 重推时允许更新状态为 E 或空的记录
@@ -235,7 +235,8 @@ class MultiStepProcessor {
                         executionTime: isRetry ? existingLog.executionTime : executionTime,
                         executionAt: isRetry ? existingLog.executionAt : executionAt,
                         lastExecutionAt: executionAt,
-                        lastExecutionTime: executionTime
+                        lastExecutionTime: executionTime,
+                        head_zrfc_logid: zrfcLogid
                     })
                     .where({ zrfc_logid: zrfcLogid, canum: canum })
             );
@@ -254,7 +255,8 @@ class MultiStepProcessor {
                     executionTime,
                     executionAt,
                     lastExecutionAt: executionAt,
-                    lastExecutionTime: executionTime
+                    lastExecutionTime: executionTime,
+                    head_zrfc_logid: zrfcLogid
                 })
             );
         }

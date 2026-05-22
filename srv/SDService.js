@@ -83,15 +83,35 @@ module.exports = cds.service.impl(async function () {
     // 数据库已存在校验
     // --------------------------
     const existingKeys = await service.run(SELECT.from(Transfer)
-      .columns(['TransferOrder', 'TransferOrderItem'])
+      .columns(['TransferOrder', 'TransferOrderItem', 'zrfc_logid'])
       .where({
         TransferOrder: { in: data.map(p => p.TransferOrder) }
       }));
 
+    // 获取需要查询的 zrfc_logid 列表
+    const zrfcLogids = existingKeys
+      .filter(r => r.zrfc_logid)
+      .map(r => r.zrfc_logid);
+    
+    // 查询 MultistepHeadLog 获取执行状态
+    const headLogs = {};
+    if (zrfcLogids.length > 0) {
+      const MultistepHeadLog = cds.entities['com.sap.zictm.MultistepHeadLog'];
+      const logs = await cds.run(SELECT.from(MultistepHeadLog)
+        .columns(['zrfc_logid', 'code'])
+        .where({ zrfc_logid: { in: zrfcLogids } }));
+      logs.forEach(log => {
+        headLogs[log.zrfc_logid] = log.code;
+      });
+    }
+
     existingKeys.forEach(existing => {
       const key = `${existing.TransferOrder}-${existing.TransferOrderItem}`;
       if (keyMap.has(key)) {
-        errors.push(`主键 [${key}] 已在数据库中存在，无法重复创建`);
+        const headLogCode = headLogs[existing.zrfc_logid];
+        if (headLogCode === 'S') {
+          errors.push(`主键 [${key}] 已成功推送，无法重复推送`);
+        }
       }
     });
 

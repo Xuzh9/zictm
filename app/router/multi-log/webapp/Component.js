@@ -1,11 +1,12 @@
-sap.ui.define([
-    "sap/fe/core/AppComponent"
-], function(AppComponent) {
-    "use strict";
+sap.ui.define(
+    ["sap/fe/core/AppComponent"],
+    function (Component) {
+        "use strict";
 
-    return AppComponent.extend("multilog.Component", {
-        metadata: {
-            manifest: "json"
-        }
-    });
-});
+        return Component.extend("multilog.Component", {
+            metadata: {
+                manifest: "json"
+            }
+        });
+    }
+);

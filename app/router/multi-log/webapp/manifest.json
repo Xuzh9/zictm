@@ -1,165 +1,170 @@
 {
-    "_version": "1.83.0",
-    "sap.app": {
-        "id": "multilog",
-        "type": "application",
-        "i18n": {
-            "bundleUrl": "i18n/i18n.properties",
-            "supportedLocales": [
-                ""
-            ]
-        },
-        "applicationVersion": {
-            "version": "0.0.1"
-        },
-        "title": "{{appTitle}}",
-        "description": "{{appDescription}}",
-        "resources": "resources.json",
-        "sourceTemplate": {
-            "id": "@sap/generator-fiori:worklist",
-            "version": "1.22.0",
-            "toolsId": "2c269a7a-994b-4e99-a7b9-75cdd7d6a0bb"
-        },
-        "dataSources": {
-            "mainService": {
-                "uri": "/odata/v4/multistep-log/",
-                "type": "OData",
-                "settings": {
-                    "annotations": [],
-                    "odataVersion": "4.01"
-                }
-            }
+  "_version": "1.84.0",
+  "sap.app": {
+    "id": "multilog",
+    "type": "application",
+    "i18n": "i18n/i18n.properties",
+    "applicationVersion": {
+      "version": "0.0.1"
+    },
+    "title": "{{appTitle}}",
+    "description": "{{appDescription}}",
+    "resources": "resources.json",
+    "sourceTemplate": {
+      "id": "@sap/generator-fiori:worklist",
+      "version": "1.24.0",
+      "toolsId": "c2737ebb-49be-410a-9d89-ef3de2c59324"
+    },
+    "dataSources": {
+      "mainService": {
+        "uri": "/odata/v4/multistep-log/",
+        "type": "OData",
+        "settings": {
+          "annotations": [],
+          "odataVersion": "4.01"
         }
-    },
-    "sap.ui": {
-        "technology": "UI5",
-        "icons": {
-            "icon": "",
-            "favIcon": "",
-            "phone": "",
-            "phone@2": "",
-            "tablet": "",
-            "tablet@2": ""
-        },
-        "deviceTypes": {
-            "desktop": true,
-            "tablet": true,
-            "phone": true
-        }
-    },
-    "sap.ui5": {
-        "flexEnabled": false,
-        "dependencies": {
-            "minUI5Version": "1.147.1",
-            "libs": {
-                "sap.m": {},
-                "sap.ui.core": {},
-                "sap.fe.templates": {}
-            }
-        },
-        "contentDensities": {
-            "compact": true,
-            "cozy": true
-        },
-        "models": {
-            "i18n": {
-                "type": "sap.ui.model.resource.ResourceModel",
-                "settings": {
-                    "bundleName": "multilog.i18n.i18n",
-                    "supportedLocales": [
-                        ""
-                    ]
-                }
-            },
-            "": {
-                "dataSource": "mainService",
-                "preload": true,
-                "settings": {
-                    "operationMode": "Server",
-                    "autoExpandSelect": true,
-                    "earlyRequests": true
-                }
-            },
-            "@i18n": {
-                "type": "sap.ui.model.resource.ResourceModel",
-                "uri": "i18n/i18n.properties",
-                "settings": {
-                    "supportedLocales": [
-                        ""
-                    ]
-                }
-            }
-        },
-        "resources": {
-            "css": []
-        },
-        "routing": {
-            "config": {
-                "async": true
-            },
-            "routes": [
-                {
-                    "pattern": ":?query:",
-                    "name": "MultistepLogList",
-                    "target": "MultistepLogList"
-                },
-                {
-                    "pattern": "MultistepLog({key}):?query:",
-                    "name": "MultistepLogObjectPage",
-                    "target": "MultistepLogObjectPage"
-                }
-            ],
-            "targets": {
-                "MultistepLogList": {
-                    "type": "Component",
-                    "id": "MultistepLogList",
-                    "name": "sap.fe.templates.ListReport",
-                    "controlAggregation": "pages",
-                    "options": {
-                        "settings": {
-                            "contextPath": "/MultistepLog",
-                            "variantManagement": "Page",
-                            "hideFilterBar": false,
-                            "navigation": {
-                                "MultistepLog": {
-                                    "detail": {
-                                        "route": "MultistepLogObjectPage"
-                                    }
-                                }
-                            },
-                            "controlConfiguration": {
-                                "@com.sap.vocabularies.UI.v1.LineItem": {
-                                    "tableSettings": {
-                                        "type": "ResponsiveTable"
-                                    }
-                                }
-                            }
-                        }
-                    }
-                },
-                "MultistepLogObjectPage": {
-                    "type": "Component",
-                    "id": "MultistepLogObjectPage",
-                    "name": "sap.fe.templates.ObjectPage",
-                    "controlAggregation": "pages",
-                    "options": {
-                        "settings": {
-                            "editableHeaderContent": false,
-                            "contextPath": "/MultistepLog"
-                        }
-                    }
-                }
-            }
-        },
-        "flexBundle": false
-    },
-    "sap.fiori": {
-        "registrationIds": [],
-        "archeType": "transactional"
-    },
-    "sap.fe": {
-        "app": {
-            "enableLazyLoading": true
-        }
+      }
     }
+  },
+  "sap.ui": {
+    "technology": "UI5",
+    "icons": {
+      "icon": "",
+      "favIcon": "",
+      "phone": "",
+      "phone@2": "",
+      "tablet": "",
+      "tablet@2": ""
+    },
+    "deviceTypes": {
+      "desktop": true,
+      "tablet": true,
+      "phone": true
+    }
+  },
+  "sap.ui5": {
+    "flexEnabled": true,
+    "dependencies": {
+      "minUI5Version": "1.148.0",
+      "libs": {
+        "sap.m": {},
+        "sap.ui.core": {},
+        "sap.fe.templates": {}
+      }
+    },
+    "contentDensities": {
+      "compact": true,
+      "cozy": true
+    },
+    "models": {
+      "i18n": {
+        "type": "sap.ui.model.resource.ResourceModel",
+        "settings": {
+          "bundleName": "multilog.i18n.i18n"
+        }
+      },
+      "": {
+        "dataSource": "mainService",
+        "preload": true,
+        "settings": {
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": true
+        }
+      },
+      "@i18n": {
+        "type": "sap.ui.model.resource.ResourceModel",
+        "uri": "i18n/i18n.properties"
+      }
+    },
+    "resources": {
+      "css": []
+    },
+    "routing": {
+      "config": {},
+      "routes": [
+        {
+          "pattern": ":?query:",
+          "name": "MultistepHeadLogList",
+          "target": "MultistepHeadLogList"
+        },
+        {
+          "pattern": "MultistepHeadLog({key}):?query:",
+          "name": "MultistepHeadLogObjectPage",
+          "target": "MultistepHeadLogObjectPage"
+        },
+        {
+          "pattern": "MultistepHeadLog({key})/items({key2}):?query:",
+          "name": "MultistepLogObjectPage",
+          "target": "MultistepLogObjectPage"
+        }
+      ],
+      "targets": {
+        "MultistepHeadLogList": {
+          "type": "Component",
+          "id": "MultistepHeadLogList",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "contextPath": "/MultistepHeadLog",
+              "variantManagement": "Page",
+              "hideFilterBar": false,
+              "navigation": {
+                "MultistepHeadLog": {
+                  "detail": {
+                    "route": "MultistepHeadLogObjectPage"
+                  }
+                }
+              },
+              "controlConfiguration": {
+                "@com.sap.vocabularies.UI.v1.LineItem": {
+                  "tableSettings": {
+                    "type": "ResponsiveTable"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "MultistepHeadLogObjectPage": {
+          "type": "Component",
+          "id": "MultistepHeadLogObjectPage",
+          "name": "sap.fe.templates.ObjectPage",
+          "options": {
+            "settings": {
+              "editableHeaderContent": false,
+              "contextPath": "/MultistepHeadLog",
+              "navigation": {
+                "items": {
+                  "detail": {
+                    "route": "MultistepLogObjectPage"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "MultistepLogObjectPage": {
+          "type": "Component",
+          "id": "MultistepLogObjectPage",
+          "name": "sap.fe.templates.ObjectPage",
+          "options": {
+            "settings": {
+              "editableHeaderContent": false,
+              "contextPath": "/MultistepHeadLog/items"
+            }
+          }
+        }
+      }
+    }
+  },
+  "sap.fiori": {
+    "registrationIds": [],
+    "archeType": "transactional"
+  },
+  "sap.fe": {
+    "app": {
+      "enableLazyLoading": true
+    }
+  }
 }

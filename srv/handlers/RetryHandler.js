@@ -13,9 +13,10 @@ class RetryHandler {
     /**
      * 重处理失败的业务流程
      * @param {string} zrfcLogid - 多步ID
+     * @param {string} id - ApiInputLog的ID（可选，当业务数据更新时传入新的id）
      * @returns {Promise<Object>} 执行结果
      */
-    async retry(zrfcLogid) {
+    async retry(zrfcLogid, id = null) {
         // 检查是否正在重推中，防止重复调用
         if (this.retryingLogids.has(zrfcLogid)) {
             console.log('[RetryHandler.retry] 日志ID', zrfcLogid, '正在重推中，跳过重复调用');
@@ -30,7 +31,7 @@ class RetryHandler {
         this.retryingLogids.add(zrfcLogid);
         
         try {
-            console.log('[RetryHandler.retry] 开始重推, zrfcLogid:', zrfcLogid);
+            console.log('[RetryHandler.retry] 开始重推, zrfcLogid:', zrfcLogid, ', id:', id);
             
             // 查询多步执行日志，找到失败的步骤
             const failedSteps = await this.getFailedSteps(zrfcLogid);
@@ -65,16 +66,16 @@ class RetryHandler {
             if (isAsync) {
                 // 异步执行重推
                 console.log('[RetryHandler.retry] 开始异步重推');
-                this.executeAsync(zrfcLogid, zrfcid, failedStepNum, zdfjy);
+                this.executeAsync(zrfcLogid, zrfcid, failedStepNum, zdfjy, id);
                 result = {
                     code: 'S',
                     message: '重推请求已提交，正在异步处理中',
                     zrfcLogid
                 };
             } else {
-                // 同步执行重推（传递 zdfjy）
+                // 同步执行重推（传递 zdfjy 和 id）
                 console.log('[RetryHandler.retry] 开始同步重推');
-                result = await this.processor.processWithLogId(zrfcLogid, zrfcid, failedStepNum, true, zdfjy);
+                result = await this.processor.processWithLogId(zrfcLogid, zrfcid, failedStepNum, true, zdfjy, id);
                 console.log('[RetryHandler.retry] 同步重推完成, result:', result);
             }
 
@@ -99,11 +100,12 @@ class RetryHandler {
      * @param {string} zrfcid - 业务流程ID
      * @param {number} failedStepNum - 失败步骤编号
      * @param {string} zdfjy - 多方交易类型ID
+     * @param {string} id - ApiInputLog的ID（可选）
      */
-    executeAsync(zrfcLogid, zrfcid, failedStepNum, zdfjy) {
+    executeAsync(zrfcLogid, zrfcid, failedStepNum, zdfjy, id = null) {
         setTimeout(async () => {
             try {
-                await this.processor.processWithLogId(zrfcLogid, zrfcid, failedStepNum, true, zdfjy);
+                await this.processor.processWithLogId(zrfcLogid, zrfcid, failedStepNum, true, zdfjy, id);
             } catch (error) {
                 console.error('异步重推处理异常:', error);
             }

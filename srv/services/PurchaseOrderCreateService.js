@@ -49,7 +49,7 @@ class PurchaseOrderService {
             const mptStepConfig = await this.commonUtils.getMPTStepConfig(zdfjy, canum);
 
             // 构建采购订单数据，同时获取行号映射和计算后的价格
-            const { purchaseOrderData, itemPrices } = await this.buildPurchaseOrderData(businessDataList, mptStepConfig, zrfcid, zdfjy);
+            const { purchaseOrderData, itemPrices } = await this.buildPurchaseOrderData(businessDataList, mptStepConfig, zrfcid, zdfjy, canum);
             
             // 调试：打印请求数据
             console.log('[PurchaseOrderService] 请求数据:', JSON.stringify(purchaseOrderData, null, 2));
@@ -108,11 +108,11 @@ class PurchaseOrderService {
                 const purchaseOrder = result.data.PurchaseOrder || '';
                 
                 // 根据 zrfcid 执行不同的更新操作
-                if (zrfcid === 'SD01' || zrfcid === 'SD06') {
-                    // SD01/SD06: 更新 PISalesOrderRel 表
-                    await this.updatePISalesOrderRel(purchaseOrder, businessDataList, itemPrices, zrfcid);
+                if (zrfcid === 'SD01' || zrfcid === 'SD06' || zrfcid === 'SD08') {
+                    // 更新 PISalesOrderRel 表
+                    await this.updatePISalesOrderRel(purchaseOrder, businessDataList, itemPrices, zrfcid, canum);
                 } else if (zrfcid === 'SD04') {
-                    // SD04: 更新 OutboundDelivery 的 PurchasePrice（使用之前计算好的价格）
+                    // 更新 OutboundDelivery 的 PurchasePrice（使用之前计算好的价格）
                     await this.updateOutboundDeliveryPurchasePrice(itemPrices);
                 }
                 
@@ -230,7 +230,7 @@ class PurchaseOrderService {
         }
     }
 
-    async buildPurchaseOrderData(businessDataList, mptStepConfig, zrfcid, zdfjy) {
+    async buildPurchaseOrderData(businessDataList, mptStepConfig, zrfcid, zdfjy, canum = null) {
         console.log('[PurchaseOrderService] buildPurchaseOrderData - 开始执行');
         console.log('[PurchaseOrderService] buildPurchaseOrderData - zdfjy 参数值:', zdfjy);
         console.log('[PurchaseOrderService] buildPurchaseOrderData - zrfcid:', zrfcid);
@@ -238,6 +238,9 @@ class PurchaseOrderService {
         
         // 获取第一行数据作为主数据
         const mainData = businessDataList[0];
+        
+        // 判断是否为退货场景
+        const isReturn = mainData.SalesOrderType === 'CBRE';
         
         // 存储计算后的价格映射，用于后续更新 OutboundDelivery 表
         const itemPrices = [];
@@ -273,6 +276,19 @@ class PurchaseOrderService {
                     netPriceAmount = zp00Value * (sd06Zjgbl / 100);
                     unitOfMeasure = item.RequestedQuantityUnit;
                     break;
+                case 'SD08': {
+                    poItemNumber = item.PIOrderItem;
+                    material = item.Material || "";
+                    unitOfMeasure = item.RequestedQuantityUnit;
+                    const step = parseInt(canum);
+                    if (step === 10) {
+                        netPriceAmount = item.PurchasePrice ? parseFloat(item.PurchasePrice) : 0;
+                    } else if (step === 40) {
+                        const sd08Zjgbl = mptStepConfig?.zjgbl ? parseFloat(mptStepConfig.zjgbl) : 100;
+                        netPriceAmount = (item.PurchasePrice ? parseFloat(item.PurchasePrice) : 0) * (sd08Zjgbl / 100);
+                    } 
+                    break;
+                }
             }
 
             // 保存计算后的价格映射（用于后续更新）
@@ -287,7 +303,7 @@ class PurchaseOrderService {
             purchaseOrderItems.push({
                 PurchaseOrderItem: poItemNumber,
                 Material: material,
-                Plant: mptStepConfig?.umwrk || "",
+                Plant: isReturn ? (mptStepConfig?.lifnr || "") : (mptStepConfig?.umwrk || ""),
                 PurchaseOrderQuantityUnit: unitOfMeasure,
                 TaxCode: mptStepConfig?.mwskz || "",
                 OrderQuantity: item.RequestedQuantity ? parseFloat(item.RequestedQuantity) : 0,
@@ -320,13 +336,12 @@ class PurchaseOrderService {
         
         let purchaseOrderData = {
             PurchaseOrderType: "Z09",
-            CompanyCode: mptStepConfig?.ekorg || "",
-            PurchasingOrganization: mptStepConfig?.ekorg || "",
+            PurchasingOrganization: isReturn ? (mptStepConfig?.bukrs || "") : (mptStepConfig?.ekorg || ""),
             PurchasingGroup: mptStepConfig?.ekgrp || "",
-            Supplier: mptStepConfig?.lifnr || "",
+            Supplier: isReturn ? (mptStepConfig?.umwrk || "") : (mptStepConfig?.lifnr || ""),
             DocumentCurrency: mainData.TransactionCurrency || "",
             YY1_FD_ZDFJY2_PDH: zdfjy,
-            SupplyingPlant: (zrfcid === 'SD04' || zrfcid === 'SD06') ? (mptStepConfig?.lifnr || "") : mainData.ProductionPlant,
+            SupplyingPlant: mptStepConfig?.lifnr || "",
             _PurchaseOrderItem: purchaseOrderItems
         };
 
@@ -354,7 +369,7 @@ class PurchaseOrderService {
         return { purchaseOrderData, itemPrices };
     }
 
-    async updatePISalesOrderRel(purchaseOrder, businessDataList, itemPrices, zrfcid) {
+    async updatePISalesOrderRel(purchaseOrder, businessDataList, itemPrices, zrfcid, canum = null) {
         try {
             const PISalesOrderRel = cds.entities['com.sap.zictm.PISalesOrderRel'];
             const { INSERT, UPDATE } = cds.ql;
@@ -364,10 +379,18 @@ class PurchaseOrderService {
                 const poItemNumber = String(item.PIOrderItem).padStart(5, '0');
                 
                 // 构建更新数据
-                const updateData = {
-                    PurchaseOrder1: purchaseOrder,
-                    PurchaseOrderItem1: poItemNumber
-                };
+                let updateData;
+                if (zrfcid === 'SD08' && canum === 40) {
+                    updateData = {
+                        PurchaseOrder2: purchaseOrder,
+                        PurchaseOrderItem2: poItemNumber
+                    };
+                } else {
+                    updateData = {
+                        PurchaseOrder1: purchaseOrder,
+                        PurchaseOrderItem1: poItemNumber
+                    };
+                }
                 
                 // 更新 SalesOrderCreate 表的 PurchasePrice
                 if (zrfcid === 'SD06' && itemPrices) {
@@ -400,14 +423,23 @@ class PurchaseOrderService {
                 
                 // 如果没有更新到数据（表中没有该记录），则插入新记录
                 if (updateResult?.affectedRows === 0 || !updateResult) {
+                    // 根据 zrfcid 和 step 决定使用哪些字段
+                    const insertData = {
+                        zrfc_logid: this.zrfcLogid,
+                        PIOrder: item.PIOrder,
+                        PIOrderItem: item.PIOrderItem
+                    };
+                    
+                    if (zrfcid === 'SD08' && canum === 40) {
+                        insertData.PurchaseOrder2 = purchaseOrder;
+                        insertData.PurchaseOrderItem2 = poItemNumber;
+                    } else {
+                        insertData.PurchaseOrder1 = purchaseOrder;
+                        insertData.PurchaseOrderItem1 = poItemNumber;
+                    }
+                    
                     await cds.run(
-                        INSERT.into(PISalesOrderRel).entries({
-                            zrfc_logid: this.zrfcLogid,
-                            PIOrder: item.PIOrder,
-                            PIOrderItem: item.PIOrderItem,
-                            PurchaseOrder1: purchaseOrder,
-                            PurchaseOrderItem1: poItemNumber
-                        })
+                        INSERT.into(PISalesOrderRel).entries(insertData)
                     );
                 }
             }

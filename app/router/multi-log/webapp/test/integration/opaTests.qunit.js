@@ -22,8 +22,11 @@ sap.ui.require(
     "sap/ui/thirdparty/qunit-2",
     "sap/ui/qunit/qunit-junit",
     "sap/ui/qunit/qunit-coverage",
-    'multilog/test/integration/FirstJourney'
-  ], function (QUnit) {
+    "multilog/test/integration/FirstJourney",
+    "multilog/test/integration/MultistepHeadLogListJourney",
+    "multilog/test/integration/MultistepHeadLogObjectPageJourney",
+    "multilog/test/integration/MultistepLogObjectPageJourney",
+], function (QUnit) {
     "use strict";
     QUnit.start();
 });

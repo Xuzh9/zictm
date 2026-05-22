@@ -51,6 +51,7 @@
   "sapux": [
     "app/mpt",
     "app/multi-step",
+    "app/multi-log",
     "app/multi-log"
   ],
   "devDependencies": {

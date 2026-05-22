@@ -52,7 +52,7 @@ class SalesOrderPricingUpdateService {
 
             // 根据 zrfcid 获取销售订单行项目数据
             let piSalesOrderRelRecords = [];
-            if (zrfcid === 'SD01' || zrfcid === 'SD03' || zrfcid === 'SD06') {
+            if (zrfcid === 'SD01' || zrfcid === 'SD03' || zrfcid === 'SD06' || zrfcid === 'SD08') {
                 // 查询 PISalesOrderRel 表获取销售订单号和行号
                 piSalesOrderRelRecords = await this.getPISalesOrderRelRecords(businessDataList);
 
@@ -294,7 +294,7 @@ class SalesOrderPricingUpdateService {
         const step = parseInt(canum);
         
         // SD01、SD04、SD06 或 SD03（步骤为 50）：更新 PMP0（当 PurchasePrice 有值时）
-        if (zrfcid === 'SD01' || zrfcid === 'SD04' || zrfcid === 'SD06' || (zrfcid === 'SD03' && step === 50)) {
+        if (zrfcid === 'SD01' || zrfcid === 'SD04' || zrfcid === 'SD06' || zrfcid === 'SD08' || (zrfcid === 'SD03' && step === 50)) {
             return [{
                 conditionType: 'PMP0',
                 valueField: 'PurchasePrice',
@@ -329,35 +329,75 @@ class SalesOrderPricingUpdateService {
      */
     async checkSkipCondition(zrfcid, canum, piSalesOrderRelRecords) {
         const step = parseInt(canum);
-        
-        // SD01 或 SD06 或 SD03 且步骤为 50：检查 SalesOrder1 是否有值
-        if (zrfcid === 'SD01' || zrfcid === 'SD06' || (zrfcid === 'SD03' && step === 50)) {
-            for (const record of piSalesOrderRelRecords) {
-                if (!record || !record.SalesOrder1) {
-                    console.log(`PISalesOrderRel 中 SalesOrder1 为空，步骤跳过: PIOrder=${record?.PIOrder}, PIOrderItem=${record?.PIOrderItem}`);
-                    return {
-                        code: 'S',
-                        message: 'PISalesOrderRel 中 SalesOrder1 为空，步骤跳过',
-                        objkey: ''
-                    };
+
+        switch (zrfcid) {
+            case 'SD03':
+                if (step === 10) {
+                    for (const record of piSalesOrderRelRecords) {
+                        if (!record || !record.SalesOrder) {
+                            console.log(`PISalesOrderRel 中 SalesOrder 为空，步骤跳过: PIOrder=${record?.PIOrder}, PIOrderItem=${record?.PIOrderItem}`);
+                            return {
+                                code: 'S',
+                                message: 'PISalesOrderRel 中 SalesOrder 为空，步骤跳过',
+                                objkey: ''
+                            };
+                        }
+                    }
+                } else if (step === 50) {
+                    for (const record of piSalesOrderRelRecords) {
+                        if (!record || !record.SalesOrder1) {
+                            console.log(`PISalesOrderRel 中 SalesOrder1 为空，步骤跳过: PIOrder=${record?.PIOrder}, PIOrderItem=${record?.PIOrderItem}`);
+                            return {
+                                code: 'S',
+                                message: 'PISalesOrderRel 中 SalesOrder1 为空，步骤跳过',
+                                objkey: ''
+                            };
+                        }
+                    }
                 }
-            }
-        }
-        
-        // SD03 且步骤为 10：检查 SalesOrder 是否有值
-        if (zrfcid === 'SD03' && step === 10) {
-            for (const record of piSalesOrderRelRecords) {
-                if (!record || !record.SalesOrder) {
-                    console.log(`PISalesOrderRel 中 SalesOrder 为空，步骤跳过: PIOrder=${record?.PIOrder}, PIOrderItem=${record?.PIOrderItem}`);
-                    return {
-                        code: 'S',
-                        message: 'PISalesOrderRel 中 SalesOrder 为空，步骤跳过',
-                        objkey: ''
-                    };
+                break;
+
+            case 'SD01':
+            case 'SD06':
+                for (const record of piSalesOrderRelRecords) {
+                    if (!record || !record.SalesOrder1) {
+                        console.log(`PISalesOrderRel 中 SalesOrder1 为空，步骤跳过: PIOrder=${record?.PIOrder}, PIOrderItem=${record?.PIOrderItem}`);
+                        return {
+                            code: 'S',
+                            message: 'PISalesOrderRel 中 SalesOrder1 为空，步骤跳过',
+                            objkey: ''
+                        };
+                    }
                 }
-            }
+                break;
+
+            case 'SD08':
+                if (step === 30) {
+                    for (const record of piSalesOrderRelRecords) {
+                        if (!record || !record.SalesOrder1) {
+                            console.log(`PISalesOrderRel 中 SalesOrder1 为空，步骤跳过: PIOrder=${record?.PIOrder}, PIOrderItem=${record?.PIOrderItem}`);
+                            return {
+                                code: 'S',
+                                message: 'PISalesOrderRel 中 SalesOrder1 为空，步骤跳过',
+                                objkey: ''
+                            };
+                        }
+                    }
+                } else if (step === 60) {
+                    for (const record of piSalesOrderRelRecords) {
+                        if (!record || !record.SalesOrder2) {
+                            console.log(`PISalesOrderRel 中 SalesOrder2 为空，步骤跳过: PIOrder=${record?.PIOrder}, PIOrderItem=${record?.PIOrderItem}`);
+                            return {
+                                code: 'S',
+                                message: 'PISalesOrderRel 中 SalesOrder2 为空，步骤跳过',
+                                objkey: ''
+                            };
+                        }
+                    }
+                }
+                break;
         }
-        
+
         return null;
     }
 
@@ -454,14 +494,32 @@ class SalesOrderPricingUpdateService {
                 
                 // 根据业务类型选择不同的销售订单字段组
                 // 对外销售订单，使用 SalesOrder/SalesOrderItem
-                if (zrfcid === 'SD03' && step === 10) {
-                    salesOrder = record.SalesOrder;
-                    salesOrderItem = record.SalesOrderItem;
-                }
-                // 公司间销售订单，使用 SalesOrder1/SalesOrderItem1
-                else if (zrfcid === 'SD01' || (zrfcid === 'SD03' && step === 30) || zrfcid === 'SD06' ) {
-                    salesOrder = record.SalesOrder1;
-                    salesOrderItem = record.SalesOrderItem1;
+                switch (zrfcid) {
+                    case 'SD03':
+                        if (step === 10) {
+                            salesOrder = record.SalesOrder;
+                            salesOrderItem = record.SalesOrderItem;
+                        } else if (step === 50) {
+                            salesOrder = record.SalesOrder1;
+                            salesOrderItem = record.SalesOrderItem1;
+                        }
+                        break;
+
+                    case 'SD01':
+                    case 'SD06':
+                        salesOrder = record.SalesOrder1;
+                        salesOrderItem = record.SalesOrderItem1;
+                        break;
+
+                    case 'SD08':
+                        if (step === 30) {
+                            salesOrder = record.SalesOrder1;
+                            salesOrderItem = record.SalesOrderItem1;
+                        } else if (step === 60) {
+                            salesOrder = record.SalesOrder2;
+                            salesOrderItem = record.SalesOrderItem2;
+                        }
+                        break;
                 }
                 
                 if (salesOrder && salesOrderItem) {

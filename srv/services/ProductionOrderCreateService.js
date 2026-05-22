@@ -205,41 +205,34 @@ class ProductionOrderCreateService {
             YY1_FD_REMARK_ORD: this.cleanRemark(businessData.Remark),
         };
 
-        // 根据 zrfcid 添加不同的字段
-        if (zrfcid === 'SD01') {
-            // 从 PISalesOrderRel 表获取内部交易1相关字段
-            const PISalesOrderRel = cds.entities['com.sap.zictm.PISalesOrderRel'];
-            const piOrder = businessData.PIOrder || '';
-            const piOrderItem = businessData.PIOrderItem || '';
-            
-            if (piOrder && piOrderItem) {
-                const relRecord = await cds.run(
-                    SELECT.one.from(PISalesOrderRel)
-                        .where({ PIOrder: piOrder, PIOrderItem: piOrderItem })
-                );
-                
-                if (relRecord) {
-                    productionOrderData.YY1_FD_SO3_ORD = relRecord.PurchaseOrder1;
-                    productionOrderData.YY1_FD_SOITEM3_ORD = relRecord.PurchaseOrderItem1;
-                }
-            }
-        } else if (zrfcid === 'SD06') {
-            // 从 PISalesOrderRel 表获取销售订单和采购订单相关字段
-            const PISalesOrderRel = cds.entities['com.sap.zictm.PISalesOrderRel'];
-            const piOrder = businessData.PIOrder || '';
-            const piOrderItem = businessData.PIOrderItem || '';
-            
-            if (piOrder && piOrderItem) {
-                const relRecord = await cds.run(
-                    SELECT.one.from(PISalesOrderRel)
-                        .where({ PIOrder: piOrder, PIOrderItem: piOrderItem })
-                );
-                
-                if (relRecord) {
-                    productionOrderData.YY1_FD_SO2_ORD = relRecord.SalesOrder;
-                    productionOrderData.YY1_FD_SOITEM2_ORD = relRecord.SalesOrderItem;
-                    productionOrderData.YY1_FD_SO3_ORD = relRecord.PurchaseOrder1;
-                    productionOrderData.YY1_FD_SOITEM3_ORD = relRecord.PurchaseOrderItem1;
+        const PISalesOrderRel = cds.entities['com.sap.zictm.PISalesOrderRel'];
+        const piOrder = businessData.PIOrder || '';
+        const piOrderItem = businessData.PIOrderItem || '';
+
+        if (piOrder && piOrderItem) {
+            const relRecord = await cds.run(
+                SELECT.one.from(PISalesOrderRel)
+                    .where({ PIOrder: piOrder, PIOrderItem: piOrderItem })
+            );
+
+            if (relRecord) {
+                switch (zrfcid) {
+                    case 'SD01':
+                        productionOrderData.YY1_FD_SO3_ORD = relRecord.PurchaseOrder1;
+                        productionOrderData.YY1_FD_SOITEM3_ORD = relRecord.PurchaseOrderItem1;
+                        break;
+                    case 'SD06':
+                        productionOrderData.YY1_FD_SO2_ORD = relRecord.SalesOrder;
+                        productionOrderData.YY1_FD_SOITEM2_ORD = relRecord.SalesOrderItem;
+                        productionOrderData.YY1_FD_SO3_ORD = relRecord.PurchaseOrder1;
+                        productionOrderData.YY1_FD_SOITEM3_ORD = relRecord.PurchaseOrderItem1;
+                        break;
+                    case 'SD08':
+                        productionOrderData.YY1_FD_SO3_ORD = relRecord.PurchaseOrder1;
+                        productionOrderData.YY1_FD_SOITEM3_ORD = relRecord.PurchaseOrderItem1;
+                        productionOrderData.YY1_FD_SO4_ORD = relRecord.PurchaseOrder2;
+                        productionOrderData.YY1_FD_SOITEM4_ORD = relRecord.PurchaseOrderItem2;
+                        break;
                 }
             }
         }

@@ -1,9 +1,9 @@
 ## Application Details
 |               |
 | ------------- |
-|**Generation Date and Time**<br>Wed Apr 29 2026 09:23:10 GMT+0000 (Coordinated Universal Time)|
+|**Generation Date and Time**<br>Thu May 21 2026 11:58:31 GMT+0000 (Coordinated Universal Time)|
 |**App Generator**<br>SAP Fiori Application Generator|
-|**App Generator Version**<br>1.22.0|
+|**App Generator Version**<br>1.24.0|
 |**Generation Platform**<br>SAP Business Application Studio|
 |**Template Used**<br>Worklist Page V4|
 |**Service Type**<br>Local CAP|
@@ -12,10 +12,11 @@
 |**Application Title**<br>多步日志查询|
 |**Namespace**<br>|
 |**UI5 Theme**<br>sap_horizon|
-|**UI5 Version**<br>1.147.1|
+|**UI5 Version**<br>1.148.0|
 |**Enable TypeScript**<br>False|
 |**Add Eslint configuration**<br>True, see https://www.npmjs.com/package/@sap-ux/eslint-plugin-fiori-tools#rules for the eslint rules.|
-|**Main Entity**<br>MultistepLog|
+|**Main Entity**<br>MultistepHeadLog|
+|**Navigation Entity**<br>items|
 
 ## multi-log
 
@@ -25,7 +26,7 @@ An SAP Fiori application.
 
 -   This app has been generated using the SAP Fiori tools - App Generator, as part of the SAP Fiori tools suite.  To launch the generated app, start your CAP project:  and navigate to the following location in your browser:
 
-http://localhost:4004/multi-log/webapp/index.html
+http://localhost:4004/multilog/index.html
 
 #### Pre-requisites:
 

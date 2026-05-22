@@ -29,7 +29,7 @@ class SalesOrderQueryService {
             }
 
             // 根据条件查询销售订单
-            return await this.querySalesOrderByCondition(purchaseOrderByCustomer, zrfcid);
+            return await this.querySalesOrderByCondition(purchaseOrderByCustomer, zrfcid, canum);
 
         } catch (error) {
             console.error('SalesOrderQueryService 执行失败:', error);
@@ -41,7 +41,7 @@ class SalesOrderQueryService {
         }
     }
 
-    async querySalesOrderByCondition(purchaseOrderByCustomer, zrfcid) {
+    async querySalesOrderByCondition(purchaseOrderByCustomer, zrfcid, canum) {
         const maxRetries = 10;
         const retryDelay = 1000; // 1秒
         
@@ -108,8 +108,8 @@ class SalesOrderQueryService {
                     console.log('销售订单行项目数量:', salesOrderItems.length);
 
                     // 更新 PISalesOrderRel 表
-                    if ((zrfcid === 'SD01' || zrfcid === 'SD06') && salesOrderItems.length > 0) {
-                        await this.updatePISalesOrderRel(purchaseOrderByCustomer, salesOrderItems);
+                    if ((zrfcid === 'SD01' || zrfcid === 'SD06' || zrfcid === 'SD08') && salesOrderItems.length > 0) {
+                        await this.updatePISalesOrderRel(purchaseOrderByCustomer, salesOrderItems, zrfcid, canum);
                     }
 
                     return {
@@ -149,7 +149,7 @@ class SalesOrderQueryService {
         }
     }
 
-    async updatePISalesOrderRel(purchaseOrderByCustomer, salesOrderItems) {
+    async updatePISalesOrderRel(purchaseOrderByCustomer, salesOrderItems, zrfcid, canum) {
         try {
             const PISalesOrderRel = cds.entities['com.sap.zictm.PISalesOrderRel'];
             const salesOrderNumber = salesOrderItems[0]?.SalesOrder;
@@ -165,20 +165,31 @@ class SalesOrderQueryService {
                     const formattedPurchaseOrder = String(itemPurchaseOrderByCustomer).padStart(10, '0');
                     const formattedSalesOrderItem = String(item.SalesOrderItem).padStart(6, '0');
                     
+                    // 根据 zrfcid 和 canum 决定更新哪些字段
+                    let updateData;
+                    if (zrfcid === 'SD08' && canum === 50) {
+                        updateData = {
+                            SalesOrder2: salesOrderNumber,
+                            SalesOrderItem2: formattedSalesOrderItem
+                        };
+                    } else {
+                        updateData = {
+                            SalesOrder1: salesOrderNumber,
+                            SalesOrderItem1: formattedSalesOrderItem
+                        };
+                    }
+                    
                     // 根据 to_Item.PurchaseOrderByCustomer = PurchaseOrder1 和 to_Item.UnderlyingPurchaseOrderItem = PurchaseOrderItem1 更新记录
                     const affectedRows = await cds.run(
                         UPDATE(PISalesOrderRel)
-                            .set({
-                                SalesOrder1: salesOrderNumber,
-                                SalesOrderItem1: formattedSalesOrderItem
-                            })
+                            .set(updateData)
                             .where({
                                 PurchaseOrder1: formattedPurchaseOrder,
                                 PurchaseOrderItem1: String(item.UnderlyingPurchaseOrderItem).padStart(5, '0')
                             })
                     );
                     
-                    console.log(`更新 PISalesOrderRel: PurchaseOrder1=${formattedPurchaseOrder}, PurchaseOrderItem1=${String(item.UnderlyingPurchaseOrderItem).padStart(5, '0')} -> SalesOrder1=${salesOrderNumber}, SalesOrderItem1=${formattedSalesOrderItem}, 更新行数: ${affectedRows}`);
+                    console.log(`更新 PISalesOrderRel: PurchaseOrder1=${formattedPurchaseOrder}, PurchaseOrderItem1=${String(item.UnderlyingPurchaseOrderItem).padStart(5, '0')} -> ${JSON.stringify(updateData)}, 更新行数: ${affectedRows}`);
                 }
             }
         } catch (error) {

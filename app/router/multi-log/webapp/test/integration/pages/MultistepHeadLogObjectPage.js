@@ -16,8 +16,8 @@ sap.ui.define(['sap/fe/test/ObjectPage', 'sap/ui/test/actions/Press'], function(
     return new ObjectPage(
         {
             appId: 'multilog',
-            componentId: 'MultistepLogObjectPage',
-            contextPath: '/MultistepHeadLog/items'
+            componentId: 'MultistepHeadLogObjectPage',
+            contextPath: '/MultistepHeadLog'
         },
         CustomPageDefinitions
     );

@@ -56,10 +56,15 @@ entity MultistepHeadLog {
     executionTime       : Decimal(10,2) @title: '运行时间';  // 运行时间（秒）
     lastExecutionAt     : Timestamp @title: '最新执行时间';      // 最新执行时间
     lastExecutionTime   : Decimal(10,2) @title: '最新运行时间';  // 最新运行时间（秒）
+     // 与 MultistepLog 的组合关系（一对多，行表）
+    items : Composition of many MultistepLog
+        on items.head.zrfc_logid = $self.zrfc_logid;
 }
 
 // 多步执行日志表
 entity MultistepLog {
+    // 关联到父实体
+    head                : Association to MultistepHeadLog; 
     key zrfc_logid      : UUID @title: '多步ID';           // 多步ID
     key canum           : Integer @title: '步骤编号';     // 步骤编号（如10、20、30）
     zrfcid              : String(10) @title: '业务流程ID';     // 业务流程ID
@@ -81,8 +86,6 @@ entity MPTTypeConfig {
     zrfcid         : String(10) @title: '业务流程ID';     // 业务流程ID
     zxsf           : String(4) @title: '销售方';      // 销售方(公司代码)
     zfcf           : String(4) @title: '发出方';      // 发出方(公司代码)
-    // 关联到 ProcessConfig
-    process        : Association to ProcessConfig;
     // 与 MPTStepConfig 的组合关系（一对多，行表）
     steps : Composition of many MPTStepConfig
         on steps.mptType.zdfjy = $self.zdfjy;
@@ -94,7 +97,7 @@ entity MPTStepConfig {
     mptType        : Association to MPTTypeConfig;  // 父实体关联
     key zdfjy      : String(10) @title: '多方交易类型ID';     // 多方交易类型ID
     key canum      : Integer @title: '步骤编号';        // 步骤编号（如10、20、30）
-    // 配置参数
+    bukrs          : String(4) @title: '公司代码';      // 公司代码
     vkorg          : String(4) @title: '销售组织';      // 销售组织
     vtweg          : String(2) @title: '分销渠道';      // 分销渠道
     kunnr          : String(10) @title: '客户';        // 客户
@@ -105,11 +108,9 @@ entity MPTStepConfig {
     ekgrp          : String(4) @title: '采购组';      // 采购组
     umwrk          : String(4) @title: '收货工厂';      // 收货工厂
     umlgo          : String(4) @title: '收货库存地点';      // 收货库存地点
-    // 价格和税务信息
     zjgbl          : Decimal(10,2) @title: '价格比例(%)';  // 价格比例(%)
     mwskz          : String(3) @title: '税码';      // 税码
     zsl            : Decimal(10,2) @title: '税率';  // 税率
-    // 枚举类型：价格方向
     zjgfx          : PriceDirection @title: '价格方向';
 }
 

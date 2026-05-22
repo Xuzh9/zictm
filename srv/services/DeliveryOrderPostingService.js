@@ -117,6 +117,10 @@ class DeliveryOrderPostingService {
             // 添加 If-Match 头（如果获取到 ETag 则使用，否则使用 *）
             requestHeaders['If-Match'] = etag || '*';
 
+            // 打印请求信息
+            console.log(`[DeliveryOrderPostingService] 过账请求 - 交货单号: ${deliveryDocument}`);
+            console.log(`[DeliveryOrderPostingService] 请求头:`, requestHeaders);
+            
             // 调用交货单过账 API
             const result = await executeHttpRequest(
                 {
