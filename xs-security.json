@@ -50,7 +50,9 @@
   "oauth2-configuration": {
     "redirect-uris": [
       "https://*.btp.sunlu3d.cn/**",
-      "https://zictm.btp.sunlu3d.cn/login/callback"
+      "https://*.btp-test.sunlu3d.cn/**",
+      "https://zictm.btp.sunlu3d.cn/login/callback",
+      "https://zictm.btp-test.sunlu3d.cn/login/callback"
     ]
   }
 }

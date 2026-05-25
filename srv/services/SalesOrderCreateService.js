@@ -28,11 +28,13 @@ class SalesOrderCreateService {
                 return {
                     csrfUrl: '/sap/opu/odata/sap/API_DEBIT_MEMO_REQUEST_SRV/$metadata',
                     createUrl: '/sap/opu/odata/sap/API_DEBIT_MEMO_REQUEST_SRV/A_DebitMemoRequest',
-                    responseField: 'DebitMemoRequest',
-                    dateField: 'DebitMemoRequestDate',
-                    itemCategoryField: 'DebitMemoRequestItemCategory',
+                    responseField: 'CreditMemoRequest',
+                    dateField: 'CreditMemoRequestDate',
+                    itemCategoryField: 'CreditMemoRequestItemCategory',
                     itemCategory: salesOrderType === 'CR' ? 'G2N' : 'L2N',
-                    plantField: 'Plant'
+                    plantField: 'Plant',
+                    orderTypeField: 'CreditMemoRequestType',
+                    itemField: 'CreditMemoRequestItem'
                 };
             case 'CBRE':
                 // CBRE 退货订单
@@ -43,7 +45,9 @@ class SalesOrderCreateService {
                     dateField: 'CustomerReturnDate',
                     itemCategoryField: 'CustomerReturnItemCategory',
                     itemCategory: 'CBEN',
-                    plantField: 'ProductionPlant'
+                    plantField: 'ProductionPlant',
+                    orderTypeField: 'CustomerReturnType',
+                    itemField: 'CustomerReturnItem'
                 };
             case 'ZPR':
             case 'OR':
@@ -55,7 +59,9 @@ class SalesOrderCreateService {
                     dateField: 'SalesOrderDate',
                     itemCategoryField: 'SalesOrderItemCategory',
                     itemCategory: 'TAN',
-                    plantField: 'ProductionPlant'
+                    plantField: 'ProductionPlant',
+                    orderTypeField: 'SalesOrderType',
+                    itemField: 'SalesOrderItem'
                 };
         }
     }
@@ -142,7 +148,7 @@ class SalesOrderCreateService {
                     data: salesOrderData,
                     headers: {
                         'X-CSRF-Token': csrfToken,
-                        'Content-Type': 'application/json;charset=UTF-8',
+                        'Accept': 'application/json',
                         'Cookie': cookieString,
                         'sap-language': 'ZH'
                     },
@@ -153,7 +159,7 @@ class SalesOrderCreateService {
             );
 
             if (result.status >= 200 && result.status < 300) {
-                const salesOrder = result.data.d?.SalesOrder || '';
+                const salesOrder = result.data.d?.[apiConfig.responseField] || '';
                 
                 // SD05/SD06 需要更新 PISalesOrderRel 表
                 if (zrfcid === 'SD05' || zrfcid === 'SD06') {
@@ -291,7 +297,7 @@ class SalesOrderCreateService {
         }
 
         const mainData = businessDataList[0];
-        const salesOrderType = mainData.SalesOrderType || 'ZPR';
+        const salesOrderType = mainData.SalesOrderType;
         
         // 根据 zrfcid 获取工厂字段值
         let plantValue;
@@ -343,7 +349,7 @@ class SalesOrderCreateService {
             }
             
             const itemData = {
-                SalesOrderItem: itemNumber,
+                [apiConfig.itemField]: itemNumber,
                 Material: (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') ? (item.Material || "") : (item.Product || ""),
                 RequestedQuantity: item.RequestedQuantity ? parseFloat(item.RequestedQuantity).toString() : "0",
                 to_PricingElement: {
@@ -364,7 +370,6 @@ class SalesOrderCreateService {
 
         // 构建销售订单主数据
         let salesOrderData = {
-            SalesOrderType: salesOrderType || "",
             SalesOrganization: mainData.SalesOrganization || mptStepConfig?.vkorg,
             SalesOffice: mainData.SalesOffice || "",
             DistributionChannel: (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') ? (mainData.DistributionChannel) : (mptStepConfig?.vtweg),
@@ -378,6 +383,9 @@ class SalesOrderCreateService {
             }
         };
         
+        // 根据订单类型设置对应的订单类型字段（从 apiConfig 获取字段名）
+        salesOrderData[apiConfig.orderTypeField] = salesOrderType || '';
+        
         // 根据业务流程设置销售订单日期
         if (apiConfig.dateField) {
             if (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') {
@@ -390,18 +398,10 @@ class SalesOrderCreateService {
         // 根据业务流程设置交货日期字段
         if (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') {
             if (mainData.ConfirmedDeliveryDate) {
-                if (salesOrderType === 'ZPR' || salesOrderType === 'OR') {
-                    salesOrderData.RequestedDeliveryDate = this.convertDate(mainData.ConfirmedDeliveryDate);
-                } else if (salesOrderType === 'CBRE') {
-                    salesOrderData.PlannedGoodsIssueDate = this.convertDate(mainData.ConfirmedDeliveryDate);
-                }
+                salesOrderData.RequestedDeliveryDate = this.convertDate(mainData.ConfirmedDeliveryDate);
             }
         } else if (mainData.DeliveryDate) {
-            if (salesOrderType === 'ZPR' || salesOrderType === 'OR') {
-                salesOrderData.RequestedDeliveryDate = this.convertDate(mainData.DeliveryDate);
-            } else if (salesOrderType === 'CBRE') {
-                salesOrderData.PlannedGoodsIssueDate = this.convertDate(mainData.DeliveryDate);
-            }
+            salesOrderData.RequestedDeliveryDate = this.convertDate(mainData.DeliveryDate);
         }
 
         return salesOrderData;

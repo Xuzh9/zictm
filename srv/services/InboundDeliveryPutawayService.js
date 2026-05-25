@@ -123,7 +123,7 @@ class InboundDeliveryPutawayService {
                 // 构建请求头
                 const requestHeaders = {
                     'X-CSRF-Token': csrfToken,
-                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
                     'Cookie': cookieString,
                     'sap-language': 'ZH',
                     'If-Match': etag || '*'

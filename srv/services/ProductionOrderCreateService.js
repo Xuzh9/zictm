@@ -95,7 +95,7 @@ class ProductionOrderCreateService {
                         data: productionOrderData,
                         headers: {
                             'X-CSRF-Token': csrfToken,
-                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
                             'Cookie': cookieString,
                             'sap-language': 'ZH'
                         },

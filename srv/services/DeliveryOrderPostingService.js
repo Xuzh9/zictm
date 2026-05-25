@@ -110,7 +110,7 @@ class DeliveryOrderPostingService {
             // 构建请求头（包含 ETag）
             const requestHeaders = {
                 'X-CSRF-Token': csrfToken,
-                'Content-Type': 'application/json',
+                'Accept': 'application/json',
                 'Cookie': cookieString,
                 'sap-language': 'ZH'
             };
@@ -145,7 +145,7 @@ class DeliveryOrderPostingService {
                 let message;
                 if (zrfcid === 'SD04' && canum === 130) {
                     message = '内向交货单过账成功';
-                } else if (salesOrderType === 'CBRE') {
+                } else if (((zrfcid === 'SD04' && canum === 170) || (zrfcid === 'SD07' && canum === 80)) && salesOrderType === 'CBRE') {
                     message = '退货交货单过账成功';
                 } else {
                     message = '交货单过账成功';
@@ -257,14 +257,14 @@ class DeliveryOrderPostingService {
                 csrfUrl: '/sap/opu/odata/sap/API_INBOUND_DELIVERY_SRV;v=0002/A_InbDeliveryHeader(\'{DeliveryDocument}\')',
                 postingUrl: '/sap/opu/odata/sap/API_INBOUND_DELIVERY_SRV;v=0002/PostGoodsReceipt?DeliveryDocument='
             };
-        } else if (salesOrderType === 'CBRE') {
-            // CBRE 退货订单 - 使用收货 API
+        } else if (((zrfcid === 'SD04' && canum === 170) || (zrfcid === 'SD07' && canum === 80)) && salesOrderType === 'CBRE') {
+            // SD04 170 CBRE / SD07 80 CBRE 退货交货单过账 - 使用退货交货单 API
             return {
-                csrfUrl: '/sap/opu/odata/sap/API_CUSTOMER_RETURNS_DELIVERY_SRV;v=0002/A_CustomerReturnsDeliveryHeader(\'{DeliveryDocument}\')',
-                postingUrl: '/sap/opu/odata/sap/API_CUSTOMER_RETURNS_DELIVERY_SRV;v=0002/PostGoodsReceipt?DeliveryDocument='
+                csrfUrl: '/sap/opu/odata/sap/API_CUSTOMER_RETURNS_DELIVERY_SRV;v=2/A_ReturnsDeliveryHeader(\'{DeliveryDocument}\')',
+                postingUrl: '/sap/opu/odata/sap/API_CUSTOMER_RETURNS_DELIVERY_SRV;v=2/PostGoodsReceipt?DeliveryDocument='
             };
-        } else if (salesOrderType === 'ZPR' || salesOrderType === 'OR' ){
-            // ZPR/OR 标准订单 - 使用发货 API
+        } else if (salesOrderType === 'ZPR' || salesOrderType === 'OR') {
+            // ZPR/OR - 使用外向交货单 API
             return {
                 csrfUrl: '/sap/opu/odata/sap/API_OUTBOUND_DELIVERY_SRV;v=0002/A_OutbDeliveryHeader(\'{DeliveryDocument}\')',
                 postingUrl: '/sap/opu/odata/sap/API_OUTBOUND_DELIVERY_SRV;v=0002/PostGoodsIssue?DeliveryDocument='

@@ -61,8 +61,8 @@ class MultiStepInvoker {
                 // 更新业务表数据（覆盖更新）
                 await this.updateBusinessDataByConfig(processConfig, businessTable1, businessTable2, businessTable3, zrfcid, zrfcLogid, zdfjy);
                 
-                // 调用 RetryHandler 的 retry 方法（传递 id，因为业务数据有更新）
-                const retryResult = await this.retryHandler.retry(zrfcLogid, id);
+                // 调用 RetryHandler 的 retry 方法（传递 id 和 zdfjy）
+                const retryResult = await this.retryHandler.retry(zrfcLogid, id, zdfjy);
                 result.code = retryResult.code;
                 result.message = retryResult.message;
                 result.zrfcLogid = zrfcLogid;

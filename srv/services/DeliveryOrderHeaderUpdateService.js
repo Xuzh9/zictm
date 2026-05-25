@@ -126,7 +126,7 @@ class DeliveryOrderHeaderUpdateService {
             // 构建请求头
             const requestHeaders = {
                 'X-CSRF-Token': csrfToken,
-                'Content-Type': 'application/json',
+                'Accept': 'application/json',
                 'Cookie': cookieString,
                 'sap-language': 'ZH',
                 'If-Match': etag || '*'
@@ -243,22 +243,21 @@ class DeliveryOrderHeaderUpdateService {
      * @returns {Object} API 配置
      */
     getApiConfig(zrfcid, canum, salesOrderType) {
-        // SD04 且 canum = 100 时使用内向交货单 API
+        // 根据 zrfcid 和 canum 获取对应的 API 配置
         if (zrfcid === 'SD04' && canum === 100) {
+            // SD04 且 canum = 100 时使用内向交货单 API
             return {
                 csrfUrl: '/sap/opu/odata/sap/API_INBOUND_DELIVERY_SRV;v=0002/A_InbDeliveryHeader(\'{DeliveryDocument}\')',
                 updateUrl: "/sap/opu/odata/sap/API_INBOUND_DELIVERY_SRV;v=0002/A_InbDeliveryHeader('{DeliveryDocument}')"
             };
-        }
-        
-        if (salesOrderType === 'CBRE') {
-            // CBRE 退货订单 - 使用退货交货单 API
+        } else if (((zrfcid === 'SD04' && canum === 150) || (zrfcid === 'SD07' && canum === 60)) && salesOrderType === 'CBRE') {
+            // SD04 150 CBRE / SD07 60 CBRE 使用退货交货单 API
             return {
-                csrfUrl: '/sap/opu/odata/sap/API_CUSTOMER_RETURNS_DELIVERY_SRV;v=0002/A_ReturnsDeliveryHeader(\'{DeliveryDocument}\')',
-                updateUrl: "/sap/opu/odata/sap/API_CUSTOMER_RETURNS_DELIVERY_SRV;v=0002/A_ReturnsDeliveryHeader(DeliveryDocument='{DeliveryDocument}')"
+                csrfUrl: '/sap/opu/odata/sap/API_CUSTOMER_RETURNS_DELIVERY_SRV;v=2/A_ReturnsDeliveryHeader(\'{DeliveryDocument}\')',
+                updateUrl: "/sap/opu/odata/sap/API_CUSTOMER_RETURNS_DELIVERY_SRV;v=2/A_ReturnsDeliveryHeader(DeliveryDocument='{DeliveryDocument}')"
             };
-        } else if (salesOrderType === 'ZPR' || salesOrderType === 'OR'){
-            // ZPR/OR 标准订单 - 使用发货交货单 API
+        } else {
+            // 使用外向交货单 API
             return {
                 csrfUrl: '/sap/opu/odata/sap/API_OUTBOUND_DELIVERY_SRV;v=0002/A_OutbDeliveryHeader(\'{DeliveryDocument}\')',
                 updateUrl: "/sap/opu/odata/sap/API_OUTBOUND_DELIVERY_SRV;v=0002/A_OutbDeliveryHeader('{DeliveryDocument}')"

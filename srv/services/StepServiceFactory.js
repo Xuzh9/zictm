@@ -1,6 +1,7 @@
 const MaterialDocumentService = require('./MaterialDocumentService');
 const AccountingDocumentService = require('./AccountingDocumentService');
 const PurchaseOrderCreateService = require('./PurchaseOrderCreateService');
+const PurchaseOrderHeaderUpdateService = require('./PurchaseOrderHeaderUpdateService');
 const PurchaseOrderItemUpdateService = require('./PurchaseOrderItemUpdateService');
 const PurchaseOrderScheduleLineUpdateService = require('./PurchaseOrderScheduleLineUpdateService');
 const SalesOrderCreateService = require('./SalesOrderCreateService');
@@ -41,6 +42,8 @@ class StepServiceFactory {
             case 'PurchaseOrderService':
             case 'PurchaseOrderCreateService':
                 return new PurchaseOrderCreateService();
+            case 'PurchaseOrderHeaderUpdateService':
+                return new PurchaseOrderHeaderUpdateService();
             case 'PurchaseOrderItemUpdateService':
                 return new PurchaseOrderItemUpdateService();
             case 'PurchaseOrderScheduleLineUpdateService':

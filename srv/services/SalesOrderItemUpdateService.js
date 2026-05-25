@@ -133,7 +133,7 @@ class SalesOrderItemUpdateService {
                         data: itemData,
                         headers: {
                             'X-CSRF-Token': csrfToken,
-                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
                             'Cookie': cookieString,
                             'sap-language': 'ZH',
                             'If-Match': etag || '*'

@@ -69,19 +69,26 @@ class DeliveryOrderCreateService {
                 return returnResult;
             }
             
-            // 根据销售订单类型获取 API 配置
-            const apiConfig = this.getApiConfig(salesOrderType);
-            
-            console.log(`销售订单类型: ${salesOrderType}, API配置:`, apiConfig);
+            // 根据 zrfcid、canum 和销售订单类型确定 API 配置
+            let csrfUrl, createUrl;
+            if (((zrfcid === 'SD04' && canum === 140) || (zrfcid === 'SD07' && canum === 50)) && salesOrderType === 'CBRE') {
+                // SD04 140 CBRE / SD07 50 CBRE 使用退货交货单 API
+                csrfUrl = '/sap/opu/odata/sap/API_CUSTOMER_RETURNS_DELIVERY_SRV;v=2/A_ReturnsDeliveryHeader';
+                createUrl = '/sap/opu/odata/sap/API_CUSTOMER_RETURNS_DELIVERY_SRV;v=2/A_ReturnsDeliveryHeader';
+            } else {
+                // 默认使用外向交货单 API
+                csrfUrl = '/sap/opu/odata/sap/API_OUTBOUND_DELIVERY_SRV;v=0002/';
+                createUrl = '/sap/opu/odata/sap/API_OUTBOUND_DELIVERY_SRV;v=0002/A_OutbDeliveryHeader';
+            }
 
-            // 获取 CSRF token（使用对应的 API 服务）
+            // 获取 CSRF token
             const csrfResult = await executeHttpRequest(
                 {
                     destinationName: 'ES_API'
                 },
                 {
                     method: 'GET',
-                    url: apiConfig.csrfUrl,
+                    url: csrfUrl,
                     headers: {
                         'X-CSRF-Token': 'Fetch'
                     }
@@ -105,11 +112,11 @@ class DeliveryOrderCreateService {
                 },
                 {
                     method: 'POST',
-                    url: apiConfig.createUrl,
+                    url: createUrl,
                     data: deliveryOrderData,
                     headers: {
                         'X-CSRF-Token': csrfToken,
-                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
                         'Cookie': cookieString,
                         'sap-language': 'ZH'
                     },
@@ -123,7 +130,7 @@ class DeliveryOrderCreateService {
 
             if (result.status >= 200 && result.status < 300) {
                 const responseData = typeof result.data === 'string' ? JSON.parse(result.data) : result.data;
-                const deliveryDocument = responseData?.d?.[apiConfig.responseField] || '';
+                const deliveryDocument = responseData?.d?.DeliveryDocument || '';
                 
                 console.log('交货单创建成功:', deliveryDocument);
                 
@@ -155,31 +162,6 @@ class DeliveryOrderCreateService {
             };
             console.log('[DeliveryOrderCreateService] 返回结果:', JSON.stringify(returnResult));
             return returnResult;
-        }
-    }
-
-    /**
-     * 根据销售订单类型获取 API 配置
-     * @param {string} salesOrderType - 销售订单类型
-     * @returns {Object} API 配置对象
-     */
-    getApiConfig(salesOrderType) {
-        switch (salesOrderType) {
-            case 'CBRE':
-                // CBRE 退货订单
-                return {
-                    csrfUrl: '/sap/opu/odata/sap/API_CUSTOMER_RETURNS_DELIVERY_SRV;v=0002/',
-                    createUrl: '/sap/opu/odata/sap/API_CUSTOMER_RETURNS_DELIVERY_SRV;v=0002/A_ReturnsDeliveryHeader',
-                    responseField: 'ReturnsDeliveryDocument'
-                };
-            case 'ZPR':
-            case 'OR':
-                // ZPR/OR 标准外向交货单
-                return {
-                    csrfUrl: '/sap/opu/odata/sap/API_OUTBOUND_DELIVERY_SRV;v=0002/',
-                    createUrl: '/sap/opu/odata/sap/API_OUTBOUND_DELIVERY_SRV;v=0002/A_OutbDeliveryHeader',
-                    responseField: 'DeliveryDocument'
-                };
         }
     }
 

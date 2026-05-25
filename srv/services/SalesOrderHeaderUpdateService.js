@@ -130,7 +130,7 @@ class SalesOrderHeaderUpdateService {
                     data: headerData,
                     headers: {
                         'X-CSRF-Token': csrfToken,
-                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
                         'Cookie': cookieString,
                         'sap-language': 'ZH',
                         'If-Match': etag || '*'

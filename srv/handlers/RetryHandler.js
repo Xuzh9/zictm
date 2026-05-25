@@ -14,9 +14,10 @@ class RetryHandler {
      * 重处理失败的业务流程
      * @param {string} zrfcLogid - 多步ID
      * @param {string} id - ApiInputLog的ID（可选，当业务数据更新时传入新的id）
+     * @param {string} zdfjy - 多方交易类型ID（可选，前端点击重推时不传，由系统从MultistepHeadLog获取）
      * @returns {Promise<Object>} 执行结果
      */
-    async retry(zrfcLogid, id = null) {
+    async retry(zrfcLogid, id = null, zdfjy = null) {
         // 检查是否正在重推中，防止重复调用
         if (this.retryingLogids.has(zrfcLogid)) {
             console.log('[RetryHandler.retry] 日志ID', zrfcLogid, '正在重推中，跳过重复调用');
@@ -31,7 +32,7 @@ class RetryHandler {
         this.retryingLogids.add(zrfcLogid);
         
         try {
-            console.log('[RetryHandler.retry] 开始重推, zrfcLogid:', zrfcLogid, ', id:', id);
+            console.log('[RetryHandler.retry] 开始重推, zrfcLogid:', zrfcLogid, ', id:', id, ', zdfjy:', zdfjy);
             
             // 查询多步执行日志，找到失败的步骤
             const failedSteps = await this.getFailedSteps(zrfcLogid);
@@ -47,19 +48,45 @@ class RetryHandler {
             const zrfcid = firstFailedStep.zrfcid;
             const failedStepNum = parseInt(firstFailedStep.canum);
             
-            // 从 MPTTypeConfig 表中查询 zdfjy
-            const MPTTypeConfig = cds.entities['com.sap.zictm.MPTTypeConfig'];
-            const mptTypeConfig = await cds.run(
-                SELECT.one.from(MPTTypeConfig).where({ zrfcid: zrfcid })
-            );
-            const zdfjy = mptTypeConfig?.zdfjy || null;
-
-            // 查询 ProcessConfig 获取 isAsync 配置
+            // 查询 ProcessConfig 获取 isAsync 配置和业务表名
             const ProcessConfig = cds.entities['com.sap.zictm.ProcessConfig'];
             const processConfig = await cds.run(
                 SELECT.one.from(ProcessConfig).where({ zrfcid: zrfcid })
             );
             const isAsync = processConfig?.isAsync || false;
+            const businessTable1 = processConfig?.businessTable1;
+            
+            // 如果没有传入 zdfjy，依次从 MultistepHeadLog、业务表获取
+            if (!zdfjy) {
+                // 1. 优先从 MultistepHeadLog 获取（前端点击重推时使用）
+                const MultistepHeadLog = cds.entities['com.sap.zictm.MultistepHeadLog'];
+                const headLog = await cds.run(
+                    SELECT.one.from(MultistepHeadLog).where({ zrfc_logid: zrfcLogid })
+                );
+                if (headLog?.zdfjy) {
+                    zdfjy = headLog.zdfjy;
+                    console.log('[RetryHandler.retry] 从 MultistepHeadLog 获取 zdfjy:', zdfjy);
+                }
+                
+                // 2. 如果还是没有找到，从业务表获取
+                if (!zdfjy && businessTable1) {
+                    try {
+                        const BusinessTable = cds.entities[`com.sap.zictm.${businessTable1}`];
+                        if (BusinessTable) {
+                            const businessData = await cds.run(
+                                SELECT.one.from(BusinessTable).where({ zrfc_logid: zrfcLogid })
+                            );
+                            if (businessData && businessData.zdfjy) {
+                                zdfjy = businessData.zdfjy;
+                                console.log('[RetryHandler.retry] 从业务表', businessTable1, '获取 zdfjy:', zdfjy);
+                            }
+                        }
+                    } catch (error) {
+                        console.warn('[RetryHandler.retry] 从业务表获取 zdfjy 失败:', error.message);
+                    }
+                }
+            }
+            
             console.log('[RetryHandler.retry] 重推配置, zrfcid:', zrfcid, 'failedStepNum:', failedStepNum, 'zdfjy:', zdfjy, 'isAsync:', isAsync);
 
             let result;

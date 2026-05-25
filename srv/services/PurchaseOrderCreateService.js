@@ -77,7 +77,7 @@ class PurchaseOrderService {
             // 调试：打印请求头
             console.log('[PurchaseOrderService] 请求头:', {
                 'X-CSRF-Token': csrfToken,
-                'Content-Type': 'application/json;charset=UTF-8',
+                'Accept': 'application/json',
                 'Cookie': cookieString,
                 'sap-language': 'ZH'
             });
@@ -93,7 +93,7 @@ class PurchaseOrderService {
                     data: purchaseOrderData,
                     headers: {
                         'X-CSRF-Token': csrfToken,
-                        'Content-Type': 'application/json;charset=UTF-8',
+                        'Accept': 'application/json',
                         'Cookie': cookieString,
                         'sap-language': 'ZH'
                     },
@@ -304,6 +304,7 @@ class PurchaseOrderService {
                 PurchaseOrderItem: poItemNumber,
                 Material: material,
                 Plant: isReturn ? (mptStepConfig?.lifnr || "") : (mptStepConfig?.umwrk || ""),
+                StorageLocation: mptStepConfig?.umlgo || "", 
                 PurchaseOrderQuantityUnit: unitOfMeasure,
                 TaxCode: mptStepConfig?.mwskz || "",
                 OrderQuantity: item.RequestedQuantity ? parseFloat(item.RequestedQuantity) : 0,
@@ -341,7 +342,7 @@ class PurchaseOrderService {
             Supplier: isReturn ? (mptStepConfig?.umwrk || "") : (mptStepConfig?.lifnr || ""),
             DocumentCurrency: mainData.TransactionCurrency || "",
             YY1_FD_ZDFJY2_PDH: zdfjy,
-            SupplyingPlant: mptStepConfig?.lifnr || "",
+            SupplyingPlant: isReturn ? (mptStepConfig?.umwrk || "") : (mptStepConfig?.lifnr || ""),
             _PurchaseOrderItem: purchaseOrderItems
         };
 

@@ -1,0 +1,5 @@
+_schema-version: 3.3.0
+ID: zictm-dev
+extends: zictm
+parameters:
+  domain: btp-test.sunlu3d.cn

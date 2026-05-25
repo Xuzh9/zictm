@@ -64,7 +64,7 @@ class DeliveryOrderQueryService {
                         method: 'GET',
                         url: url,
                         headers: {
-                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
                             'sap-language': 'ZH'
                         },
                         validateStatus: function (status) {

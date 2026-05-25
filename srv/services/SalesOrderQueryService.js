@@ -72,7 +72,7 @@ class SalesOrderQueryService {
                         method: 'GET',
                         url: url,
                         headers: {
-                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
                             'sap-language': 'ZH'
                         },
                         validateStatus: function (status) {
@@ -165,28 +165,34 @@ class SalesOrderQueryService {
                     const formattedPurchaseOrder = String(itemPurchaseOrderByCustomer).padStart(10, '0');
                     const formattedSalesOrderItem = String(item.SalesOrderItem).padStart(6, '0');
                     
-                    // 根据 zrfcid 和 canum 决定更新哪些字段
+                    // 根据 zrfcid 和 canum 决定更新哪些字段以及使用哪个查询条件
                     let updateData;
+                    let queryField;
                     if (zrfcid === 'SD08' && canum === 50) {
                         updateData = {
                             SalesOrder2: salesOrderNumber,
                             SalesOrderItem2: formattedSalesOrderItem
+                        };
+                        queryField = {
+                            PurchaseOrder2: formattedPurchaseOrder,
+                            PurchaseOrderItem2: String(item.UnderlyingPurchaseOrderItem).padStart(5, '0')
                         };
                     } else {
                         updateData = {
                             SalesOrder1: salesOrderNumber,
                             SalesOrderItem1: formattedSalesOrderItem
                         };
+                        queryField = {
+                            PurchaseOrder1: formattedPurchaseOrder,
+                            PurchaseOrderItem1: String(item.UnderlyingPurchaseOrderItem).padStart(5, '0')
+                        };
                     }
                     
-                    // 根据 to_Item.PurchaseOrderByCustomer = PurchaseOrder1 和 to_Item.UnderlyingPurchaseOrderItem = PurchaseOrderItem1 更新记录
+                    // 根据对应的查询条件更新记录
                     const affectedRows = await cds.run(
                         UPDATE(PISalesOrderRel)
                             .set(updateData)
-                            .where({
-                                PurchaseOrder1: formattedPurchaseOrder,
-                                PurchaseOrderItem1: String(item.UnderlyingPurchaseOrderItem).padStart(5, '0')
-                            })
+                            .where(queryField)
                     );
                     
                     console.log(`更新 PISalesOrderRel: PurchaseOrder1=${formattedPurchaseOrder}, PurchaseOrderItem1=${String(item.UnderlyingPurchaseOrderItem).padStart(5, '0')} -> ${JSON.stringify(updateData)}, 更新行数: ${affectedRows}`);

@@ -63,13 +63,19 @@ class DeliveryOrderItemUpdateService {
             }
             console.log('[DeliveryOrderItemUpdateService] 交货单号:', deliveryDocument);
 
-            // 根据 zrfcid 和 canum 判断使用的 API 路径
+            // 获取销售订单类型（从第一条业务数据获取）
+            const salesOrderType = businessDataList[0]?.SalesOrderType;
+            
+            // 根据 zrfcid、canum 和销售订单类型判断使用的 API 路径
             let apiPath;
             let itemEntity;
             
             if (zrfcid === 'SD04' && canum === 110) {
                 apiPath = '/sap/opu/odata/sap/API_INBOUND_DELIVERY_SRV;v=0002';
                 itemEntity = 'A_InbDeliveryItem';
+            } else if (((zrfcid === 'SD04' && canum === 160) || (zrfcid === 'SD07' && canum === 70)) && salesOrderType === 'CBRE') {
+                apiPath = '/sap/opu/odata/sap/API_CUSTOMER_RETURNS_DELIVERY_SRV;v=2';
+                itemEntity = 'A_ReturnsDeliveryItem';
             } else {
                 apiPath = '/sap/opu/odata/sap/API_OUTBOUND_DELIVERY_SRV;v=0002';
                 itemEntity = 'A_OutbDeliveryItem';
@@ -162,7 +168,7 @@ class DeliveryOrderItemUpdateService {
                         headers: {
                             'X-CSRF-Token': csrfToken,
                             'Cookie': cookieString,
-                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
                             'sap-language': 'ZH',
                             'If-Match': etag || '*'
                         },

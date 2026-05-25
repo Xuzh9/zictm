@@ -18,7 +18,7 @@ class MultiStepProcessor {
      * @returns {Promise<Object>} 处理结果
      */
     async processWithLogId(zrfcLogid, zrfcid, startStepNum = null, isRetry = false, zdfjy = null, id = null) {
-        console.log('[MultiStepProcessor.processWithLogId] 开始处理, zrfcLogid:', zrfcLogid, ', zrfcid:', zrfcid, ', id:', id);
+        console.log('[MultiStepProcessor.processWithLogId] 开始处理, zrfcLogid:', zrfcLogid, ', zrfcid:', zrfcid, ', zdfjy:', zdfjy, ', id:', id);
         let lastObjKey = '';
         let lastMessage = '';
         let lastCode = '';
@@ -84,14 +84,14 @@ class MultiStepProcessor {
                 console.log('[MultiStepProcessor] 步骤执行结果:', step.canum, 'code:', executionResult.code);
                 
                 const endTime = Date.now();
-                const executionTime = Math.round((endTime - startTime) / 1000);
+                const executionTime = Math.round((endTime - startTime) / 10) / 100;
                 
                 // 保存日志
                 const logMessage = executionResult.message ? executionResult.message.substring(0, 500) : '';
                 await this.saveLog(zrfcLogid, zrfcid, step.canum, {
                     ...executionResult,
                     message: logMessage
-                }, executionTime, executionAt, isRetry, step.objtype, step.description, id);
+                }, executionTime, executionAt, isRetry, step.objtype, step.description, id, zdfjy);
 
                 // 更新上一步对象号、消息和代码
                 lastObjKey = executionResult.objkey || lastObjKey;
@@ -209,8 +209,9 @@ class MultiStepProcessor {
      * @param {string} objtype - 对象类型（从StepConfig获取）
      * @param {string} description - 步骤描述（从StepConfig获取）
      * @param {string} id - ApiInputLog的ID，用于与MultistepHeadLog关联
+     * @param {string} zdfjy - 多方交易类型ID
      */
-    async saveLog(zrfcLogid, zrfcid, canum, executionResult, executionTime, executionAt, isRetry = false, objtype = null, description = null, id = null) {
+    async saveLog(zrfcLogid, zrfcid, canum, executionResult, executionTime, executionAt, isRetry = false, objtype = null, description = null, id = null, zdfjy = null) {
         const MultistepLog = cds.entities['com.sap.zictm.MultistepLog'];
         const MultistepHeadLog = cds.entities['com.sap.zictm.MultistepHeadLog'];
          
@@ -232,10 +233,10 @@ class MultiStepProcessor {
                         objkey: executionResult.objkey,
                         objtype: objtype || existingLog.objtype,
                         description: description || existingLog.description,
-                        executionTime: isRetry ? existingLog.executionTime : executionTime,
+                        executionTime: isRetry ? Number(existingLog.executionTime) : Number(executionTime),
                         executionAt: isRetry ? existingLog.executionAt : executionAt,
                         lastExecutionAt: executionAt,
-                        lastExecutionTime: executionTime,
+                        lastExecutionTime: Number(executionTime),
                         head_zrfc_logid: zrfcLogid
                     })
                     .where({ zrfc_logid: zrfcLogid, canum: canum })
@@ -252,17 +253,17 @@ class MultiStepProcessor {
                     objkey: executionResult.objkey,
                     objtype: objtype || '',
                     description: description || '',
-                    executionTime,
+                    executionTime: Number(executionTime),
                     executionAt,
                     lastExecutionAt: executionAt,
-                    lastExecutionTime: executionTime,
+                    lastExecutionTime: Number(executionTime),
                     head_zrfc_logid: zrfcLogid
                 })
             );
         }
         
         // 同时更新 MultistepHeadLog 表
-        await this.updateMultistepHeadLog(zrfcLogid, zrfcid, executionResult, executionTime, executionAt, id);
+        await this.updateMultistepHeadLog(zrfcLogid, zrfcid, executionResult, executionAt, id, zdfjy);
     }
     
     /**
@@ -270,11 +271,11 @@ class MultiStepProcessor {
      * @param {string} zrfcLogid - 多步ID
      * @param {string} zrfcid - 业务流程ID
      * @param {Object} executionResult - 执行结果
-     * @param {number} executionTime - 执行时间（秒）
      * @param {Date} executionAt - 执行时间戳
      * @param {string} id - ApiInputLog的ID，用于与MultistepHeadLog关联（可选）
+     * @param {string} zdfjy - 多方交易类型ID（可选）
      */
-    async updateMultistepHeadLog(zrfcLogid, zrfcid, executionResult, executionTime, executionAt, id = null) {
+    async updateMultistepHeadLog(zrfcLogid, zrfcid, executionResult, executionAt, id = null, zdfjy = null) {
         const MultistepHeadLog = cds.entities['com.sap.zictm.MultistepHeadLog'];
         
         // 检查抬头日志是否已存在
@@ -290,12 +291,11 @@ class MultiStepProcessor {
                     .set({
                         id: existingHeadLog.id, // 保留原有的id（与ApiInputLog的关联不变）
                         zrfcid: zrfcid,
+                        zdfjy: zdfjy || existingHeadLog.zdfjy, // 更新或保留原有的zdfjy
                         code: executionResult.code,
                         message: executionResult.message,
-                        executionTime: existingHeadLog.executionTime + executionTime,
                         executionAt: executionAt,
-                        lastExecutionAt: executionAt,
-                        lastExecutionTime: executionTime
+                        lastExecutionAt: executionAt
                     })
                     .where({ zrfc_logid: zrfcLogid })
             );
@@ -306,12 +306,11 @@ class MultiStepProcessor {
                     zrfc_logid: zrfcLogid,
                     id: id, // 使用传入的id
                     zrfcid: zrfcid,
+                    zdfjy: zdfjy,
                     code: executionResult.code,
                     message: executionResult.message,
-                    executionTime,
                     executionAt,
-                    lastExecutionAt: executionAt,
-                    lastExecutionTime: executionTime
+                    lastExecutionAt: executionAt
                 })
             );
         }

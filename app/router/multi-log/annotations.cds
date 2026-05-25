@@ -8,6 +8,7 @@ annotate service.MultistepHeadLog with {
     zrfc_logid         @Common.Label: '日志ID';
     id                 @Common.Label: '关联ID';
     zrfcid             @Common.Label: '业务流程ID';
+    zdfjy              @Common.Label: '多方交易类型ID';
     code               @Common.Label: '执行状态';
     message            @Common.Label: '消息';
     executionAt        @Common.Label: '执行时间';
@@ -34,7 +35,7 @@ annotate service.MultistepHeadLog with @(
             { $Type: 'UI.DataField', Label: '执行状态', Value: code },
             { $Type: 'UI.DataField', Label: '消息', Value: message },
             { $Type: 'UI.DataField', Label: '执行时间', Value: executionAt },
-            { $Type: 'UI.DataField', Label: '运行时间（秒）', Value: executionTime },
+            { $Type: 'UI.DataField', Label: '最新执行时间', Value: lastExecutionAt },
             {
                 $Type: 'UI.DataFieldForAction',
                 Label: '重推',
@@ -50,12 +51,11 @@ annotate service.MultistepHeadLog with @(
             { $Type: 'UI.DataField', Label: '日志ID', Value: zrfc_logid, Editable: false },
             { $Type: 'UI.DataField', Label: '关联ID', Value: id, Editable: false },
             { $Type: 'UI.DataField', Label: '业务流程ID', Value: zrfcid, Editable: false },
+            { $Type: 'UI.DataField', Label: '多方交易类型ID', Value: zdfjy, Editable: false },
             { $Type: 'UI.DataField', Label: '执行状态', Value: code, Editable: false },
             { $Type: 'UI.DataField', Label: '消息', Value: message, Editable: false },
             { $Type: 'UI.DataField', Label: '执行时间', Value: executionAt, Editable: false },
-            { $Type: 'UI.DataField', Label: '运行时间（秒）', Value: executionTime, Editable: false },
             { $Type: 'UI.DataField', Label: '最新执行时间', Value: lastExecutionAt, Editable: false },
-            { $Type: 'UI.DataField', Label: '最新运行时间（秒）', Value: lastExecutionTime, Editable: false }
         ],
 
         Facets: [

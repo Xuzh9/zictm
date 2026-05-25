@@ -42,6 +42,18 @@ class MaterialDocumentService {
             }
             const businessDataList = businessDataResult.businessData;
 
+            // 按照 TransferOrder 和 TransferOrderItem 排序
+            businessDataList.sort((a, b) => {
+                const orderA = a.TransferOrder || '';
+                const orderB = b.TransferOrder || '';
+                if (orderA !== orderB) {
+                    return orderA.localeCompare(orderB);
+                }
+                const itemA = a.TransferOrderItem || '';
+                const itemB = b.TransferOrderItem || '';
+                return itemA.localeCompare(itemB);
+            });
+
             // 构建物料凭证数据（MM02 需要异步查询批次库存）
             const materialDocData = await this.buildMaterialDocumentData(businessDataList, zrfcid);
  
@@ -78,7 +90,6 @@ class MaterialDocumentService {
                     data: materialDocData,
                     headers: {
                         'X-CSRF-Token': csrfResult.headers['x-csrf-token'],
-                        'Content-Type': 'application/json',
                         'Accept': 'application/json',
                         'Cookie': cookieString,
                         'sap-language': 'ZH'
@@ -108,17 +119,41 @@ class MaterialDocumentService {
             } else {
                 // 提取详细的错误信息
                 let errorMessage = `API 调用失败: ${result.status}`;
-                if (result.data && result.data.error) {
-                    const error = result.data.error;
-                    if (error.message && error.message.value) {
-                        errorMessage = error.message.value;
-                    } else if (error.message) {
-                        errorMessage = error.message;
+                
+                // SAP OData API 错误结构可能是 result.data.error 或直接 result.data
+                const errorObj = result.data?.error || result.data;
+                
+                if (errorObj) {
+                    const errorMessages = [];
+                    
+                    // 收集主错误消息
+                    if (errorObj.message?.value) {
+                        errorMessages.push(errorObj.message.value);
+                    } else if (errorObj.message) {
+                        errorMessages.push(errorObj.message);
                     }
-                    if (error.code) {
-                        errorMessage = `${errorMessage} (${error.code})`;
+                    
+                    // 收集 errordetails 中的详细错误（可能在 error 或 innererror 中）
+                    const errorDetails = errorObj.errordetails || errorObj.innererror?.errordetails;
+                    if (errorDetails && Array.isArray(errorDetails)) {
+                        for (const detail of errorDetails) {
+                            if (detail.message) {
+                                errorMessages.push(detail.message);
+                            }
+                        }
+                    }
+                    
+                    // 合并错误消息
+                    if (errorMessages.length > 0) {
+                        errorMessage = errorMessages.join('; ');
+                    }
+                    
+                    // 添加错误代码
+                    if (errorObj.code) {
+                        errorMessage = `${errorMessage} (${errorObj.code})`;
                     }
                 }
+                
                 // 限制错误消息长度，避免超过系统限制
                 errorMessage = errorMessage.substring(0, 500);
                 return {
@@ -131,19 +166,42 @@ class MaterialDocumentService {
             console.error('MaterialDocumentService 执行失败:', error);
             // 提取详细的错误信息
             let errorMessage = error.message ? error.message.substring(0, 500) : '未知错误';
+            
+            // 处理 HTTP 响应错误
             if (error.response && error.response.data && error.response.data.error) {
                 const errorData = error.response.data.error;
+                const errorMessages = [];
+                
+                // 添加主错误消息
                 if (errorData.message && errorData.message.value) {
-                    errorMessage = errorData.message.value;
+                    errorMessages.push(errorData.message.value);
                 } else if (errorData.message) {
-                    errorMessage = errorData.message;
+                    errorMessages.push(errorData.message);
                 }
+                
+                // 添加 errordetails 中的详细错误
+                if (errorData.errordetails && Array.isArray(errorData.errordetails)) {
+                    for (const detail of errorData.errordetails) {
+                        if (detail.message) {
+                            errorMessages.push(detail.message);
+                        }
+                    }
+                }
+                
+                // 合并错误消息
+                if (errorMessages.length > 0) {
+                    errorMessage = errorMessages.join('; ');
+                }
+                
+                // 添加错误代码
                 if (errorData.code) {
                     errorMessage = `${errorMessage} (${errorData.code})`;
                 }
+                
                 // 限制错误消息长度，避免超过系统限制
                 errorMessage = errorMessage.substring(0, 500);
             }
+            
             return {
                 code: 'E',
                 message: errorMessage,

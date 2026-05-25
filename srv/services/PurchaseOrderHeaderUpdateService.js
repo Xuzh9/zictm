@@ -2,7 +2,7 @@ const cds = require('@sap/cds');
 const { executeHttpRequest } = require('@sap-cloud-sdk/http-client');
 const CommonUtils = require('../handlers/CommonUtils');
 
-class PurchaseOrderUpdateService {
+class PurchaseOrderHeaderUpdateService {
     constructor() {
         this.zrfcLogid = null;
         this.commonUtils = new CommonUtils();
@@ -104,7 +104,7 @@ class PurchaseOrderUpdateService {
                     data: updateData,
                     headers: {
                         'X-CSRF-Token': csrfToken,
-                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
                         'Cookie': cookieString,
                         'sap-language': 'ZH',
                         'If-Match': etag || '*'
@@ -135,7 +135,7 @@ class PurchaseOrderUpdateService {
             }
 
         } catch (error) {
-            console.error('PurchaseOrderUpdateService 执行失败:', error);
+            console.error('PurchaseOrderHeaderUpdateService 执行失败:', error);
             return {
                 code: 'E',
                 message: error.message || '采购订单修改失败',
@@ -217,4 +217,4 @@ class PurchaseOrderUpdateService {
     }
 }
 
-module.exports = PurchaseOrderUpdateService;
+module.exports = PurchaseOrderHeaderUpdateService;

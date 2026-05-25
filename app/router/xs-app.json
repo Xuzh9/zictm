@@ -8,7 +8,7 @@
       "authenticationType": "xsuaa",
       "csrfProtection": true
     },
-   {
+    {
       "source": "^/multi-step/(.*)$",
       "localDir": ".",
       "authenticationType": "xsuaa",
