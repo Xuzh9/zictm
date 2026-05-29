@@ -73,9 +73,9 @@ entity MultistepLog {
     objtype             : String(5) @title: '对象类型';      // 对象类型
     objkey              : String(20) @title: '对象号';     // 对象号
     executionAt         : Timestamp @title: '执行时间';      // 执行时间
-    executionTime       : Decimal(10,2) @title: '运行时间';  // 运行时间（秒）
+    executionTime       : Decimal(10,2) @title: '运行时间(秒)';  // 运行时间(秒)
     lastExecutionAt     : Timestamp @title: '最新执行时间';      // 最新执行时间
-    lastExecutionTime   : Decimal(10,2) @title: '最新运行时间';  // 最新运行时间（秒）
+    lastExecutionTime   : Decimal(10,2) @title: '最新运行时间(秒)';  // 最新运行时间(秒)
 }
 
 // 多方交易类型配置表
@@ -107,6 +107,7 @@ entity MPTStepConfig {
     ekgrp          : String(4) @title: '采购组';      // 采购组
     umwrk          : String(4) @title: '收货工厂';      // 收货工厂
     umlgo          : String(4) @title: '收货库存地点';      // 收货库存地点
+    taxFreightAmt  : Decimal(13,2) @title: '关税运费价格';  // 关税运费价格
     zjgbl          : Decimal(10,2) @title: '价格比例(%)';  // 价格比例(%)
     mwskz          : String(3) @title: '税码';      // 税码
     zsl            : Decimal(10,2) @title: '税率';  // 税率
@@ -165,11 +166,12 @@ entity PaymentReceipt {
     procurementOrganization     : String(4) @title: '采购组织';      // 采购组织
     paymentOrganization         : String(4) @title: '付款组织';      // 付款组织
     receivingOrganization       : String(32) @title: '收款组织';     // 收款组织
-    expenseResponsibleDepartment: String(32) @title: '部门';        // 部门
+    expenseResponsibleDepartment: String(10) @title: '成本中心';     // 成本中心
     currency                    : String(3) @title: '币别' ;        // 币别        
     businessDate                : Date @title: '业务日期';           // 业务日期
     documentType                : String(20) @title: '单据类型';     // 单据类型
     businessType                : String(20) @title: '业务类型';     // 业务类型
+    remark                      : String(50) @title: '抬头备注';        // 抬头备注
     settlementMethod            : String(20) @title: '结算方式';     // 结算方式
     paymentPurpose              : String(50) @title: '收付款用途';     // 收付款用途
     receivingUnitType           : String(10) @title: '收款单位类型';     // 收款单位类型
@@ -231,6 +233,7 @@ entity SalesOrderCreate {
     RequestedQuantity             : Decimal(13,3) @title: '数量'; // 数量
     RequestedQuantityUnit         : String(3) @title: '单位';     // 单位
     ProductionPlant               : String(4) @title: '工厂';     // 工厂
+    StorageLocation               : String(4) @title: '库存地点';          // 库存地点
     ItemRemark                    : LargeString @title: '销售订单行项目文本备注';   // 销售订单行项目文本备注
     PurchaseOrderByShipToParty    : String(6) @title: '客户采购订单行项目';     // 客户采购订单行项目
     ProductTaxClassification1     : String(4) @title: '产品税分类';     // 产品税分类
@@ -280,6 +283,7 @@ entity SalesOrderChange {
     RequestedQuantity             : Decimal(15,3) @title: '数量';  // 数量
     RequestedQuantityUnit         : String(3) @title: '单位';      // 单位
     ProductionPlant               : String(4) @title: '工厂';      // 工厂
+    StorageLocation               : String(4) @title: '库存地点';          // 库存地点
     PurchasePrice                 : Decimal(15,2) @title: '采购单价'; // 采购单价
     ZB01_Value                    : Decimal(15,2) @title: 'ZB01价格';  // ZB01价格
     ZB01_CurrencyCode             : String(3) @title: 'ZB01价格单位';      // ZB01价格单位
@@ -321,8 +325,8 @@ entity DeliveryActualInfo {
     ActualGoodsMovementDate   : Date @title: '实际发货日期';            // 实际发货日期
     YY1_FD_SPZT               : String(2) @title: '财务审批状态';       // 财务审批状态
     Material                  : String(40) @title: '物料编码';      // 物料编码
-    ActualDeliveryQuantity    : Decimal(13,3) @title: '实际发货数量';   // 实际发货数量
     StorageLocation           : String(4) @title: '实际发货库位';       // 实际发货库位
+    ActualDeliveryQuantity    : Decimal(13,3) @title: '实际发货数量';   // 实际发货数量
     Batch                     : String(10) @title: '实际批次';      // 实际批次
     ParentItem                : String(6) @title: '上层行项目号';       // 上层行项目号
     RefDocNo                  : String(10) @title: '参考单号';      // 参考单号

@@ -142,14 +142,7 @@ class DeliveryOrderPostingService {
                 const responseData = typeof result.data === 'string' ? JSON.parse(result.data) : result.data;
 
                 // 提取过账结果信息
-                let message;
-                if (zrfcid === 'SD04' && canum === 130) {
-                    message = '内向交货单过账成功';
-                } else if (((zrfcid === 'SD04' && canum === 170) || (zrfcid === 'SD07' && canum === 80)) && salesOrderType === 'CBRE') {
-                    message = '退货交货单过账成功';
-                } else {
-                    message = '交货单过账成功';
-                }
+                let message = '交货单过账成功';
                 if (responseData?.d?.PostingConfirmation) {
                     const confirmation = responseData.d.PostingConfirmation;
                     if (confirmation.MaterialDocument) {
@@ -251,20 +244,23 @@ class DeliveryOrderPostingService {
      */
     getApiConfig(salesOrderType, zrfcid, canum) {
         console.log(`[DeliveryOrderPostingService.getApiConfig] 入参 - salesOrderType: ${salesOrderType}, zrfcid: ${zrfcid}, canum: ${canum}, 类型 - zrfcid: ${typeof zrfcid}, canum: ${typeof canum}`);
-        if (zrfcid === 'SD04' && canum === 130) {
-            // SD04 130 内向交货单过账 - 使用 PostGoodsReceipt（收货）
+        if ((zrfcid === 'SD04' && canum === 130) || 
+            (zrfcid === 'SD07' && canum === 50) || 
+            zrfcid === 'SD09' || 
+            (zrfcid === 'SD10' && (canum === 50 || canum === 140))) {
+            // 内向交货单过账API
             return {
                 csrfUrl: '/sap/opu/odata/sap/API_INBOUND_DELIVERY_SRV;v=0002/A_InbDeliveryHeader(\'{DeliveryDocument}\')',
                 postingUrl: '/sap/opu/odata/sap/API_INBOUND_DELIVERY_SRV;v=0002/PostGoodsReceipt?DeliveryDocument='
             };
-        } else if (((zrfcid === 'SD04' && canum === 170) || (zrfcid === 'SD07' && canum === 80)) && salesOrderType === 'CBRE') {
-            // SD04 170 CBRE / SD07 80 CBRE 退货交货单过账 - 使用退货交货单 API
+        } else if (((zrfcid === 'SD04' && canum === 170) || (zrfcid === 'SD07' && canum === 90) ) && salesOrderType === 'CBRE') {
+            // 退货交货单过账API
             return {
                 csrfUrl: '/sap/opu/odata/sap/API_CUSTOMER_RETURNS_DELIVERY_SRV;v=2/A_ReturnsDeliveryHeader(\'{DeliveryDocument}\')',
                 postingUrl: '/sap/opu/odata/sap/API_CUSTOMER_RETURNS_DELIVERY_SRV;v=2/PostGoodsReceipt?DeliveryDocument='
             };
         } else if (salesOrderType === 'ZPR' || salesOrderType === 'OR') {
-            // ZPR/OR - 使用外向交货单 API
+            // 外向交货单过账API
             return {
                 csrfUrl: '/sap/opu/odata/sap/API_OUTBOUND_DELIVERY_SRV;v=0002/A_OutbDeliveryHeader(\'{DeliveryDocument}\')',
                 postingUrl: '/sap/opu/odata/sap/API_OUTBOUND_DELIVERY_SRV;v=0002/PostGoodsIssue?DeliveryDocument='

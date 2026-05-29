@@ -12,9 +12,9 @@ annotate service.MultistepHeadLog with {
     code               @Common.Label: '执行状态';
     message            @Common.Label: '消息';
     executionAt        @Common.Label: '执行时间';
-    executionTime      @Common.Label: '运行时间（秒）';
+    executionTime      @Common.Label: '运行时间(秒)';
     lastExecutionAt    @Common.Label: '最新执行时间';
-    lastExecutionTime  @Common.Label: '最新运行时间（秒）';
+    lastExecutionTime  @Common.Label: '最新运行时间(秒)';
 };
 
 annotate service.MultistepHeadLog with @(
@@ -75,8 +75,8 @@ annotate service.MultistepLog with @(
         },
         LineItem: [
             { $Type: 'UI.DataField', Label: '步骤编号', Value: canum, Editable: false },
-            { $Type: 'UI.DataField', Label: '业务流程ID', Value: zrfcid, Editable: false },
             { $Type: 'UI.DataField', Label: '描述', Value: description, Editable: false },
+            { $Type: 'UI.DataField', Label: '最新执行时间', Value: lastExecutionAt, Editable: false },
             { $Type: 'UI.DataField', Label: '消息状态', Value: code, Editable: false },
             { $Type: 'UI.DataField', Label: '消息文本', Value: message, Editable: false },
             { $Type: 'UI.DataField', Label: '对象号', Value: objkey, Editable: false }
@@ -91,9 +91,9 @@ annotate service.MultistepLog with @(
             { $Type: 'UI.DataField', Label: '对象类型', Value: objtype, Editable: false },
             { $Type: 'UI.DataField', Label: '对象号', Value: objkey, Editable: false },
             { $Type: 'UI.DataField', Label: '执行时间', Value: executionAt, Editable: false },
-            { $Type: 'UI.DataField', Label: '运行时间', Value: executionTime, Editable: false },
+            { $Type: 'UI.DataField', Label: '运行时间(秒)', Value: executionTime, Editable: false },
             { $Type: 'UI.DataField', Label: '最新执行时间', Value: lastExecutionAt, Editable: false },
-            { $Type: 'UI.DataField', Label: '最新运行时间', Value: lastExecutionTime, Editable: false }
+            { $Type: 'UI.DataField', Label: '最新运行时间(秒)', Value: lastExecutionTime, Editable: false }
         ],
         Facets: [
             { $Type: 'UI.ReferenceFacet', Label: '步骤执行信息', Target: '@UI.Identification' }

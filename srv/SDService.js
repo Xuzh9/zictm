@@ -209,6 +209,9 @@ module.exports = cds.service.impl(async function () {
       if (!item.paymentReceiptNoItem) {
         errors.push(`第 ${rowNum} 条数据缺少必填字段：paymentReceiptNoItem`);
       }
+      if (!item.documentType) {
+        errors.push(`第 ${rowNum} 条数据缺少必填字段：documentType`);
+      }
     });
 
     // --------------------------

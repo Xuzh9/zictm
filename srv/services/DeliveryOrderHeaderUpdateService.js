@@ -74,7 +74,7 @@ class DeliveryOrderHeaderUpdateService {
             }
 
             // 获取 DeliveryDate
-            const deliveryDate = mainData.DeliveryDate;
+            const deliveryDate = mainData.DeliveryDate || mainData.ActualGoodsMovementDate;
             if (!deliveryDate) {
                 const returnResult = {
                     code: 'E',
@@ -232,7 +232,7 @@ class DeliveryOrderHeaderUpdateService {
         } catch (error) {
             console.error('[DeliveryOrderUpdateService.getBusinessData] 获取业务数据失败:', error);
             return { code: 'E', message: `获取业务数据失败: ${error.message}` };
-        }
+        } 
     }
 
     /**
@@ -244,20 +244,23 @@ class DeliveryOrderHeaderUpdateService {
      */
     getApiConfig(zrfcid, canum, salesOrderType) {
         // 根据 zrfcid 和 canum 获取对应的 API 配置
-        if (zrfcid === 'SD04' && canum === 100) {
-            // SD04 且 canum = 100 时使用内向交货单 API
+        if ((zrfcid === 'SD04' && canum === 100) || 
+            (zrfcid === 'SD07' && canum === 20) || 
+            zrfcid === 'SD09' || 
+            (zrfcid === 'SD10' && (canum === 20 || canum === 100))) {
+            //内向交货单 API
             return {
                 csrfUrl: '/sap/opu/odata/sap/API_INBOUND_DELIVERY_SRV;v=0002/A_InbDeliveryHeader(\'{DeliveryDocument}\')',
                 updateUrl: "/sap/opu/odata/sap/API_INBOUND_DELIVERY_SRV;v=0002/A_InbDeliveryHeader('{DeliveryDocument}')"
             };
-        } else if (((zrfcid === 'SD04' && canum === 150) || (zrfcid === 'SD07' && canum === 60)) && salesOrderType === 'CBRE') {
-            // SD04 150 CBRE / SD07 60 CBRE 使用退货交货单 API
+        } else if (((zrfcid === 'SD04' && canum === 150) || (zrfcid === 'SD07' && canum === 60) ) && salesOrderType === 'CBRE') {
+            //退货交货单 API
             return {
                 csrfUrl: '/sap/opu/odata/sap/API_CUSTOMER_RETURNS_DELIVERY_SRV;v=2/A_ReturnsDeliveryHeader(\'{DeliveryDocument}\')',
                 updateUrl: "/sap/opu/odata/sap/API_CUSTOMER_RETURNS_DELIVERY_SRV;v=2/A_ReturnsDeliveryHeader(DeliveryDocument='{DeliveryDocument}')"
             };
         } else {
-            // 使用外向交货单 API
+            //外向交货单 API
             return {
                 csrfUrl: '/sap/opu/odata/sap/API_OUTBOUND_DELIVERY_SRV;v=0002/A_OutbDeliveryHeader(\'{DeliveryDocument}\')',
                 updateUrl: "/sap/opu/odata/sap/API_OUTBOUND_DELIVERY_SRV;v=0002/A_OutbDeliveryHeader('{DeliveryDocument}')"

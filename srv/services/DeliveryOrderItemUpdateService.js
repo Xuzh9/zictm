@@ -69,10 +69,15 @@ class DeliveryOrderItemUpdateService {
             // 根据 zrfcid、canum 和销售订单类型判断使用的 API 路径
             let apiPath;
             let itemEntity;
+            let isInboundDelivery = false; // 新增：标识是否为内向交货单
             
-            if (zrfcid === 'SD04' && canum === 110) {
+            if ((zrfcid === 'SD04' && canum === 110) || 
+                (zrfcid === 'SD07' && canum === 30) || 
+                zrfcid === 'SD09' || 
+                (zrfcid === 'SD10' && (canum === 30 || canum === 120))) {
                 apiPath = '/sap/opu/odata/sap/API_INBOUND_DELIVERY_SRV;v=0002';
                 itemEntity = 'A_InbDeliveryItem';
+                isInboundDelivery = true; // 设置为内向交货单
             } else if (((zrfcid === 'SD04' && canum === 160) || (zrfcid === 'SD07' && canum === 70)) && salesOrderType === 'CBRE') {
                 apiPath = '/sap/opu/odata/sap/API_CUSTOMER_RETURNS_DELIVERY_SRV;v=2';
                 itemEntity = 'A_ReturnsDeliveryItem';
@@ -137,17 +142,14 @@ class DeliveryOrderItemUpdateService {
                 // 构建更新数据
                 const updateData = {};
                 
-                // 更新 Batch（如果有值，否则使用默认值 '2025'）
-                updateData.Batch = '2025';
+                // 更新 Batch（内向交货单不需要更新）
+                if (!isInboundDelivery) {
+                    updateData.Batch = '2025';
+                }
                 
                 // 更新 StorageLocation（内向交货单不需要更新）
-                if (businessData.ReceivingStorageLocation && !(zrfcid === 'SD04' && canum === 110)) {
-                    updateData.StorageLocation = businessData.ReceivingStorageLocation;
-                }
-
-                // 更新 ActualDeliveryQuantity = RequestedQuantity（仅 SD04 110）
-                if (zrfcid === 'SD04' && canum === 110 && businessData.RequestedQuantity) {
-                    updateData.ActualDeliveryQuantity = businessData.RequestedQuantity;
+                if (businessData.ReceivingStorageLocation && !isInboundDelivery) {
+                    updateData.StorageLocation = businessData.ReceivingStorageLocation || businessData.StorageLocation || "";
                 }
 
                 if (Object.keys(updateData).length === 0) {

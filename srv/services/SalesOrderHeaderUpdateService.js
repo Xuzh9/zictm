@@ -215,9 +215,6 @@ class SalesOrderHeaderUpdateService {
         if (firstBusinessData.YY1_FD_ZH) {
             headerData.YY1_FD_ZH_SDH = firstBusinessData.YY1_FD_ZH;
         }
-        if (firstBusinessData.YY1_FD_ZDFJY) {
-            headerData.YY1_FD_ZDFJY_SDH = firstBusinessData.YY1_FD_ZDFJY;
-        }
 
         return headerData;
     }

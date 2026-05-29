@@ -33,7 +33,7 @@
     "requires": {
       "db": "hana",
       "auth": {
-        "kind": "mocked"
+        "kind": "xsuaa"
       }
     },
     "server": {

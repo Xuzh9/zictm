@@ -222,7 +222,7 @@ class MultiStepProcessor {
         );
  
         if (existingLog) {
-            // 如果日志已存在，更新执行结果
+            // 如果日志已存在，更新执行结果（executionAt 只在首次创建时设置）
             // 重推时允许更新状态为 E 或空的记录
             await cds.run(
                 UPDATE(MultistepLog)
@@ -234,7 +234,6 @@ class MultiStepProcessor {
                         objtype: objtype || existingLog.objtype,
                         description: description || existingLog.description,
                         executionTime: isRetry ? Number(existingLog.executionTime) : Number(executionTime),
-                        executionAt: isRetry ? existingLog.executionAt : executionAt,
                         lastExecutionAt: executionAt,
                         lastExecutionTime: Number(executionTime),
                         head_zrfc_logid: zrfcLogid
@@ -285,7 +284,7 @@ class MultiStepProcessor {
         );
         
         if (existingHeadLog) {
-            // 如果抬头日志已存在，更新执行结果（保留原有的id）
+            // 如果抬头日志已存在，更新执行结果（executionAt 只在首次创建时设置）
             await cds.run(
                 UPDATE(MultistepHeadLog)
                     .set({
@@ -294,8 +293,7 @@ class MultiStepProcessor {
                         zdfjy: zdfjy || existingHeadLog.zdfjy, // 更新或保留原有的zdfjy
                         code: executionResult.code,
                         message: executionResult.message,
-                        executionAt: executionAt,
-                        lastExecutionAt: executionAt
+                        lastExecutionAt: executionAt // 只更新最后执行时间
                     })
                     .where({ zrfc_logid: zrfcLogid })
             );

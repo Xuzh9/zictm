@@ -98,11 +98,10 @@ class InboundDeliveryPutawayService {
                 }
             );
 
-            // 提取 cookie、CSRF token 和 ETag
+            // 提取 cookie、CSRF token
             const cookies = csrfResult.headers['set-cookie'] || [];
             const cookieString = cookies.map(cookie => cookie.split(';')[0]).join('; ');
             const csrfToken = csrfResult.headers['x-csrf-token'];
-            const etag = csrfResult.headers['etag'] || csrfResult.headers['Etag'] || csrfResult.headers['ETag'];
             console.log('[InboundDeliveryPutawayService] CSRF token:', csrfToken ? '获取成功' : '获取失败');
 
             // 循环处理每个行项目
@@ -116,6 +115,38 @@ class InboundDeliveryPutawayService {
 
                 console.log('[InboundDeliveryPutawayService] 处理行项目:', deliveryDocumentItem);
 
+                // 获取行项目的 ETag
+                const itemEtagUrl = `${apiPath}/A_InbDeliveryItem(DeliveryDocument='${deliveryDocument}',DeliveryDocumentItem='${deliveryDocumentItem}')`;
+                let itemEtag; 
+                try {
+                    const itemEtagResult = await executeHttpRequest(
+                        {
+                            destinationName: 'ES_API'
+                        },
+                        {
+                            method: 'GET',
+                            url: itemEtagUrl,
+                            headers: {
+                                'Accept': 'application/json',
+                                'Cookie': cookieString,
+                                'sap-language': 'ZH'
+                            },
+                            validateStatus: function (status) {
+                                return true;
+                            }
+                        }
+                    );
+
+                    if (itemEtagResult.status >= 200 && itemEtagResult.status < 300) {
+                        itemEtag = itemEtagResult.headers['etag'] || itemEtagResult.headers['Etag'] || itemEtagResult.headers['ETag'];
+                        console.log('[InboundDeliveryPutawayService] 获取行项目 ETag 成功:', deliveryDocumentItem);
+                    } else {
+                        console.warn('[InboundDeliveryPutawayService] 获取行项目 ETag 失败:', deliveryDocumentItem);
+                    }
+                } catch (error) {
+                    console.warn('[InboundDeliveryPutawayService] 获取行项目 ETag 异常:', deliveryDocumentItem, error.message);
+                }
+
                 // 构建 PutawayOneItem API URL (通过查询参数方式)
                 const putawayUrl = `${apiPath}/PutawayOneItem?DeliveryDocument='${deliveryDocument}'&DeliveryDocumentItem='${deliveryDocumentItem}'`;
                 console.log('[InboundDeliveryPutawayService] 上架API地址:', putawayUrl);
@@ -126,7 +157,7 @@ class InboundDeliveryPutawayService {
                     'Accept': 'application/json',
                     'Cookie': cookieString,
                     'sap-language': 'ZH',
-                    'If-Match': etag || '*'
+                    'If-Match': itemEtag || '*'
                 };
 
                 // 调用 PutawayOneItem API

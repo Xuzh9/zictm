@@ -304,7 +304,7 @@ class PurchaseOrderService {
                 PurchaseOrderItem: poItemNumber,
                 Material: material,
                 Plant: isReturn ? (mptStepConfig?.lifnr || "") : (mptStepConfig?.umwrk || ""),
-                StorageLocation: mptStepConfig?.umlgo || "", 
+                StorageLocation: item.StorageLocation || mptStepConfig?.umlgo || "", 
                 PurchaseOrderQuantityUnit: unitOfMeasure,
                 TaxCode: mptStepConfig?.mwskz || "",
                 OrderQuantity: item.RequestedQuantity ? parseFloat(item.RequestedQuantity) : 0,
@@ -315,19 +315,19 @@ class PurchaseOrderService {
                     ScheduleLine: "1",
                     ScheduleLineDeliveryDate: zrfcid === 'SD04' ? (item.DeliveryDate || "") : (item.ConfirmedDeliveryDate || "")
                 }],
-                _PurOrdPricingElement: [{
+                _PurOrdPricingElement: mptStepConfig?.taxFreightAmt ? [{
                     PurchaseOrderItem: poItemNumber,
                     ConditionType: "ZQU1",
-                    ConditionBaseAmount: 0.01,
+                    ConditionBaseAmount: mptStepConfig.taxFreightAmt,
                     ConditionCurrency: item.TransactionCurrency || "",
                     FreightSupplier: "600000"
                 }, {
                     PurchaseOrderItem: poItemNumber,
                     ConditionType: "ZQU2",
-                    ConditionBaseAmount: 0.01,
+                    ConditionBaseAmount: mptStepConfig.taxFreightAmt,
                     ConditionCurrency: item.TransactionCurrency || "",
                     FreightSupplier: "600000"
-                }]
+                }] : []
             });
         }
 
@@ -342,6 +342,7 @@ class PurchaseOrderService {
             Supplier: isReturn ? (mptStepConfig?.umwrk || "") : (mptStepConfig?.lifnr || ""),
             DocumentCurrency: mainData.TransactionCurrency || "",
             YY1_FD_ZDFJY2_PDH: zdfjy,
+            YY1_FD_ZRFCID_PDH: zrfcid,
             SupplyingPlant: isReturn ? (mptStepConfig?.umwrk || "") : (mptStepConfig?.lifnr || ""),
             _PurchaseOrderItem: purchaseOrderItems
         };

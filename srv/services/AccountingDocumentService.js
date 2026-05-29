@@ -43,7 +43,7 @@ class AccountingDocumentService {
             const businessDataList = businessDataResult.businessData;
 
             // 构建会计凭证 SOAP 请求数据
-            const soapRequest = this.buildSoapRequest(businessDataList);
+            const soapRequest = await this.buildSoapRequest(businessDataList);
  
             // 使用 SAP Cloud SDK 的 executeHttpRequest 方法调用 SOAP 接口
             console.log('开始调用 SOAP 接口 journalentrycreaterequestconfi...');
@@ -70,13 +70,13 @@ class AccountingDocumentService {
             
             console.log('SOAP 请求状态码:', result.status);
             console.log('SOAP 响应头:', result.headers);
-            // 只输出响应数据的前 1000 个字符，避免日志过长
+            // 输出完整响应数据用于调试
             const responseDataStr = typeof result.data === 'string' ? result.data : JSON.stringify(result.data);
-            console.log('SOAP 响应数据:', responseDataStr.length > 1000 ? responseDataStr.substring(0, 1000) + '...' : responseDataStr);
+            console.log('SOAP 响应数据长度:', responseDataStr.length);
+            console.log('SOAP 响应数据:', responseDataStr.length > 2000 ? responseDataStr.substring(0, 2000) + '...[截断]' : responseDataStr);
 
             if (result.status >= 200 && result.status < 300) {
                 // 解析 SOAP 响应，提取会计凭证号
-                const responseDataStr = typeof result.data === 'string' ? result.data : JSON.stringify(result.data);
                 const objkey = this.extractAccountingDocumentNumber(responseDataStr);
                 
                 // 调试日志：确认提取的凭证号
@@ -181,7 +181,34 @@ class AccountingDocumentService {
         }
     }
 
-    buildSoapRequest(businessDataList) {
+    async getProfitCenter(costCenter) {
+        try {
+            const result = await executeHttpRequest(
+                { destinationName: 'ES_API' },
+                {
+                    method: 'GET',
+                    url: `/sap/opu/odata/sap/YY1_CD_COSTCENTER_CDS/YY1_CD_CostCenter?$filter=CostCenter eq '${encodeURIComponent(costCenter)}'`,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'sap-language': 'ZH'
+                    }
+                }
+            );
+            
+            if (result.data && result.data.d && result.data.d.results && result.data.d.results.length > 0) {
+                const profitCenter = result.data.d.results[0].ProfitCenter;
+                console.log('[AccountingDocumentService] 获取利润中心成功:', costCenter, '->', profitCenter);
+                return profitCenter;
+            }
+            console.warn('[AccountingDocumentService] 未找到利润中心:', costCenter);
+            return null;
+        } catch (error) {
+            console.warn('[AccountingDocumentService] 获取利润中心失败:', error.message);
+            return null;
+        }
+    }
+
+    async buildSoapRequest(businessDataList) {
         // 构建 SOAP 请求体 - 根据 SAP API Business Hub 官方文档格式
         const firstBusinessData = businessDataList[0];
         const currentDate = new Date();
@@ -189,67 +216,176 @@ class AccountingDocumentService {
         // 业务日期已为 YYYY-MM-DD 格式，直接使用；若无则使用当前日期
         const businessDate = firstBusinessData.businessDate || currentDate.toISOString().substring(0, 10);
         
-        // 构建会计凭证行项目 - 每条业务数据生成客户行 + 费用行
-        let lineItems = '';
-        let itemNumber = 1;
+        // 构建会计凭证行项目
+        let debtorItems = ''; // 客户行
+        let itemLines = ''; // 费用行
+        let itemNumber = 1; // 统一的行号（客户行和费用行配对使用）
 
-        for (const businessData of businessDataList) {
-            // 1. 客户行结构 (DebtorItem)
-            lineItems += `
-                <DebtorItem>
-                    <ReferenceDocumentItem>${itemNumber}</ReferenceDocumentItem>
-                    <CompanyCode>${firstBusinessData.receivingOrganization}</CompanyCode>
-                    <AmountInTransactionCurrency currencyCode="${firstBusinessData.currency}">${firstBusinessData.receivableAmount * -1}</AmountInTransactionCurrency>
-                    <DebitCreditCode>H</DebitCreditCode>
-                    <Debtor>${firstBusinessData.payingUnit}</Debtor>
-                </DebtorItem>
-            `;
-            itemNumber += 1;
+        // 第一次循环
+        for (const item of businessDataList) {
+            const itemDocType = item.documentType || '';
+            switch (itemDocType) {
+                case 'YSD02_SYS':
+                case 'SKDLX01_SYS': {
+                    debtorItems += `
+                        <DebtorItem>
+                            <ReferenceDocumentItem>${itemNumber}</ReferenceDocumentItem>
+                            <CompanyCode>${item.salesOrganization || item.procurementOrganization || firstBusinessData.receivingOrganization || ''}</CompanyCode>
+                            <AmountInTransactionCurrency currencyCode="${item.currency || ''}">${item.incomeExpenseType === '01' ? (item.receivableAmount || 0) * -1 : (item.receivableAmount || 0)}</AmountInTransactionCurrency>
+                            <DebitCreditCode>${item.incomeExpenseType === '01' ? 'H' : 'S'}</DebitCreditCode>
+                            <Debtor>${item.receivingUnit || ''}</Debtor>
+                            <DocumentItemText>${item.itemRemark || ''}</DocumentItemText>
+                            <AssignmentReference>${item.receivingUnit || ''}</AssignmentReference>
+                        </DebtorItem>
+                    `;
+                    itemNumber += 1;
+                    break;
+                }
+                case 'SKDLX02_SYS':
+                    itemLines += `
+                        <Item>
+                            <ReferenceDocumentItem>${itemNumber}</ReferenceDocumentItem>
+                            <CompanyCode>${item.salesOrganization || item.procurementOrganization || firstBusinessData.receivingOrganization || ''}</CompanyCode>
+                            <GLAccount>${item.generalLedgerAccountNonCash}</GLAccount>
+                            <AmountInTransactionCurrency currencyCode="${item.currency}">${item.incomeExpenseType === '01' ? (item.receivableAmount || 0) * -1 : (item.receivableAmount || 0)}</AmountInTransactionCurrency>
+                            <DebitCreditCode>${item.incomeExpenseType === '01' ? 'H' : 'S'}</DebitCreditCode>
+                            <DocumentItemText>${item.itemRemark}</DocumentItemText>
+                        </Item>
+                    `;
+                    itemNumber += 1;
+                    break;
+                case 'FKDLX02_SYS',
+                     'SKTKDLX01_SYS':
+                    itemLines += `
+                        <Item>
+                            <ReferenceDocumentItem>${itemNumber}</ReferenceDocumentItem>
+                            <CompanyCode>${item.salesOrganization || item.procurementOrganization || firstBusinessData.receivingOrganization || ''}</CompanyCode>
+                            <GLAccount>${item.generalLedgerAccountCash}</GLAccount>
+                            <AmountInTransactionCurrency currencyCode="${item.currency}">${item.incomeExpenseType === '01' ? (item.receivableAmount || 0) * -1 : (item.receivableAmount || 0)}</AmountInTransactionCurrency>
+                            <DebitCreditCode>${item.incomeExpenseType === '01' ? 'H' : 'S'}</DebitCreditCode>
+                            <DocumentItemText>${item.itemRemark}</DocumentItemText>
+                            <FinancialTransactionType>901</FinancialTransactionType>
+                        </Item>
+                    `;
+                    itemNumber += 1;
+                    break;
+            }
+        }
 
-            // 2. 费用行结构 (Item)
-            lineItems += `
-                <Item>
-                    <ReferenceDocumentItem>${itemNumber}</ReferenceDocumentItem>
-                    <CompanyCode>${firstBusinessData.receivingOrganization}</CompanyCode>
-                    <GLAccount>1002010000</GLAccount>
-                    <AmountInTransactionCurrency currencyCode="${firstBusinessData.currency}">${firstBusinessData.receivableAmount}</AmountInTransactionCurrency>
-                    <DebitCreditCode>S</DebitCreditCode>
-                    <ReasonCode>050</ReasonCode>
-                </Item>
-            `;
-            itemNumber += 1;
+        // 第二次循环
+        for (const item of businessDataList) {
+            const documentType = item.documentType || '';
+            const gl = String(item.generalLedgerAccountNonCash || '');
+            
+            switch (documentType) {
+                case 'YSD02_SYS',
+                     'FKDLX02_SYS':
+                    let assignmentReference = '';
+                    let profitCenter = '';
+                    if (gl.startsWith('600')) {
+                        profitCenter = await this.getProfitCenter(item.expenseResponsibleDepartment) || '';
+                        assignmentReference = item.expenseResponsibleDepartment;
+                    } else if (gl.startsWith('800')) {
+                        assignmentReference = item.receivingUnit;
+                    } else if (gl.startsWith('65') || gl.startsWith('2221')) {
+                        assignmentReference = '';
+                    }
+
+                    itemLines += `
+                        <Item>
+                            <ReferenceDocumentItem>${itemNumber}</ReferenceDocumentItem>
+                            <CompanyCode>${item.salesOrganization || item.procurementOrganization || firstBusinessData.receivingOrganization || ''}</CompanyCode>
+                            <GLAccount>${item.generalLedgerAccountNonCash}</GLAccount>
+                            <AmountInTransactionCurrency currencyCode="${item.currency}">${item.incomeExpenseType === '02' ? (item.receivableAmount || 0) * -1 : (item.receivableAmount || 0)}</AmountInTransactionCurrency>
+                            <DebitCreditCode>${item.incomeExpenseType === '01' ? 'S' : 'H'}</DebitCreditCode>
+                            <DocumentItemText>${item.itemRemark}</DocumentItemText>
+                            <AssignmentReference>${assignmentReference}</AssignmentReference>
+                            ${(gl.startsWith('600') || gl.startsWith('800')) ? `<AccountAssignment>${gl.startsWith('600') ? `<ProfitCenter>${profitCenter}</ProfitCenter>` : ''}${gl.startsWith('800') ? `<CostCenter>${item.expenseResponsibleDepartment}</CostCenter>` : ''}</AccountAssignment>` : ''}
+                            ${gl.startsWith('600') ? `<ProfitabilitySupplement><Customer>${item.receivingUnit}</Customer></ProfitabilitySupplement>` : ''}
+                        </Item>
+                    `;
+                    itemNumber += 1;
+                    break;
+                case 'SKDLX01_SYS',
+                     'SKDLX02_SYS':
+                    itemLines += `
+                        <Item>
+                            <ReferenceDocumentItem>${itemNumber}</ReferenceDocumentItem>
+                            <CompanyCode>${item.salesOrganization || item.procurementOrganization || firstBusinessData.receivingOrganization || ''}</CompanyCode>
+                            <GLAccount>${item.generalLedgerAccountCash}</GLAccount>
+                            <AmountInTransactionCurrency currencyCode="${item.currency}">${item.incomeExpenseType === '02' ? (item.receivableAmount || 0) * -1 : (item.receivableAmount || 0)}</AmountInTransactionCurrency>
+                            <DebitCreditCode>${item.incomeExpenseType === '01' ? 'S' : 'H'}</DebitCreditCode>
+                            <DocumentItemText>${item.itemRemark}</DocumentItemText>
+                            <FinancialTransactionType>901</FinancialTransactionType>
+                        </Item>
+                    `;
+                    itemNumber += 1;
+                    break;
+                case 'SKTKDLX01_SYS': {
+                    const glCash = String(item.generalLedgerAccountCash || '');
+                    if (glCash === '1122010000') {
+                        // 生成客户行                       
+                        itemLines += `
+                            <DebtorItem>
+                                <ReferenceDocumentItem>${itemNumber}</ReferenceDocumentItem>
+                                <CompanyCode>${item.salesOrganization || item.procurementOrganization || firstBusinessData.receivingOrganization || ''}</CompanyCode>
+                                <AmountInTransactionCurrency currencyCode="${item.currency || ''}">${item.incomeExpenseType === '02' ? (item.receivableAmount || 0) * -1 : (item.receivableAmount || 0)}</AmountInTransactionCurrency>
+                                <DebitCreditCode>${item.incomeExpenseType === '01' ? 'S' : 'H'}</DebitCreditCode>
+                                <Debtor>${item.receivingUnit || ''}</Debtor>
+                                <DocumentItemText>${item.itemRemark || ''}</DocumentItemText>
+                                <AssignmentReference>${item.receivingUnit || ''}</AssignmentReference>
+                            </DebtorItem>
+                        `;
+                    } else {
+                        // 生成费用行
+                        itemLines += `
+                            <Item>
+                                <ReferenceDocumentItem>${itemNumber}</ReferenceDocumentItem>
+                                <CompanyCode>${item.salesOrganization || item.procurementOrganization || firstBusinessData.receivingOrganization || ''}</CompanyCode>
+                                <GLAccount>${item.generalLedgerAccountNonCash}</GLAccount>
+                                <AmountInTransactionCurrency currencyCode="${item.currency}">${item.incomeExpenseType === '02' ? (item.receivableAmount || 0) * -1 : (item.receivableAmount || 0)}</AmountInTransactionCurrency>
+                                <DebitCreditCode>${item.incomeExpenseType === '01' ? 'S' : 'H'}</DebitCreditCode>
+                                <DocumentItemText>${item.itemRemark}</DocumentItemText>
+                                <AssignmentReference>${item.receivingUnit || ''}</AssignmentReference>
+                            </Item>
+                        `;
+                    }
+                    itemNumber += 1;
+                    break;
+                }
+            }
         }
 
         // 完整的 SOAP 请求 (根据 SAP JournalEntryBulkCreateRequest 官方格式)
         const soapRequest = `<?xml version="1.0" encoding="UTF-8"?>
-<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:sfin="http://sap.com/xi/SAPSCORE/SFIN">
-    <soapenv:Header/>
-    <soapenv:Body>
-        <sfin:JournalEntryBulkCreateRequest>
-            <MessageHeader>
-                <CreationDateTime>${currentDate.toISOString()}</CreationDateTime>
-            </MessageHeader>
-            <JournalEntryCreateRequest>
-                <MessageHeader>
-                    <CreationDateTime>${currentDate.toISOString()}</CreationDateTime>
-                </MessageHeader>
-                <JournalEntry>
-                    <OriginalReferenceDocumentType>BKPFF</OriginalReferenceDocumentType>
-                    <BusinessTransactionType>RFBU</BusinessTransactionType>
-                    <AccountingDocumentType>SA</AccountingDocumentType>
-                    <DocumentHeaderText>${firstBusinessData.paymentPurpose}</DocumentHeaderText>
-                    <CreatedByUser>CC0000000002</CreatedByUser>
-                    <CompanyCode>${firstBusinessData.receivingOrganization}</CompanyCode>
-                    <DocumentDate>${businessDate}</DocumentDate>
-                    <PostingDate>${businessDate}</PostingDate>
-                    <ExchangeRateDate>${businessDate}</ExchangeRateDate>
-                    <DocumentReferenceID>${firstBusinessData.paymentReceiptNo}</DocumentReferenceID>
-                    ${lineItems}
-                </JournalEntry>
-            </JournalEntryCreateRequest>
-        </sfin:JournalEntryBulkCreateRequest>
-    </soapenv:Body>
-</soapenv:Envelope>`;
+            <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:sfin="http://sap.com/xi/SAPSCORE/SFIN">
+                <soapenv:Header/>
+                <soapenv:Body>
+                    <sfin:JournalEntryBulkCreateRequest>
+                        <MessageHeader>
+                            <CreationDateTime>${currentDate.toISOString()}</CreationDateTime>
+                        </MessageHeader>
+                        <JournalEntryCreateRequest>
+                            <MessageHeader>
+                                <CreationDateTime>${currentDate.toISOString()}</CreationDateTime>
+                            </MessageHeader>
+                            <JournalEntry>
+                                <OriginalReferenceDocumentType>BKPFF</OriginalReferenceDocumentType>
+                                <BusinessTransactionType>RFBU</BusinessTransactionType>
+                                <AccountingDocumentType>SA</AccountingDocumentType>
+                                <!-- <DocumentHeaderText>${firstBusinessData.paymentPurpose}</DocumentHeaderText> -->
+                                <CreatedByUser>CC0000000002</CreatedByUser>
+                                <CompanyCode>${firstBusinessData.salesOrganization || firstBusinessData.procurementOrganization || firstBusinessData.receivingOrganization || ''}</CompanyCode>
+                                <DocumentDate>${currentDate.toISOString().substring(0, 10)}</DocumentDate>
+                                <PostingDate>${businessDate}</PostingDate>
+                                <ExchangeRateDate>${businessDate}</ExchangeRateDate>
+                                <DocumentReferenceID>${firstBusinessData.paymentReceiptNo}</DocumentReferenceID>
+                                ${itemLines}
+                            </JournalEntry>
+                        </JournalEntryCreateRequest>
+                    </sfin:JournalEntryBulkCreateRequest>
+                </soapenv:Body>
+            </soapenv:Envelope>`;
 
         return soapRequest;
     }
@@ -291,18 +427,27 @@ class AccountingDocumentService {
         
         // 检查错误级别代码 (3=错误, 2=警告, 1=信息)
         const severityCodeMatch = responseData.match(/<[^>]*MaximumLogItemSeverityCode[^>]*>([^<]+)<\/[^>]*MaximumLogItemSeverityCode[^>]*>/);
+        console.log('[parseSapLogError] severityCodeMatch:', severityCodeMatch);
+        
         if (severityCodeMatch) {
             const severityCode = parseInt(severityCodeMatch[1].trim());
-            // 如果是错误级别 (3)，提取错误消息
+            console.log('[parseSapLogError] severityCode:', severityCode);
+            
+            // 如果是错误级别 (3)，提取所有错误消息
             if (severityCode >= 3) {
-                const noteMatch = responseData.match(/<[^>]*Note[^>]*>([^<]+)<\/[^>]*Note[^>]*>/);
-                if (noteMatch) {
-                    const errorNote = noteMatch[1].trim();
-                    return errorNote;
+                // 使用 matchAll 提取所有 <Note> 标签中的错误消息
+                const noteMatches = [...responseData.matchAll(/<[^>]*Note[^>]*>([^<]+)<\/[^>]*Note[^>]*>/g)];
+                
+                if (noteMatches && noteMatches.length > 0) {
+                    // 提取所有错误消息，用分号分隔
+                    const errorNotes = noteMatches.map(match => match[1].trim()).join('; ');
+                    console.log('[parseSapLogError] 提取到所有错误信息:', errorNotes);
+                    return errorNotes;
                 }
             }
         }
         
+        console.log('[parseSapLogError] 未提取到错误信息');
         return null;
     }
 
@@ -326,3 +471,4 @@ class AccountingDocumentService {
 }
 
 module.exports = AccountingDocumentService;
+    

@@ -7,6 +7,7 @@ module.exports = cds.service.impl(async function () {
 
   // 获取 MultistepLog 实体引用
   const MultistepLog = cds.entities['com.sap.zictm.MultistepLog'];
+  const MultistepHeadLog = cds.entities['com.sap.zictm.MultistepHeadLog'];
 
   // 读取 PISalesOrderRel 时，计算 code 和 message
   this.on('READ', 'PISalesOrderRel', async (req) => {
@@ -386,7 +387,7 @@ module.exports = cds.service.impl(async function () {
     // 查询 MultistepHeadLog 获取执行状态
     const headLogs = {};
     if (zrfcLogids.length > 0) {
-      const logs = await service.run(SELECT.from('MultistepHeadLog')
+      const logs = await cds.run(SELECT.from(MultistepHeadLog)
         .columns(['zrfc_logid', 'code'])
         .where({ zrfc_logid: { in: zrfcLogids } }));
       logs.forEach(log => {
@@ -576,7 +577,7 @@ module.exports = cds.service.impl(async function () {
     // 查询 MultistepHeadLog 获取执行状态
     const headLogs = {};
     if (zrfcLogids.length > 0) {
-      const logs = await service.run(SELECT.from('MultistepHeadLog')
+      const logs = await cds.run(SELECT.from(MultistepHeadLog)
         .columns(['zrfc_logid', 'code'])
         .where({ zrfc_logid: { in: zrfcLogids } }));
       logs.forEach(log => {
@@ -735,7 +736,7 @@ module.exports = cds.service.impl(async function () {
     // 查询 MultistepHeadLog 获取执行状态
     const headLogs = {};
     if (zrfcLogids.length > 0) {
-      const logs = await service.run(SELECT.from('MultistepHeadLog')
+      const logs = await cds.run(SELECT.from(MultistepHeadLog)
         .columns(['zrfc_logid', 'code'])
         .where({ zrfc_logid: { in: zrfcLogids } }));
       logs.forEach(log => {

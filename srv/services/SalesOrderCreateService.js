@@ -378,6 +378,7 @@ class SalesOrderCreateService {
             PurchaseOrderByCustomer: (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') ? (mainData.PIOrder || "") : (mainData.SalesOrder || ""),
             TransactionCurrency: mainData.TransactionCurrency,
             YY1_FD_ZDFJY_SDH: (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') ? mainData.YY1_FD_ZDFJY : mptStepConfig?.zdfjy,
+            YY1_FD_ZRFCID2_SDH: zrfcid,
             to_Item: {
                 results: salesOrderItems
             }
