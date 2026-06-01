@@ -17,6 +17,7 @@ const DeliveryOrderHeaderUpdateService = require('./DeliveryOrderHeaderUpdateSer
 const DeliveryOrderQueryService = require('./DeliveryOrderQueryService');
 const DeliveryOrderItemUpdateService = require('./DeliveryOrderItemUpdateService');
 const InboundDeliveryPutawayService = require('./InboundDeliveryPutawayService');
+const DeliveryOrderBatchSplitService = require('./DeliveryOrderBatchSplitService');
 
 class StepServiceFactory {
     constructor() {
@@ -74,6 +75,8 @@ class StepServiceFactory {
                 return new DeliveryOrderItemUpdateService();
             case 'InboundDeliveryPutawayService':
                 return new InboundDeliveryPutawayService();
+            case 'DeliveryOrderBatchSplitService':
+                return new DeliveryOrderBatchSplitService();
             default:
                 // 未知的服务类
                 return null;

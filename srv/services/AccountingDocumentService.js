@@ -264,7 +264,7 @@ class AccountingDocumentService {
                             <AmountInTransactionCurrency currencyCode="${item.currency}">${item.incomeExpenseType === '01' ? (item.receivableAmount || 0) * -1 : (item.receivableAmount || 0)}</AmountInTransactionCurrency>
                             <DebitCreditCode>${item.incomeExpenseType === '01' ? 'H' : 'S'}</DebitCreditCode>
                             <DocumentItemText>${item.itemRemark}</DocumentItemText>
-                            <FinancialTransactionType>901</FinancialTransactionType>
+                            <FinancialTransactionType>${item.financialTransactionType}</FinancialTransactionType>
                         </Item>
                     `;
                     itemNumber += 1;
@@ -316,7 +316,7 @@ class AccountingDocumentService {
                             <AmountInTransactionCurrency currencyCode="${item.currency}">${item.incomeExpenseType === '02' ? (item.receivableAmount || 0) * -1 : (item.receivableAmount || 0)}</AmountInTransactionCurrency>
                             <DebitCreditCode>${item.incomeExpenseType === '01' ? 'S' : 'H'}</DebitCreditCode>
                             <DocumentItemText>${item.itemRemark}</DocumentItemText>
-                            <FinancialTransactionType>901</FinancialTransactionType>
+                            <FinancialTransactionType>${item.financialTransactionType}</FinancialTransactionType>
                         </Item>
                     `;
                     itemNumber += 1;

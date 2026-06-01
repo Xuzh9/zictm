@@ -15,28 +15,72 @@ class MultiStepProcessor {
      * @param {boolean} isRetry - 是否为重推操作
      * @param {string} zdfjy - 多方交易类型ID
      * @param {string} id - ApiInputLog的ID，用于与MultistepHeadLog关联（可选）
+     * @param {Object} processConfig - 业务流程配置
+     * @param {Array} businessTable1 - 业务表1数据
+     * @param {Array} businessTable2 - 业务表2数据
+     * @param {Array} businessTable3 - 业务表3数据
      * @returns {Promise<Object>} 处理结果
      */
-    async processWithLogId(zrfcLogid, zrfcid, startStepNum = null, isRetry = false, zdfjy = null, id = null) {
+    async processWithLogId(zrfcLogid, zrfcid, startStepNum = null, isRetry = false, zdfjy = null, id = null, processConfig = null, businessTable1 = null, businessTable2 = null, businessTable3 = null) {
         console.log('[MultiStepProcessor.processWithLogId] 开始处理, zrfcLogid:', zrfcLogid, ', zrfcid:', zrfcid, ', zdfjy:', zdfjy, ', id:', id);
         let lastObjKey = '';
         let lastMessage = '';
         let lastCode = '';
         
         try {
-            // 获取步骤配置
+            // 1. 先获取步骤配置（校验在插入数据之前，避免无效数据插入）
             const steps = await this.getSteps(zrfcid);
             if (!steps || steps.length === 0) {
                 const errorMsg = `未找到步骤配置: zrfcid=${zrfcid}`;
-                await this.saveLog(zrfcLogid, zrfcid, '0', {
-                    code: 'E',
-                    message: errorMsg
-                }, 0, new Date(), isRetry, null, '', id);
+                console.error('[MultiStepProcessor.processWithLogId]', errorMsg);
                 return {
                     code: 'E',
                     message: errorMsg,
                     zrfcLogid
                 };
+            }
+            
+            // 2. 使用事务机制同时插入 MultistepHeadLog 和业务表
+            console.log('[MultiStepProcessor.processWithLogId] 使用事务机制同时插入 MultistepHeadLog 和业务表');
+            await cds.tx(async (tx) => {
+                // 2.1 优先创建 MultistepHeadLog（初始状态）
+                const MultistepHeadLog = cds.entities['com.sap.zictm.MultistepHeadLog'];
+                const executionAt = new Date();
+                
+                // 先检查是否已存在
+                const existingHeadLog = await tx.run(
+                    SELECT.one.from(MultistepHeadLog).where({ zrfc_logid: zrfcLogid })
+                );
+                
+                if (!existingHeadLog) {
+                    // 不存在，执行插入 MultistepHeadLog 和业务表
+                    await tx.run(
+                        INSERT.into(MultistepHeadLog).entries({
+                            zrfc_logid: zrfcLogid,
+                            zrfcid: zrfcid,
+                            zdfjy: zdfjy || null,
+                            objkey: '',
+                            code: 'S',
+                            message: '处理中',
+                            executionAt: executionAt,
+                            lastExecutionAt: executionAt,
+                            id: id || null
+                        })
+                    );
+                    console.log('[MultiStepProcessor.processWithLogId] MultistepHeadLog 插入成功');
+                    
+                    // 2.2 插入业务表数据
+                    await this.insertBusinessDataByConfigWithTx(tx, processConfig, businessTable1, businessTable2, businessTable3, zrfcid, zrfcLogid, zdfjy);
+                    console.log('[MultiStepProcessor.processWithLogId] 业务表插入成功');
+                } else {
+                    console.log('[MultiStepProcessor.processWithLogId] MultistepHeadLog 已存在，跳过插入');
+                }
+            });
+            
+            // 3. 如果是重推且传入了业务表数据，需要更新业务表（接口传入数据可能变化，前台点击重推不会变化）
+            if (isRetry && processConfig && businessTable1) {
+                console.log('[MultiStepProcessor.processWithLogId] 重推时更新业务表数据');
+                await this.updateBusinessDataByConfig(processConfig, businessTable1, businessTable2, businessTable3, zrfcid, zrfcLogid, zdfjy);
             }
             
             // 按顺序执行每个步骤
@@ -215,6 +259,9 @@ class MultiStepProcessor {
         const MultistepLog = cds.entities['com.sap.zictm.MultistepLog'];
         const MultistepHeadLog = cds.entities['com.sap.zictm.MultistepHeadLog'];
          
+        // 截断 message 字段，确保不超过 255 字符
+        const truncatedMessage = executionResult.message ? executionResult.message.substring(0, 255) : '';
+ 
         // 检查日志是否已存在（主键为 zrfc_logid + canum）
         const existingLog = await cds.run(
             SELECT.one.from(MultistepLog)
@@ -229,7 +276,7 @@ class MultiStepProcessor {
                     .set({
                         zrfcid: zrfcid,
                         code: executionResult.code,
-                        message: executionResult.message,
+                        message: truncatedMessage,
                         objkey: executionResult.objkey,
                         objtype: objtype || existingLog.objtype,
                         description: description || existingLog.description,
@@ -248,7 +295,7 @@ class MultiStepProcessor {
                     canum: canum,
                     zrfcid: zrfcid,
                     code: executionResult.code,
-                    message: executionResult.message,
+                    message: truncatedMessage,
                     objkey: executionResult.objkey,
                     objtype: objtype || '',
                     description: description || '',
@@ -311,6 +358,209 @@ class MultiStepProcessor {
                     lastExecutionAt: executionAt
                 })
             );
+        }
+    }
+
+    /**
+     * 使用事务插入业务数据（按配置）
+     * @param {Object} tx - 事务对象
+     * @param {Object} processConfig - 业务流程配置
+     * @param {Array} businessTable1Data - 业务表1数据
+     * @param {Array} businessTable2Data - 业务表2数据
+     * @param {Array} businessTable3Data - 业务表3数据
+     * @param {string} zrfcid - 业务流程ID
+     * @param {string} zrfcLogid - 多步ID
+     * @param {string} zdfjy - 多方交易类型ID
+     */
+    async insertBusinessDataByConfigWithTx(tx, processConfig, businessTable1Data, businessTable2Data, businessTable3Data, zrfcid, zrfcLogid, zdfjy = null) {
+        try {
+            if (!processConfig) {
+                console.warn('[insertBusinessDataByConfigWithTx] processConfig 为空，跳过插入业务数据');
+                return;
+            }
+
+            // 处理 businessTable1
+            if (processConfig.businessTable1 && businessTable1Data) {
+                const table1Data = businessTable1Data.map(item => ({
+                    ...item,
+                    zrfcid,
+                    zrfc_logid: zrfcLogid,
+                    ...(zdfjy && { zdfjy })
+                }));
+                await this.insertBusinessDataWithTx(tx, processConfig.businessTable1, table1Data);
+            }
+
+            // 处理 businessTable2
+            if (processConfig.businessTable2 && businessTable2Data) {
+                const table2Data = businessTable2Data.map(item => ({
+                    ...item,
+                    zrfcid,
+                    zrfc_logid: zrfcLogid,
+                    ...(zdfjy && { zdfjy })
+                }));
+                await this.insertBusinessDataWithTx(tx, processConfig.businessTable2, table2Data);
+            }
+
+            // 处理 businessTable3
+            if (processConfig.businessTable3 && businessTable3Data) {
+                const table3Data = businessTable3Data.map(item => ({
+                    ...item,
+                    zrfcid,
+                    zrfc_logid: zrfcLogid,
+                    ...(zdfjy && { zdfjy })
+                }));
+                await this.insertBusinessDataWithTx(tx, processConfig.businessTable3, table3Data);
+            }
+        } catch (error) {
+            console.error('[insertBusinessDataByConfigWithTx] 按配置插入业务数据失败:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * 使用事务插入业务数据
+     * @param {Object} tx - 事务对象
+     * @param {string} tableName - 业务表名
+     * @param {Array} data - 业务数据
+     */
+    async insertBusinessDataWithTx(tx, tableName, data) {
+        try {
+            if (!tableName) {
+                console.warn('[insertBusinessDataWithTx] 业务表名为空');
+                return;
+            }
+
+            const BusinessEntity = cds.entities[`com.sap.zictm.${tableName}`];
+            if (!BusinessEntity) {
+                console.warn(`[insertBusinessDataWithTx] 业务表不存在: ${tableName}`);
+                return;
+            }
+
+            if (!data || !Array.isArray(data) || data.length === 0) {
+                console.warn(`[insertBusinessDataWithTx] 业务数据为空: ${tableName}`);
+                return;
+            }
+
+            await tx.run(INSERT.into(BusinessEntity).entries(data));
+            console.log(`[insertBusinessDataWithTx] 插入业务表成功: ${tableName}, 数据量: ${data.length}`);
+        } catch (error) {
+            console.error(`[insertBusinessDataWithTx] 插入业务表失败: ${tableName}`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * 根据 ProcessConfig 配置分别更新 businessTable1、businessTable2、businessTable3 对应的数据表（覆盖更新）
+     * @param {Object} processConfig - 业务流程配置
+     * @param {Array} businessTable1Data - 业务表1的数据
+     * @param {Array} businessTable2Data - 业务表2的数据
+     * @param {Array} businessTable3Data - 业务表3的数据
+     * @param {string} zrfcid - 业务流程ID
+     * @param {string} zrfcLogid - 日志ID
+     * @param {string} zdfjy - 多方交易类型ID（可选）
+     */
+    async updateBusinessDataByConfig(processConfig, businessTable1Data, businessTable2Data, businessTable3Data, zrfcid, zrfcLogid, zdfjy = null) {
+        try {
+            if (!processConfig) {
+                console.warn('[updateBusinessDataByConfig] processConfig 为空，跳过更新业务数据');
+                return;
+            }
+
+            // 处理 businessTable1
+            if (processConfig.businessTable1 && businessTable1Data) {
+                const table1Data = businessTable1Data.map(item => ({
+                    ...item,
+                    zrfcid,
+                    zrfc_logid: zrfcLogid,
+                    ...(zdfjy && { zdfjy })
+                }));
+                await this.updateBusinessData(processConfig.businessTable1, table1Data);
+            }
+
+            // 处理 businessTable2
+            if (processConfig.businessTable2 && businessTable2Data) {
+                const table2Data = businessTable2Data.map(item => ({
+                    ...item,
+                    zrfcid,
+                    zrfc_logid: zrfcLogid,
+                    ...(zdfjy && { zdfjy })
+                }));
+                await this.updateBusinessData(processConfig.businessTable2, table2Data);
+            }
+
+            // 处理 businessTable3
+            if (processConfig.businessTable3 && businessTable3Data) {
+                const table3Data = businessTable3Data.map(item => ({
+                    ...item,
+                    zrfcid,
+                    zrfc_logid: zrfcLogid,
+                    ...(zdfjy && { zdfjy })
+                }));
+                await this.updateBusinessData(processConfig.businessTable3, table3Data);
+            }
+        } catch (error) {
+            console.error('[updateBusinessDataByConfig] 按配置更新业务数据失败:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * 更新业务数据表（包含 zrfcid 和 zrfc_logid 字段，覆盖更新）
+     * @param {string} tableName - 业务表名
+     * @param {Array} data - 业务数据（已包含 zrfcid 和 zrfc_logid）
+     */
+    async updateBusinessData(tableName, data) {
+        try {
+            if (!tableName) {
+                console.warn('[updateBusinessData] 业务表名为空');
+                return;
+            }
+
+            const BusinessEntity = cds.entities[`com.sap.zictm.${tableName}`];
+            if (!BusinessEntity) {
+                console.warn(`[updateBusinessData] 业务表不存在: ${tableName}`);
+                return;
+            }
+
+            if (!data || !Array.isArray(data) || data.length === 0) {
+                console.warn(`[updateBusinessData] 业务数据为空: ${tableName}`);
+                return;
+            }
+
+            // 获取表的主键字段
+            const keys = Object.keys(BusinessEntity.elements).filter(key => {
+                const element = BusinessEntity.elements[key];
+                return element && element.key;
+            });
+
+            if (keys.length === 0) {
+                console.warn(`[updateBusinessData] 未找到业务表的主键字段: ${tableName}`);
+                return;
+            }
+
+            // 逐条更新数据
+            for (const item of data) {
+                // 构建查询条件
+                const whereConditions = {};
+                for (const key of keys) {
+                    if (item[key] !== undefined) {
+                        whereConditions[key] = item[key];
+                    }
+                }
+
+                if (Object.keys(whereConditions).length === 0) {
+                    console.warn(`[updateBusinessData] 无法构建查询条件: ${tableName}`);
+                    continue;
+                }
+
+                // 执行更新
+                await cds.run(UPDATE(BusinessEntity).set(item).where(whereConditions));
+            }
+
+            console.log(`[updateBusinessData] 更新业务表成功: ${tableName}, 数据量: ${data.length}`);
+        } catch (error) {
+            console.error(`[updateBusinessData] 更新业务表失败: ${tableName}`, error);
+            throw error;
         }
     }
 }

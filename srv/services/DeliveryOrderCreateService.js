@@ -20,13 +20,6 @@ class DeliveryOrderCreateService {
             
             this.zrfcLogid = zrfcLogid;
 
-            // 使用通用工具类读取之前步骤的 objkey（销售订单号）
-            let sourceDocument = objkey;
-            const previousObjkey = await this.commonUtils.getPreviousStepObjkey(zrfcLogid, zrfcid, readsteps, canum);
-            if (previousObjkey) {
-                sourceDocument = previousObjkey;
-            }
-
             // 读取 ProcessConfig 表获取业务表名（使用业务表1）
             const businessTable = await this.commonUtils.getBusinessTableName(zrfcid, true);
             if (!businessTable) {
@@ -44,18 +37,146 @@ class DeliveryOrderCreateService {
             if (!businessDataList || businessDataList.length === 0) {
                 const returnResult = {
                     code: 'E',
-                    message: `未找到业务数据，源文档: ${sourceDocument}`,
+                    message: `未找到业务数据`,
                     objkey: ''
                 };
                 console.log('[DeliveryOrderCreateService] 返回结果:', JSON.stringify(returnResult));
                 return returnResult;
             }
 
+            let sourceDocument;
+            let salesOrderType;
+            let mainRowDataListForDelivery = businessDataList;
+
+            // 如果是 SD07 或 SD10，需要根据业务表的 DeliveryDocument 和 DeliveryDocumentItem
+            // 查询 PIDeliveryRel 获取 PIOrder 和 PIOrderItem，再查询 PISalesOrderRel 获取 SalesOrder
+            if (zrfcid === 'SD07' || zrfcid === 'SD10') {
+                console.log('[DeliveryOrderCreateService] SD07/SD10 业务数据条数:', businessDataList.length);
+                businessDataList.forEach((item, idx) => {
+                    console.log(`[DeliveryOrderCreateService] 业务数据[${idx}] ParentItem: '${item.ParentItem}', DeliveryDocument: ${item.DeliveryDocument}, DeliveryDocumentItem: ${item.DeliveryDocumentItem}`);
+                });
+
+                // 过滤出 ParentItem 为空或 '000000' 的业务数据（只创建主行，批次拆分行由 DeliveryOrderBatchSplitService 处理）
+                const mainRowDataList = businessDataList.filter(item => !item.ParentItem || item.ParentItem.trim() === '' || item.ParentItem === '000000');
+                console.log('[DeliveryOrderCreateService] 过滤后主行数据条数:', mainRowDataList.length);
+                mainRowDataListForDelivery = mainRowDataList;
+
+                const PIDeliveryRel = cds.entities['com.sap.zictm.PIDeliveryRel'];
+                const PISalesOrderRel = cds.entities['com.sap.zictm.PISalesOrderRel'];
+
+                // 收集所有 DeliveryDocument（PIDeliveryRel 主键已取消 DeliveryDocumentItem）
+                const deliveryDocuments = mainRowDataList.map(item => item.DeliveryDocument).filter(v => v);
+
+                if (deliveryDocuments.length > 0) {
+                    // 批量查询 PIDeliveryRel（只使用 DeliveryDocument）
+                    const deliveryRelDataList = await cds.run(
+                        SELECT.from(PIDeliveryRel).where({
+                            zrfc_logid: zrfcLogid,
+                            DeliveryDocument: { in: deliveryDocuments }
+                        })
+                    );
+
+                    console.log('[DeliveryOrderCreateService] SD07/SD10 获取 PIDeliveryRel 数据:', JSON.stringify(deliveryRelDataList));
+
+                    if (deliveryRelDataList && deliveryRelDataList.length > 0) {
+                        // 构建 DeliveryDocument -> {PIOrder, PIOrderItem} 的映射
+                        const deliveryToPiMap = new Map();
+                        deliveryRelDataList.forEach(item => {
+                            if (item.DeliveryDocument) {
+                                deliveryToPiMap.set(item.DeliveryDocument, {
+                                    PIOrder: item.PIOrder,
+                                    PIOrderItem: item.PIOrderItem
+                                });
+                            }
+                        });
+
+                        // 使用 deliveryRelDataList 中的 PIOrder/PIOrderItem 更新 mainRowDataList
+                        mainRowDataList.forEach(item => {
+                            const piInfo = deliveryToPiMap.get(item.DeliveryDocument);
+                            if (piInfo) {
+                                item.PIOrder = piInfo.PIOrder;
+                                item.PIOrderItem = piInfo.PIOrderItem;
+                            }
+                        });
+
+                        // 收集 PIOrder 和 PIOrderItem
+                        const piOrders = deliveryRelDataList.map(item => item.PIOrder).filter(v => v);
+                        const piOrderItems = deliveryRelDataList.map(item => item.PIOrderItem).filter(v => v);
+
+                        // 批量查询 PISalesOrderRel
+                        const salesOrderRels = await cds.run(
+                            SELECT.from(PISalesOrderRel).where({
+                                PIOrder: { in: piOrders },
+                                PIOrderItem: { in: piOrderItems }
+                            })
+                        );
+
+                        console.log('[DeliveryOrderCreateService] SD07/SD10 获取 PISalesOrderRel 数据:', JSON.stringify(salesOrderRels));
+
+                        // 构建 PI -> PISalesOrderRel 的映射
+                        const piToRelMap = new Map();
+                        salesOrderRels.forEach(rel => {
+                            if (rel.PIOrder && rel.PIOrderItem) {
+                                const key = `${rel.PIOrder}-${rel.PIOrderItem}`;
+                                piToRelMap.set(key, rel);
+                            }
+                        });
+
+                        // 根据 zrfcid 将对应字段设置到 mainRowDataList 中
+                        // SD07 设置 SalesOrder，SD10 设置 PurchaseOrder1
+                        mainRowDataList.forEach(item => {
+                            const piKey = `${item.PIOrder}-${item.PIOrderItem}`;
+                            if (piToRelMap.has(piKey)) {
+                                const rel = piToRelMap.get(piKey);
+                                if (zrfcid === 'SD07') {
+                                    item.SalesOrder = rel.SalesOrder;
+                                } else if (zrfcid === 'SD10') {
+                                    item.PurchaseOrder1 = rel.PurchaseOrder1;
+                                }
+                            }
+                        });
+
+                        // 根据 zrfcid 确定 sourceDocument
+                        // SD07 使用 SalesOrder，SD10 使用 PurchaseOrder1
+                        if (salesOrderRels.length > 0) {
+                            if (zrfcid === 'SD07') {
+                                sourceDocument = salesOrderRels[0].SalesOrder;
+                                console.log('[DeliveryOrderCreateService] SD07 获取 SalesOrder:', sourceDocument);
+                            } else if (zrfcid === 'SD10') {
+                                sourceDocument = salesOrderRels[0].PurchaseOrder1;
+                                console.log('[DeliveryOrderCreateService] SD10 获取 PurchaseOrder1:', sourceDocument);
+                            }
+                        }
+
+                        // 通过 PIOrder/PIOrderItem 查询 SalesOrderCreate 表获取 SalesOrderType
+                        if (piOrders.length > 0 && piOrderItems.length > 0) {
+                            const SalesOrderCreate = cds.entities['com.sap.zictm.SalesOrderCreate'];
+                            const salesOrderCreates = await cds.run(
+                                SELECT.from(SalesOrderCreate).where({
+                                    PIOrder: { in: piOrders },
+                                    PIOrderItem: { in: piOrderItems }
+                                })
+                            );
+
+                            console.log('[DeliveryOrderCreateService] SD07/SD10 获取 SalesOrderCreate 数据:', JSON.stringify(salesOrderCreates));
+
+                            // SD07/SD10 直接从查询结果获取 SalesOrderType
+                            if (salesOrderCreates.length > 0 && salesOrderCreates[0].SalesOrderType) {
+                                salesOrderType = salesOrderCreates[0].SalesOrderType;
+                                console.log('[DeliveryOrderCreateService] SD07/SD10 获取 SalesOrderType:', salesOrderType);
+                            }
+                        }
+                    }
+                }
+            } else {
+                // 使用通用工具类读取之前步骤的 objkey（销售订单号）
+                sourceDocument = await this.commonUtils.getPreviousStepObjkey(zrfcLogid, zrfcid, readsteps, canum);
+                // 获取销售订单类型（从第一条业务数据获取）
+                salesOrderType = businessDataList[0]?.SalesOrderType;
+            }
+
             // 根据 zdfjy 和 canum 查找 MPTStepConfig 配置
             const mptStepConfig = await this.commonUtils.getMPTStepConfig(zdfjy, canum);
-
-            // 获取销售订单类型（从第一条业务数据获取）
-            const salesOrderType = businessDataList[0]?.SalesOrderType;
             
             // 借贷项订单（CR/DR）不需要生成交货单，直接跳过
             if (salesOrderType === 'CR' || salesOrderType === 'DR') {
@@ -100,8 +221,8 @@ class DeliveryOrderCreateService {
             const cookieString = cookies.map(cookie => cookie.split(';')[0]).join('; ');
             const csrfToken = csrfResult.headers['x-csrf-token'];
 
-            // 构建交货单创建数据（传入整个 businessDataList 数组，一次性创建一张交货单）
-            const deliveryOrderData = await this.buildDeliveryOrderData(businessDataList, mptStepConfig, zrfcid, canum, salesOrderType, sourceDocument);
+            // 构建交货单创建数据（传入主行数据，一次性创建一张交货单）
+            const deliveryOrderData = await this.buildDeliveryOrderData(mainRowDataListForDelivery, mptStepConfig, zrfcid, canum, salesOrderType, sourceDocument);
             
             console.log('交货单数据:', JSON.stringify(deliveryOrderData, null, 2));
 
@@ -131,9 +252,19 @@ class DeliveryOrderCreateService {
             if (result.status >= 200 && result.status < 300) {
                 const responseData = typeof result.data === 'string' ? JSON.parse(result.data) : result.data;
                 const deliveryDocument = responseData?.d?.DeliveryDocument || '';
-                
+
                 console.log('交货单创建成功:', deliveryDocument);
-                
+
+                // SD07/SD10 需要更新 PIDeliveryRel 表
+                if (zrfcid === 'SD07' || zrfcid === 'SD10') {
+                    // 从返回结果中获取行项目号
+                    const deliveryItems = responseData?.d?.to_DeliveryDocumentItem?.results || [];
+                    console.log('[DeliveryOrderCreateService] 交货单行项目:', JSON.stringify(deliveryItems));
+
+                    // 批量更新 PIDeliveryRel（使用原始业务数据，包括批次拆分行）
+                    await this.updatePIDeliveryRel(deliveryDocument, deliveryItems, businessDataList, salesOrderType);
+                }
+
                 const returnResult = {
                     code: 'S',
                     message: '交货单创建成功',
@@ -202,50 +333,86 @@ class DeliveryOrderCreateService {
     }
 
     /**
-     * 将交货单号更新到 PIDeliveryRel 表
-     * @param {string} deliveryDocument - 交货单号
-     * @param {Object} businessData - 业务数据
+     * 将交货单号批量更新到 PIDeliveryRel 表（SD07/SD10 使用）
+     * 只更新 ParentItem 为空的行（批次拆分前的主行）
+     * @param {string} deliveryDocument - 创建的交货单号
+     * @param {Array} deliveryItems - 交货单行项目列表
+     * @param {Array} businessDataList - 业务数据列表
+     * @param {string} salesOrderType - 销售订单类型
      */
-    async updatePIDeliveryRel(deliveryDocument, businessData) {
+    async updatePIDeliveryRel(deliveryDocument, deliveryItems, businessDataList, salesOrderType) {
         try {
             const PIDeliveryRel = cds.entities['com.sap.zictm.PIDeliveryRel'];
-            const { INSERT, UPDATE } = cds.ql;
-            
-            const piOrder = businessData.PIOrder || '';
-            const piOrderItem = businessData.PIOrderItem || '';
-            const deliveryItem = businessData.DeliveryItem || '00010';
-            
-            console.log(`[updatePIDeliveryRel] 开始更新 PIDeliveryRel, piOrder=${piOrder}, piOrderItem=${piOrderItem}, deliveryDocument=${deliveryDocument}, deliveryItem=${deliveryItem}`);
-            
-            if (piOrder && piOrderItem && deliveryDocument) {
-                // 先尝试更新
-                const updateResult = await cds.run(
-                    UPDATE(PIDeliveryRel)
-                        .set({ DeliveryNo1: deliveryDocument, DeliveryNoItem1: deliveryItem })
-                        .where({ PIOrder: piOrder, PIOrderItem: piOrderItem })
-                );
-                
-                console.log(`[updatePIDeliveryRel] 更新结果:`, updateResult);
-                
-                // 如果没有更新到数据（表中没有该记录），则插入新记录
-                if (updateResult?.affectedRows === 0 || !updateResult) {
-                    console.log(`[updatePIDeliveryRel] 更新未影响任何行，尝试插入新记录`);
-                    await cds.run(
-                        INSERT.into(PIDeliveryRel).entries({
-                            zrfc_logid: this.zrfcLogid,
-                            PIOrder: piOrder,
-                            PIOrderItem: piOrderItem,
-                            DeliveryNo1: deliveryDocument,
-                            DeliveryNoItem1: deliveryItem
-                        })
-                    );
-                    console.log(`PIDeliveryRel 插入成功: PIOrder=${piOrder}, PIOrderItem=${piOrderItem}, DeliveryNo1=${deliveryDocument}, DeliveryNoItem1=${deliveryItem}`);
-                } else {
-                    console.log(`PIDeliveryRel 更新成功: PIOrder=${piOrder}, PIOrderItem=${piOrderItem}, DeliveryNo1=${deliveryDocument}, DeliveryNoItem1=${deliveryItem}`);
-                }
+            const { UPDATE, SELECT } = cds.ql;
+
+            const businessDeliveryDocuments = businessDataList.map(b => b.DeliveryDocument || '').filter(v => v);
+            const businessDeliveryItems = businessDataList.map(b => b.DeliveryDocumentItem || '').filter(v => v);
+
+            if (businessDeliveryDocuments.length === 0 || businessDeliveryItems.length === 0) {
+                console.warn('[updatePIDeliveryRel] 业务数据为空，跳过更新');
+                return;
             }
+
+            console.log(`[updatePIDeliveryRel] 开始批量更新 PIDeliveryRel, deliveryDocument=${deliveryDocument}, businessDataList.length=${businessDataList.length}`);
+
+            // 批量查询 PIDeliveryRel 记录
+            const existingRecords = await cds.run(
+                SELECT.from(PIDeliveryRel)
+                    .where({
+                        DeliveryDocument: { in: businessDeliveryDocuments },
+                        DeliveryDocumentItem: { in: businessDeliveryItems }
+                    })
+            );
+
+            console.log(`[updatePIDeliveryRel] 查询到 ${existingRecords.length} 条 PIDeliveryRel 记录`);
+
+            // 按 DeliveryDocument+DeliveryDocumentItem 建立映射
+            const existingMap = new Map();
+            existingRecords.forEach(record => {
+                const key = `${record.DeliveryDocument}-${record.DeliveryDocumentItem}`;
+                existingMap.set(key, record);
+            });
+
+            // 构建批量更新的 SET 数据列表
+            const updateTasks = [];
+            for (let i = 0; i < businessDataList.length; i++) {
+                const businessData = businessDataList[i];
+                const businessDeliveryItem = businessData.DeliveryDocumentItem || '000010';
+                const key = `${businessData.DeliveryDocument}-${businessDeliveryItem}`;
+                const existingRecord = existingMap.get(key);
+
+                if (!existingRecord) {
+                    console.warn(`[updatePIDeliveryRel] 未找到匹配的 PIDeliveryRel 记录: ${key}`);
+                    continue;
+                }
+
+                const setData = { DeliveryNo1: deliveryDocument, DeliveryNoItem1: businessDeliveryItem };
+                if (salesOrderType) {
+                    setData.SalesOrderType = salesOrderType;
+                }
+
+                updateTasks.push({
+                    where: {
+                        PIOrder: existingRecord.PIOrder,
+                        PIOrderItem: existingRecord.PIOrderItem,
+                        DeliveryDocument: existingRecord.DeliveryDocument,
+                        DeliveryDocumentItem: existingRecord.DeliveryDocumentItem
+                    },
+                    setData
+                });
+            }
+
+            // 批量执行更新（顺序）
+            let updatedCount = 0;
+            for (const task of updateTasks) {
+                const result = await cds.run(UPDATE(PIDeliveryRel).set(task.setData).where(task.where));
+                console.log(`[updatePIDeliveryRel] 更新 PIDeliveryRel: PIOrder=${task.where.PIOrder}, PIOrderItem=${task.where.PIOrderItem}, DeliveryNo1=${task.setData.DeliveryNo1}, 结果=${result}`);
+                updatedCount++;
+            }
+
+            console.log(`[updatePIDeliveryRel] 批量更新完成，共更新 ${updatedCount} 条`);
         } catch (error) {
-            console.error(`PIDeliveryRel 更新/插入失败:`, error);
+            console.error(`[updatePIDeliveryRel] PIDeliveryRel 批量更新失败:`, error);
         }
     }
 

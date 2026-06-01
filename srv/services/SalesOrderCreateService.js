@@ -301,10 +301,18 @@ class SalesOrderCreateService {
         
         // 根据 zrfcid 获取工厂字段值
         let plantValue;
-        if (zrfcid === 'SD02') {
-            plantValue = mainData.ReceivingPlant;
-        } else if (zrfcid === 'SD04') {
-            plantValue = mptStepConfig?.werks;
+        switch (zrfcid) {
+            case 'SD02':
+                plantValue = mainData.ReceivingPlant;
+                break;
+            case 'SD04':
+                plantValue = mptStepConfig?.werks;
+                break;
+            case 'SD01':
+            case 'SD05':
+            case 'SD06':
+                plantValue = mainData.ProductionPlant;
+                break;
         }
         
         // 构建行项目

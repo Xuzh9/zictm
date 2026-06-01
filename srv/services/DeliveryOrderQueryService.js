@@ -22,8 +22,10 @@ class DeliveryOrderQueryService {
 
             // 如果是 SD09/SD07/SD10，从业务表获取 RefDocNo
             let referenceSDDocument;
-            if (zrfcid === 'SD07' || zrfcid === 'SD09' || zrfcid === 'SD10') {
+            if (zrfcid === 'SD07' || zrfcid === 'SD09' || (zrfcid === 'SD10' && canum === 10)) {
                 referenceSDDocument = await this.getRefDocNoFromBusinessTable(zrfcLogid);
+            } else if (zrfcid === 'SD10' && canum === 110) {
+                referenceSDDocument = await this.getRefDocNoFromPIDeliveryRel(zrfcLogid);
             } else {
                 // 使用通用工具类读取之前步骤的 objkey
                 referenceSDDocument = objkey;
@@ -37,7 +39,7 @@ class DeliveryOrderQueryService {
 
             // 如果查询成功且 zrfcid 为 SD07/SD09/SD10，更新 PIDeliveryRel
             if (queryResult.code === 'S' && (zrfcid === 'SD07' || zrfcid === 'SD09' || zrfcid === 'SD10')) {
-                await this.updatePIDeliveryRel(zrfcLogid, referenceSDDocument, queryResult.inboundDeliveries);
+                await this.updatePIDeliveryRel(zrfcLogid, referenceSDDocument, queryResult.inboundDeliveries, zrfcid, canum);
             }
 
             return queryResult;
@@ -49,6 +51,76 @@ class DeliveryOrderQueryService {
                 message: error.message || '查询内向交货单失败',
                 objkey: ''
             };
+        }
+    }
+
+    async getRefDocNoFromPIDeliveryRel(zrfcLogid) {
+        try {
+            const DeliveryActualInfo = cds.entities['com.sap.zictm.DeliveryActualInfo'];
+            const PIDeliveryRel = cds.entities['com.sap.zictm.PIDeliveryRel'];
+            const PISalesOrderRel = cds.entities['com.sap.zictm.PISalesOrderRel'];
+
+            const businessDataList = await cds.run(
+                SELECT.from(DeliveryActualInfo)
+                    .columns(['DeliveryDocument', 'DeliveryDocumentItem'])
+                    .where({ zrfc_logid: zrfcLogid })
+            );
+
+            if (!businessDataList || businessDataList.length === 0) {
+                console.warn(`[getRefDocNoFromPIDeliveryRel] 未找到业务数据，zrfcLogid: ${zrfcLogid}`);
+                return null;
+            }
+
+            const deliveryDocuments = [...new Set(businessDataList.map(item => item.DeliveryDocument).filter(v => v))];
+            const deliveryItems = [...new Set(businessDataList.map(item => item.DeliveryDocumentItem).filter(v => v))];
+
+            if (deliveryDocuments.length === 0 || deliveryItems.length === 0) {
+                console.warn('[getRefDocNoFromPIDeliveryRel] DeliveryDocument 或 DeliveryDocumentItem 为空');
+                return null;
+            }
+
+            const piDeliveryRels = await cds.run(
+                SELECT.from(PIDeliveryRel)
+                    .columns(['PIOrder', 'PIOrderItem'])
+                    .where({
+                        DeliveryDocument: { in: deliveryDocuments },
+                        DeliveryDocumentItem: { in: deliveryItems }
+                    })
+            );
+
+            if (!piDeliveryRels || piDeliveryRels.length === 0) {
+                console.warn('[getRefDocNoFromPIDeliveryRel] 未找到 PIDeliveryRel 记录');
+                return null;
+            }
+
+            const piOrders = [...new Set(piDeliveryRels.map(item => item.PIOrder).filter(v => v))];
+            const piOrderItems = [...new Set(piDeliveryRels.map(item => item.PIOrderItem).filter(v => v))];
+
+            if (piOrders.length === 0 || piOrderItems.length === 0) {
+                console.warn('[getRefDocNoFromPIDeliveryRel] PIOrder 或 PIOrderItem 为空');
+                return null;
+            }
+
+            const salesOrderRels = await cds.run(
+                SELECT.from(PISalesOrderRel)
+                    .columns(['PurchaseOrder1'])
+                    .where({
+                        PIOrder: { in: piOrders },
+                        PIOrderItem: { in: piOrderItems }
+                    })
+            );
+
+            if (salesOrderRels && salesOrderRels.length > 0 && salesOrderRels[0].PurchaseOrder1) {
+                const purchaseOrder1 = salesOrderRels[0].PurchaseOrder1;
+                console.log(`[getRefDocNoFromPIDeliveryRel] 获取 PurchaseOrder1: ${purchaseOrder1}`);
+                return purchaseOrder1;
+            }
+
+            console.warn('[getRefDocNoFromPIDeliveryRel] 未找到 PurchaseOrder1');
+            return null;
+        } catch (error) {
+            console.error('[getRefDocNoFromPIDeliveryRel] 查询失败:', error);
+            return null;
         }
     }
 
@@ -168,19 +240,19 @@ class DeliveryOrderQueryService {
         }
     }
 
-    async updatePIDeliveryRel(zrfcLogid, outboundDeliveryNo, inboundDeliveries) {
+    async updatePIDeliveryRel(zrfcLogid, outboundDeliveryNo, inboundDeliveries, zrfcid, canum) {
         try {
-            console.log('[updatePIDeliveryRel] 开始更新 PIDeliveryRel，外向交货单:', outboundDeliveryNo, '内向交货单数量:', inboundDeliveries.length);
+            console.log('[updatePIDeliveryRel] 开始更新 PIDeliveryRel，外向交货单:', outboundDeliveryNo, '内向交货单数量:', inboundDeliveries.length, 'zrfcid:', zrfcid, 'canum:', canum);
 
             // 获取实体引用
             const PIDeliveryRel = cds.entities['com.sap.zictm.PIDeliveryRel'];
             const PISalesOrderRel = cds.entities['com.sap.zictm.PISalesOrderRel'];
             const DeliveryActualInfo = cds.entities['com.sap.zictm.DeliveryActualInfo'];
 
-            // 查询业务表，获取所有 DeliveryDocument、DeliveryDocumentItem、RefDocNo、RefDocItem
+            // 查询业务表，获取所有 DeliveryDocument、DeliveryDocumentItem、RefDocNo、RefDocItem、ParentItem
             const businessDataList = await cds.run(
                 SELECT.from(DeliveryActualInfo)
-                    .columns(['DeliveryDocument', 'DeliveryDocumentItem', 'RefDocNo', 'RefDocItem'])
+                    .columns(['DeliveryDocument', 'DeliveryDocumentItem', 'RefDocNo', 'RefDocItem', 'ParentItem'])
                     .where({ zrfc_logid: zrfcLogid })
             );
 
@@ -199,34 +271,46 @@ class DeliveryOrderQueryService {
                 return;
             }
 
-            // 收集所有需要查询的 RefDocNo 和 RefDocItem
-            const refDocNoList = [...new Set(validBusinessData.map(item => item.RefDocNo))];
-            const refDocItemList = [...new Set(validBusinessData.map(item => item.RefDocItem))];
+            // 收集所有需要查询的 RefDocNo 和 RefDocItem（过滤空值）
+            // 注意：PISalesOrderRel 的 PurchaseOrderItem 是5位，需要截取 RefDocItem 后5位来匹配
+            const refDocNoList = [...new Set(validBusinessData.map(item => item.RefDocNo).filter(v => v))];
+            const refDocItemList = [...new Set(validBusinessData.map(item => item.RefDocItem?.slice(-5)).filter(v => v))];
+
+            if (refDocNoList.length === 0 || refDocItemList.length === 0) {
+                console.warn('[updatePIDeliveryRel] RefDocNo 或 RefDocItem 为空，跳过更新');
+                return;
+            }
 
             // 构建业务数据映射，方便后续查找
+            // 注意：使用 DeliveryDocument + DeliveryDocumentItem 作为 key
             const businessDataMap = new Map();
             validBusinessData.forEach(item => {
-                const key = `${item.RefDocNo}-${item.RefDocItem}`;
+                const key = `${item.DeliveryDocument}-${item.DeliveryDocumentItem}`;
                 businessDataMap.set(key, item);
             });
 
-            // 批量查询 PISalesOrderRel，同时查询 PurchaseOrder1/PurchaseOrderItem1 和 PurchaseOrder2/PurchaseOrderItem2
-            const salesOrderRels = await cds.run(
+            // 批量查询 PISalesOrderRel，分别查询两个 PurchaseOrder 路径，然后合并结果
+            let salesOrderRels = [];
+            
+            const result1 = await cds.run(
                 SELECT.from(PISalesOrderRel)
                     .columns(['PIOrder', 'PIOrderItem', 'PurchaseOrder1', 'PurchaseOrderItem1', 'PurchaseOrder2', 'PurchaseOrderItem2'])
                     .where({
-                        or: [
-                            {
-                                PurchaseOrder1: { in: refDocNoList },
-                                PurchaseOrderItem1: { in: refDocItemList }
-                            },
-                            {
-                                PurchaseOrder2: { in: refDocNoList },
-                                PurchaseOrderItem2: { in: refDocItemList }
-                            }
-                        ]
+                        PurchaseOrder1: { in: refDocNoList },
+                        PurchaseOrderItem1: { in: refDocItemList }
                     })
             );
+            
+            const result2 = await cds.run(
+                SELECT.from(PISalesOrderRel)
+                    .columns(['PIOrder', 'PIOrderItem', 'PurchaseOrder1', 'PurchaseOrderItem1', 'PurchaseOrder2', 'PurchaseOrderItem2'])
+                    .where({
+                        PurchaseOrder2: { in: refDocNoList },
+                        PurchaseOrderItem2: { in: refDocItemList }
+                    })
+            );
+            
+            salesOrderRels = [...result1, ...result2];
 
             console.log('[updatePIDeliveryRel] 找到 PISalesOrderRel 记录:', salesOrderRels.length, '条');
 
@@ -252,13 +336,15 @@ class DeliveryOrderQueryService {
             const piOrderItems = [];
             const businessToPiMap = new Map();
 
+            // 使用 RefDocNo-RefDocItem 查找 salesOrderRelMap，建立 DeliveryDocument-DeliveryDocumentItem -> PI 信息的映射
             validBusinessData.forEach(item => {
-                const key = `${item.RefDocNo}-${item.RefDocItem}`;
-                const piInfo = salesOrderRelMap.get(key);
+                const lookupKey = `${item.RefDocNo}-${item.RefDocItem?.slice(-5)}`;
+                const piInfo = salesOrderRelMap.get(lookupKey);
+                const mapKey = `${item.DeliveryDocument}-${item.DeliveryDocumentItem}`;
                 if (piInfo) {
                     piOrders.push(piInfo.PIOrder);
                     piOrderItems.push(piInfo.PIOrderItem);
-                    businessToPiMap.set(key, piInfo);
+                    businessToPiMap.set(mapKey, { ...piInfo, businessData: item });
                 } else {
                     console.warn('[updatePIDeliveryRel] 未找到 PISalesOrderRel 记录，RefDocNo:', item.RefDocNo, 'RefDocItem:', item.RefDocItem);
                 }
@@ -269,22 +355,32 @@ class DeliveryOrderQueryService {
                 return;
             }
 
-            // 批量查询 PIDeliveryRel
+            // 收集所有 DeliveryDocument 和 DeliveryDocumentItem
+            const deliveryDocuments = [...new Set(validBusinessData.map(item => item.DeliveryDocument).filter(v => v))];
+            const deliveryItems = [...new Set(validBusinessData.map(item => item.DeliveryDocumentItem).filter(v => v))];
+
+            if (deliveryDocuments.length === 0 || deliveryItems.length === 0) {
+                console.warn('[updatePIDeliveryRel] DeliveryDocument 或 DeliveryDocumentItem 为空，跳过更新');
+                return;
+            }
+
+            // 批量查询 PIDeliveryRel（通过四个主键判断：PIOrder, PIOrderItem, DeliveryDocument, DeliveryDocumentItem）
             const existingRels = await cds.run(
                 SELECT.from(PIDeliveryRel)
-                    .columns(['PIOrder', 'PIOrderItem', 'InboundDeliveryNo1', 'InboundDeliveryNoItem1', 'InboundDeliveryNo2', 'InboundDeliveryNoItem2', 'DeliveryNo1', 'DeliveryNoItem1', 'DeliveryNo2', 'DeliveryNoItem2'])
                     .where({
                         PIOrder: { in: piOrders },
-                        PIOrderItem: { in: piOrderItems }
+                        PIOrderItem: { in: piOrderItems },
+                        DeliveryDocument: { in: deliveryDocuments },
+                        DeliveryDocumentItem: { in: deliveryItems }
                     })
             );
 
             console.log('[updatePIDeliveryRel] 找到已存在的 PIDeliveryRel 记录:', existingRels.length, '条');
 
-            // 构建已存在记录的映射
+            // 构建已存在记录的映射（使用四个主键：PIOrder, PIOrderItem, DeliveryDocument, DeliveryDocumentItem）
             const existingRelMap = new Map();
             existingRels.forEach(rel => {
-                const key = `${rel.PIOrder}-${rel.PIOrderItem}`;
+                const key = `${rel.PIOrder}-${rel.PIOrderItem}-${rel.DeliveryDocument}-${rel.DeliveryDocumentItem}`;
                 existingRelMap.set(key, rel);
             });
 
@@ -307,10 +403,9 @@ class DeliveryOrderQueryService {
 
             // 更新或插入 PIDeliveryRel
             for (const [businessKey, piInfo] of businessToPiMap) {
-                const { PIOrder: piOrder, PIOrderItem: piOrderItem } = piInfo;
-                const key = `${piOrder}-${piOrderItem}`;
+                const { PIOrder: piOrder, PIOrderItem: piOrderItem, businessData } = piInfo;
+                const key = `${piOrder}-${piOrderItem}-${businessData?.DeliveryDocument}-${businessData?.DeliveryDocumentItem}`;
                 const existingRel = existingRelMap.get(key);
-                const businessData = businessDataMap.get(businessKey);
 
                 // 找到对应的内向交货单
                 let inboundDelivery = null;
@@ -334,47 +429,59 @@ class DeliveryOrderQueryService {
                 if (existingRel) {
                     // 更新
                     const updateData = {};
-                    if (!existingRel.InboundDeliveryNo1) {
-                        updateData.InboundDeliveryNo1 = inboundDelivery.DeliveryDocument;
-                        updateData.InboundDeliveryNoItem1 = inboundDelivery.DeliveryDocumentItem;
-                        updateData.DeliveryNo1 = businessData?.DeliveryDocument;
-                        updateData.DeliveryNoItem1 = businessData?.DeliveryDocumentItem;
-                    } else if (!existingRel.InboundDeliveryNo2) {
+
+                    if (zrfcid === 'SD10' && canum === '10') {
                         updateData.InboundDeliveryNo2 = inboundDelivery.DeliveryDocument;
                         updateData.InboundDeliveryNoItem2 = inboundDelivery.DeliveryDocumentItem;
-                        updateData.DeliveryNo2 = businessData?.DeliveryDocument;
-                        updateData.DeliveryNoItem2 = businessData?.DeliveryDocumentItem;
+                    } else {
+                        updateData.InboundDeliveryNo1 = inboundDelivery.DeliveryDocument;
+                        updateData.InboundDeliveryNoItem1 = inboundDelivery.DeliveryDocumentItem;
                     }
 
                     if (Object.keys(updateData).length > 0) {
+                        console.log('[updatePIDeliveryRel] UPDATE WHERE 条件，PIOrder:', piOrder, 'PIOrderItem:', piOrderItem, 'DeliveryDocument:', businessData?.DeliveryDocument, 'DeliveryDocumentItem:', businessData?.DeliveryDocumentItem);
                         await cds.run(
                             UPDATE(PIDeliveryRel)
                                 .set(updateData)
-                                .where({ PIOrder: piOrder, PIOrderItem: piOrderItem })
+                                .where({
+                                    PIOrder: piOrder,
+                                    PIOrderItem: piOrderItem,
+                                    DeliveryDocument: businessData?.DeliveryDocument,
+                                    DeliveryDocumentItem: businessData?.DeliveryDocumentItem
+                                })
                         );
-                        console.log('[updatePIDeliveryRel] 更新 PIDeliveryRel 成功，PIOrder:', piOrder, 'PIOrderItem:', piOrderItem);
+                        console.log('[updatePIDeliveryRel] 更新 PIDeliveryRel 成功，PIOrder:', piOrder, 'PIOrderItem:', piOrderItem, 'zrfcid:', zrfcid, 'canum:', canum);
                     }
+
                 } else {
                     // 插入
                     const insertData = {
                         PIOrder: piOrder,
                         PIOrderItem: piOrderItem,
-                        zrfc_logid: zrfcLogid,
-                        InboundDeliveryNo1: inboundDelivery.DeliveryDocument,
-                        InboundDeliveryNoItem1: inboundDelivery.DeliveryDocumentItem,
-                        DeliveryNo1: businessData?.DeliveryDocument,
-                        DeliveryNoItem1: businessData?.DeliveryDocumentItem
+                        DeliveryDocument: businessData?.DeliveryDocument,
+                        DeliveryDocumentItem: businessData?.DeliveryDocumentItem,
+                        ParentItem: businessData?.ParentItem || '',
+                        zrfc_logid: zrfcLogid
                     };
+
+                    if (zrfcid === 'SD10' && canum === '10') {
+                        insertData.InboundDeliveryNo2 = inboundDelivery.DeliveryDocument;
+                        insertData.InboundDeliveryNoItem2 = inboundDelivery.DeliveryDocumentItem;
+                    } else {
+                        insertData.InboundDeliveryNo1 = inboundDelivery.DeliveryDocument;
+                        insertData.InboundDeliveryNoItem1 = inboundDelivery.DeliveryDocumentItem;
+                    }
 
                     await cds.run(
                         INSERT.into(PIDeliveryRel).entries(insertData)
                     );
-                    console.log('[updatePIDeliveryRel] 插入 PIDeliveryRel 成功，PIOrder:', piOrder, 'PIOrderItem:', piOrderItem);
+                    console.log('[updatePIDeliveryRel] 插入 PIDeliveryRel 成功，PIOrder:', piOrder, 'PIOrderItem:', piOrderItem, 'zrfcid:', zrfcid, 'canum:', canum);
                 }
             }
 
         } catch (error) {
             console.error('[updatePIDeliveryRel] 更新 PIDeliveryRel 失败:', error);
+            throw error;
         }
     }
 

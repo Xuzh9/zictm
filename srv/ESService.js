@@ -100,23 +100,6 @@ module.exports = cds.service.impl(async function () {
     }
 
     // --------------------------
-    // 数据库已存在校验
-    // --------------------------
-    const existingRecords = await service.run(SELECT.from(DeliveryActualInfo)
-      .columns(['DeliveryDocument', 'DeliveryDocumentItem'])
-      .where({
-        DeliveryDocument: { in: data.map(p => p.DeliveryDocument) }
-      }));
-    
-    // 主键存在就报错
-    existingRecords.forEach(existing => {
-      const key = `${existing.DeliveryDocument}-${existing.DeliveryDocumentItem}`;
-      if (keyMap.has(key)) {
-        errors.push(`主键 [${key}] 已存在，无法重复推送`);
-      }
-    });
-
-    // --------------------------
     // 如果有任何错误，保存错误日志并返回（不调用 MultiStepInvoker）
     // --------------------------
     if (errors.length > 0) {

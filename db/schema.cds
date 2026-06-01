@@ -187,6 +187,7 @@ entity PaymentReceipt {
     itemRemark                  : String(50) @title: '明细备注';     // 明细备注   
     documentName                : String(10) @title: '单据名称';     // 单据名称
     incomeExpenseType           : paymentType @title: '收支类型';    // 收支类型
+    financialTransactionType    : String(3) @title: '金融交易类型';     // 金融交易类型
     zrfcid                      : String(10) @title: '业务流程ID';     // 业务流程ID
     zrfc_logid                  : UUID @title: '多步ID';           // 多步ID
 }
@@ -371,9 +372,13 @@ entity PISalesOrderRel {
 
 //PI交货单关系表
 entity PIDeliveryRel {
-  key PIOrder                   : String(16) @title: 'PI单号';    // PI单号
+  key PIOrder                   : String(16) @title: 'PI单号';      // PI单号
   key PIOrderItem               : String(6) @title: 'PI项目号';     // PI项目号
-      zrfc_logid                : UUID @title: '多步ID';           // 多步ID
+  key DeliveryDocument          : String(16) @title: '交货单';      // 交货单
+  key DeliveryDocumentItem      : String(6) @title: '交货行项目';       // 交货行项目
+      ParentItem                : String(6) @title: '上层行项目号';       // 上层行项目号
+      zrfc_logid                : UUID @title: '多步ID';            // 多步ID
+      SalesOrderType            : String(4) @title: '销售订单类型';     // 销售订单类型
       DeliveryNo1               : String(10) @title: '外向交货单号1';    // 外向交货单号1
       DeliveryNoItem1           : String(6) @title: '外向交货单项目号1';     // 外向交货单项目号1
       InboundDeliveryNo1        : String(10) @title: '内向交货单号1';    // 内向交货单号1

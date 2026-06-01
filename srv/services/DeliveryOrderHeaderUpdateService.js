@@ -51,10 +51,6 @@ class DeliveryOrderHeaderUpdateService {
             const businessDataList = businessDataResult.businessData;
             const mainData = businessDataList[0];
 
-            // 获取销售订单类型
-            const salesOrderType = mainData.SalesOrderType;
-            console.log(`[DeliveryOrderUpdateService] 销售订单类型: ${salesOrderType}`);
-
             // 使用通用工具类读取之前步骤的 objkey（交货单号）
             let deliveryDocument = objkey;
             const previousObjkey = await this.commonUtils.getPreviousStepObjkey(zrfcLogid, zrfcid, readsteps, canum);
@@ -72,6 +68,32 @@ class DeliveryOrderHeaderUpdateService {
                 console.log('[DeliveryOrderUpdateService] 返回结果:', JSON.stringify(returnResult));
                 return returnResult;
             }
+
+            // 获取销售订单类型（SD07/SD10 从 PIDeliveryRel 获取，其他从业务表获取）
+            let salesOrderType;
+            if ((zrfcid === 'SD07' && canum === 70) || (zrfcid === 'SD10' && canum === 120)) {
+                try {
+                    const PIDeliveryRel = cds.entities['com.sap.zictm.PIDeliveryRel'];
+                    const { SELECT } = cds.ql;
+                    const piDeliveryRel = await cds.run(
+                        SELECT.from(PIDeliveryRel)
+                            .columns(['SalesOrderType'])
+                            .where({
+                                DeliveryDocument: mainData.DeliveryDocument,
+                                DeliveryDocumentItem: mainData.DeliveryDocumentItem
+                            })
+                            .limit(1)
+                    );
+                    if (piDeliveryRel && piDeliveryRel.length > 0) {
+                        salesOrderType = piDeliveryRel[0].SalesOrderType;
+                    }
+                } catch (error) {
+                    console.error('[DeliveryOrderUpdateService] 查询 PIDeliveryRel 失败:', error);
+                }
+            } else {
+                salesOrderType = mainData.SalesOrderType;
+            }
+            console.log(`[DeliveryOrderUpdateService] 销售订单类型: ${salesOrderType}`);
 
             // 获取 DeliveryDate
             const deliveryDate = mainData.DeliveryDate || mainData.ActualGoodsMovementDate;
@@ -247,7 +269,7 @@ class DeliveryOrderHeaderUpdateService {
         if ((zrfcid === 'SD04' && canum === 100) || 
             (zrfcid === 'SD07' && canum === 20) || 
             zrfcid === 'SD09' || 
-            (zrfcid === 'SD10' && (canum === 20 || canum === 100))) {
+            (zrfcid === 'SD10' && (canum === 20 || canum === 120))) {
             //内向交货单 API
             return {
                 csrfUrl: '/sap/opu/odata/sap/API_INBOUND_DELIVERY_SRV;v=0002/A_InbDeliveryHeader(\'{DeliveryDocument}\')',

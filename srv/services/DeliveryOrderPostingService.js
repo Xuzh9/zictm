@@ -51,10 +51,6 @@ class DeliveryOrderPostingService {
             const businessDataList = businessDataResult.businessData;
             const mainData = businessDataList[0];
 
-            // 获取销售订单类型
-            const salesOrderType = mainData.SalesOrderType;
-            console.log(`[DeliveryOrderPostingService] 销售订单类型: ${salesOrderType}`);
-
             // 使用通用工具类读取之前步骤的 objkey（交货单号）
             let deliveryDocument = objkey;
             const previousObjkey = await this.commonUtils.getPreviousStepObjkey(zrfcLogid, zrfcid, readsteps, canum);
@@ -72,6 +68,32 @@ class DeliveryOrderPostingService {
                 console.log('[DeliveryOrderPostingService] 返回结果:', JSON.stringify(returnResult));
                 return returnResult;
             }
+
+            // 获取销售订单类型（SD07/SD10 从 PIDeliveryRel 获取，其他从业务表获取）
+            let salesOrderType;
+            if ((zrfcid === 'SD07' && canum === 100) || (zrfcid === 'SD10' && (canum === 100 ))) {
+                try {
+                    const PIDeliveryRel = cds.entities['com.sap.zictm.PIDeliveryRel'];
+                    const { SELECT } = cds.ql;
+                    const piDeliveryRel = await cds.run(
+                        SELECT.from(PIDeliveryRel)
+                            .columns(['SalesOrderType'])
+                            .where({
+                                DeliveryDocument: mainData.DeliveryDocument,
+                                DeliveryDocumentItem: mainData.DeliveryDocumentItem
+                            })
+                            .limit(1)
+                    );
+                    if (piDeliveryRel && piDeliveryRel.length > 0) {
+                        salesOrderType = piDeliveryRel[0].SalesOrderType;
+                    }
+                } catch (error) {
+                    console.error('[DeliveryOrderPostingService] 查询 PIDeliveryRel 失败:', error);
+                }
+            } else {
+                salesOrderType = mainData.SalesOrderType;
+            }
+            console.log(`[DeliveryOrderPostingService] 销售订单类型: ${salesOrderType}`);
 
             console.log(`[DeliveryOrderPostingService] 开始执行交货单过账, 交货单号: ${deliveryDocument}`);
             console.log(`[DeliveryOrderPostingService] 判断条件 - zrfcid: ${zrfcid}, canum: ${canum}, 类型 - zrfcid: ${typeof zrfcid}, canum: ${typeof canum}`);
@@ -247,13 +269,13 @@ class DeliveryOrderPostingService {
         if ((zrfcid === 'SD04' && canum === 130) || 
             (zrfcid === 'SD07' && canum === 50) || 
             zrfcid === 'SD09' || 
-            (zrfcid === 'SD10' && (canum === 50 || canum === 140))) {
+            (zrfcid === 'SD10' && (canum === 50 || canum === 150))) {
             // 内向交货单过账API
             return {
                 csrfUrl: '/sap/opu/odata/sap/API_INBOUND_DELIVERY_SRV;v=0002/A_InbDeliveryHeader(\'{DeliveryDocument}\')',
                 postingUrl: '/sap/opu/odata/sap/API_INBOUND_DELIVERY_SRV;v=0002/PostGoodsReceipt?DeliveryDocument='
             };
-        } else if (((zrfcid === 'SD04' && canum === 170) || (zrfcid === 'SD07' && canum === 90) ) && salesOrderType === 'CBRE') {
+        } else if (((zrfcid === 'SD04' && canum === 170) || (zrfcid === 'SD07' && canum === 80) || (zrfcid === 'SD07' && canum === 90) || (zrfcid === 'SD10' && canum === 90)) && salesOrderType === 'CBRE') {
             // 退货交货单过账API
             return {
                 csrfUrl: '/sap/opu/odata/sap/API_CUSTOMER_RETURNS_DELIVERY_SRV;v=2/A_ReturnsDeliveryHeader(\'{DeliveryDocument}\')',
@@ -284,15 +306,26 @@ class DeliveryOrderPostingService {
             }
         }
 
-        if (errorData?.error?.message?.value) {
-            return errorData.error.message.value;
-        } else if (errorData?.error?.message) {
-            return errorData.error.message;
-        } else if (errorData?.message) {
-            return errorData.message;
-        } else {
-            return JSON.stringify(errorData);
+        let errorMessage = '';
+        if (errorData?.error?.innererror?.errordetails && errorData.error.innererror.errordetails.length > 0) {
+            const details = errorData.error.innererror.errordetails;
+            const messages = details.map(d => d.code ? `${d.code}: ${d.message}` : d.message).filter(m => m);
+            errorMessage = messages.join('; ');
         }
+
+        if (!errorMessage) {
+            if (errorData?.error?.message?.value) {
+                errorMessage = errorData.error.message.value;
+            } else if (errorData?.error?.message) {
+                errorMessage = errorData.error.message;
+            } else if (errorData?.message) {
+                errorMessage = errorData.message;
+            } else {
+                errorMessage = JSON.stringify(errorData);
+            }
+        }
+
+        return errorMessage;
     }
 }
 

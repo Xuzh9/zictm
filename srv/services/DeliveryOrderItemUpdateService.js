@@ -63,8 +63,31 @@ class DeliveryOrderItemUpdateService {
             }
             console.log('[DeliveryOrderItemUpdateService] 交货单号:', deliveryDocument);
 
-            // 获取销售订单类型（从第一条业务数据获取）
-            const salesOrderType = businessDataList[0]?.SalesOrderType;
+            // 获取销售订单类型（SD07/SD10 从 PIDeliveryRel 获取，其他从业务表获取）
+            let salesOrderType;
+            if ((zrfcid === 'SD07' && canum === 80) || (zrfcid === 'SD10' && canum === 130)) {
+                try {
+                    const PIDeliveryRel = cds.entities['com.sap.zictm.PIDeliveryRel'];
+                    const { SELECT } = cds.ql;
+                    const piDeliveryRel = await cds.run(
+                        SELECT.from(PIDeliveryRel)
+                            .columns(['SalesOrderType'])
+                            .where({
+                                DeliveryDocument: businessDataList[0].DeliveryDocument,
+                                DeliveryDocumentItem: businessDataList[0].DeliveryDocumentItem
+                            })
+                            .limit(1)
+                    );
+                    if (piDeliveryRel && piDeliveryRel.length > 0) {
+                        salesOrderType = piDeliveryRel[0].SalesOrderType;
+                    }
+                } catch (error) {
+                    console.error('[DeliveryOrderItemUpdateService] 查询 PIDeliveryRel 失败:', error);
+                }
+            } else {
+                salesOrderType = businessDataList[0]?.SalesOrderType;
+            }
+            console.log(`[DeliveryOrderItemUpdateService] 销售订单类型: ${salesOrderType}`);
             
             // 根据 zrfcid、canum 和销售订单类型判断使用的 API 路径
             let apiPath;
@@ -74,7 +97,7 @@ class DeliveryOrderItemUpdateService {
             if ((zrfcid === 'SD04' && canum === 110) || 
                 (zrfcid === 'SD07' && canum === 30) || 
                 zrfcid === 'SD09' || 
-                (zrfcid === 'SD10' && (canum === 30 || canum === 120))) {
+                (zrfcid === 'SD10' && (canum === 30 || canum === 130))) {
                 apiPath = '/sap/opu/odata/sap/API_INBOUND_DELIVERY_SRV;v=0002';
                 itemEntity = 'A_InbDeliveryItem';
                 isInboundDelivery = true; // 设置为内向交货单
@@ -141,15 +164,25 @@ class DeliveryOrderItemUpdateService {
 
                 // 构建更新数据
                 const updateData = {};
-                
-                // 更新 Batch（内向交货单不需要更新）
-                if (!isInboundDelivery) {
+
+                // 更新 Batch（内向交货单、SD07/SD10 80 不需要更新）
+                if (!isInboundDelivery && !((zrfcid === 'SD07' && canum === 80) || (zrfcid === 'SD10' && canum === 80))) {
                     updateData.Batch = '2025';
                 }
                 
-                // 更新 StorageLocation（内向交货单不需要更新）
-                if (businessData.ReceivingStorageLocation && !isInboundDelivery) {
-                    updateData.StorageLocation = businessData.ReceivingStorageLocation || businessData.StorageLocation || "";
+                // 更新 StorageLocation
+                if (!isInboundDelivery && !((zrfcid === 'SD07' && canum === 80) || (zrfcid === 'SD10' && canum === 80))) {
+                    if (businessData.ReceivingStorageLocation || businessData.StorageLocation) {
+                        updateData.StorageLocation = businessData.ReceivingStorageLocation || businessData.StorageLocation || "";
+                    }
+                } else if ((zrfcid === 'SD07' && canum === 80) || (zrfcid === 'SD10' && canum === 80)) {
+                    if (businessData.RefDocNo && businessData.RefDocItem) {
+                        const refDocItemLast5 = businessData.RefDocItem.slice(-5);
+                        const poStorageLocation = await this.getPurchaseOrderStorageLocation(businessData.RefDocNo, refDocItemLast5);
+                        if (poStorageLocation) {
+                            updateData.StorageLocation = poStorageLocation;
+                        }
+                    }
                 }
 
                 if (Object.keys(updateData).length === 0) {
@@ -211,6 +244,38 @@ class DeliveryOrderItemUpdateService {
                 message: `交货单行项目修改失败: ${error.message}`,
                 objkey: ''
             };
+        }
+    }
+
+    async getPurchaseOrderStorageLocation(purchaseOrder, itemDeliveryAddress) {
+        try {
+            const poUrl = `/sap/opu/odata4/sap/api_purchaseorder_2/srvd_a2x/sap/purchaseorder/0001/PurchaseOrderItem/${purchaseOrder}/${itemDeliveryAddress}`;
+            console.log(`[DeliveryOrderItemUpdateService] 获取采购订单库存地点: ${poUrl}`);
+
+            const result = await executeHttpRequest(
+                {
+                    destinationName: 'ES_API'
+                },
+                {
+                    method: 'GET',
+                    url: poUrl,
+                    headers: {
+                        'Accept': 'application/json',
+                        'sap-language': 'ZH'
+                    }
+                }
+            );
+
+            if (result.data?.StorageLocation) {
+                const storageLocation = result.data.StorageLocation;
+                console.log(`[DeliveryOrderItemUpdateService] 获取到 StorageLocation: ${storageLocation}`);
+                return storageLocation;
+            }
+            console.warn(`[DeliveryOrderItemUpdateService] 未获取到 StorageLocation`);
+            return null;
+        } catch (error) {
+            console.error('[DeliveryOrderItemUpdateService] 获取采购订单库存地点失败:', error);
+            return null;
         }
     }
 

@@ -72,15 +72,13 @@ class MultiStepInvoker {
                 zrfcLogid = this.generateZrfcLogid();
                 console.log('[MultiStepInvoker.process] 生成的 zrfcLogid:', zrfcLogid);
                 
-                // 根据 ProcessConfig 中的 businessTable1、businessTable2、businessTable3 分别插入对应表的数据
-                await this.insertBusinessDataByConfig(processConfig, businessTable1, businessTable2, businessTable3, zrfcid, zrfcLogid, zdfjy);
-                
                 // 根据 isAsync 字段判断同步还是异步调用
                 if (processConfig.isAsync) {
-                    this.executeAsync(zrfcid, zrfcLogid, zdfjy, null, false, id);
+                    this.executeAsync(zrfcid, zrfcLogid, zdfjy, null, false, id, processConfig, businessTable1, businessTable2, businessTable3);
                     result.message = '异步调用成功，正在处理中';
                 } else {
-                    const processorResult = await this.processor.processWithLogId(zrfcLogid, zrfcid, null, false, zdfjy, id);
+                    // 将业务表数据传递给 MultiStepProcessor，由其统一保存业务表和 MultistepLog
+                    const processorResult = await this.processor.processWithLogId(zrfcLogid, zrfcid, null, false, zdfjy, id, processConfig, businessTable1, businessTable2, businessTable3);
                     result.code = processorResult.code;
                     result.message = processorResult.message ? processorResult.message.substring(0, 500) : '执行成功';
                     result.objkey = processorResult.objkey || '';
@@ -180,10 +178,10 @@ class MultiStepInvoker {
      * @param {boolean} isRetry - 是否为重推操作
      * @param {string} id - ApiInputLog的ID，用于与MultistepHeadLog关联（可选）
      */
-    executeAsync(zrfcid, zrfcLogid, zdfjy = null, startStepNum = null, isRetry = false, id = null) {
+    executeAsync(zrfcid, zrfcLogid, zdfjy = null, startStepNum = null, isRetry = false, id = null, processConfig = null, businessTable1 = null, businessTable2 = null, businessTable3 = null) {
         setTimeout(async () => {
             try {
-                await this.processor.processWithLogId(zrfcLogid, zrfcid, startStepNum, isRetry, zdfjy, id);
+                await this.processor.processWithLogId(zrfcLogid, zrfcid, startStepNum, isRetry, zdfjy, id, processConfig, businessTable1, businessTable2, businessTable3);
             } catch (error) {
                 console.error('异步处理异常:', error);
             }
@@ -236,56 +234,6 @@ class MultiStepInvoker {
             }
         } catch (error) {
             console.error('按配置更新业务数据失败:', error);
-            throw error;
-        }
-    }
-
-    /**
-     * 根据 ProcessConfig 配置分别插入 businessTable1、businessTable2、businessTable3 对应的数据表
-     * @param {Object} processConfig - 业务流程配置
-     * @param {Array} businessTable1Data - 业务表1的数据
-     * @param {Array} businessTable2Data - 业务表2的数据
-     * @param {Array} businessTable3Data - 业务表3的数据
-     * @param {string} zrfcid - 业务流程ID
-     * @param {string} zrfcLogid - 日志ID
-     * @param {string} zdfjy - 多方交易类型ID（可选）
-     */
-    async insertBusinessDataByConfig(processConfig, businessTable1Data, businessTable2Data, businessTable3Data, zrfcid, zrfcLogid, zdfjy = null) {
-        try {
-            // 处理 businessTable1
-            if (processConfig.businessTable1 && businessTable1Data) {
-                const table1Data = businessTable1Data.map(item => ({
-                    ...item,
-                    zrfcid,
-                    zrfc_logid: zrfcLogid,
-                    ...(zdfjy && { zdfjy })
-                }));
-                await this.insertBusinessData(processConfig.businessTable1, table1Data);
-            }
-
-            // 处理 businessTable2
-            if (processConfig.businessTable2 && businessTable2Data) {
-                const table2Data = businessTable2Data.map(item => ({
-                    ...item,
-                    zrfcid,
-                    zrfc_logid: zrfcLogid,
-                    ...(zdfjy && { zdfjy })
-                }));
-                await this.insertBusinessData(processConfig.businessTable2, table2Data);
-            }
-
-            // 处理 businessTable3
-            if (processConfig.businessTable3 && businessTable3Data) {
-                const table3Data = businessTable3Data.map(item => ({
-                    ...item,
-                    zrfcid,
-                    zrfc_logid: zrfcLogid,
-                    ...(zdfjy && { zdfjy })
-                }));
-                await this.insertBusinessData(processConfig.businessTable3, table3Data);
-            }
-        } catch (error) {
-            console.error('按配置插入业务数据失败:', error);
             throw error;
         }
     }
@@ -348,39 +296,6 @@ class MultiStepInvoker {
             }
         } catch (error) {
             console.error('更新业务数据失败:', error);
-            throw error;
-        }
-    }
-
-    /**
-     * 插入业务数据表（包含 zrfcid 和 zrfc_logid 字段）
-     * @param {string} tableName - 业务表名
-     * @param {Array} data - 业务数据（已包含 zrfcid 和 zrfc_logid）
-     */
-    async insertBusinessData(tableName, data) {
-        try {
-            if (!tableName) {
-                console.warn('业务表名为空');
-                return;
-            }
-
-            // 获取业务表实体
-            const BusinessEntity = cds.entities[tableName];
-            if (!BusinessEntity) {
-                console.warn(`业务表不存在: ${tableName}`);
-                return;
-            }
-
-            // 执行批量插入（数据已包含 zrfcid 和 zrfc_logid）
-            if (Array.isArray(data) && data.length > 0) {
-                await cds.run(
-                    INSERT.into(BusinessEntity).entries(data)
-                );
-            } else {
-                console.warn('数据不是数组或为空');
-            }
-        } catch (error) {
-            console.error('插入业务数据失败:', error);
             throw error;
         }
     }
