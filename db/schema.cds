@@ -151,7 +151,7 @@ entity OutboundDelivery{
     ReceivingPlant           : String(4) @title: '库存组织';          // 库存组织
     ReceivingStorageLocation : String(4) @title: '库存地点';          // 库存地点
     DeliveryDate             : Date @title: '发货日期';               // 发货日期
-    PurchasePrice                 : Decimal(15,2) @title: '采购单价'; // 采购单价
+    PurchasePrice            : Decimal(15,2) @title: '采购单价';      // 采购单价
     zrfcid                   : String(10) @title: '业务流程ID';         // 业务流程ID
     zrfc_logid               : UUID @title: '多步ID';               // 多步ID
     zdfjy                    : String(10) @title: '多方交易类型ID';     // 多方交易类型ID
@@ -164,8 +164,7 @@ entity PaymentReceipt {
     settlementOrganization      : String(4) @title: '结算组织';      // 结算组织
     salesOrganization           : String(4) @title: '销售组织';      // 销售组织
     procurementOrganization     : String(4) @title: '采购组织';      // 采购组织
-    paymentOrganization         : String(4) @title: '付款组织';      // 付款组织
-    receivingOrganization       : String(32) @title: '收款组织';     // 收款组织
+    receivingOrganization       : String(32) @title: '收付款组织';     // 收付款组织
     expenseResponsibleDepartment: String(10) @title: '成本中心';     // 成本中心
     currency                    : String(3) @title: '币别' ;        // 币别        
     businessDate                : Date @title: '业务日期';           // 业务日期
@@ -174,10 +173,8 @@ entity PaymentReceipt {
     remark                      : String(50) @title: '抬头备注';        // 抬头备注
     settlementMethod            : String(20) @title: '结算方式';     // 结算方式
     paymentPurpose              : String(50) @title: '收付款用途';     // 收付款用途
-    receivingUnitType           : String(10) @title: '收款单位类型';     // 收款单位类型
-    receivingUnit               : String(32) @title: '收款单位';     // 收款单位
-    payingUnitType              : String(10) @title: '付款单位类型';     // 付款单位类型
-    payingUnit                  : String(32) @title: '付款单位';     // 付款单位
+    receivingUnitType           : String(10) @title: '收付款单位类型';     // 收付款单位类型
+    receivingUnit               : String(32) @title: '收付款单位';     // 收付款单位
     receivableAmount            : Decimal(15,2) @title: '应收金额';  // 应收金额  
     taxRate                     : Decimal(5,2) @title: '税率';       // 税率      
     ourBankAccount              : String(50) @title: '我方银行账号';     // 我方银行账号
@@ -195,7 +192,7 @@ entity PaymentReceipt {
 //销售订单创建表
 entity SalesOrderCreate {
     key PIOrder                   : String(16) @title: 'PI单号';    // PI单号
-    key PIOrderItem               : String(6) @title: 'PI项目号';     // PI项目号
+    key PIOrderItem               : String(6) @title: 'PI单行号';     // PI单行号
     SalesOrderType                : String(4) @title: '销售订单类型';     // 销售订单类型
     SalesOrganization             : String(4) @title: '销售组织';     // 销售组织
     DistributionChannel           : String(2) @title: '分销渠道';     // 分销渠道
@@ -277,7 +274,7 @@ entity SalesOrderCreate {
 // 销售订单修改表
 entity SalesOrderChange {
     key PIOrder                   : String(16) @title: 'PI单号';    // PI单号
-    key PIOrderItem               : String(6) @title: 'PI项目号';     // PI项目号
+    key PIOrderItem               : String(6) @title: 'PI单行号';     // PI单行号
     SalesOrderItemCategory        : String(4) @title: '销售订单项目类别';      // 销售订单项目类别
     Material                      : String(40) @title: '物料号';     // 物料号
     MaterialByCustomer            : String(40) @title: '客户物料编号';     // 客户物料编号
@@ -321,8 +318,8 @@ entity SalesOrderChange {
 
 //交货单表
 entity DeliveryActualInfo {
-    key DeliveryDocument      : String(16) @title: '交货单';      // 交货单
-    key DeliveryDocumentItem  : String(6) @title: '交货行项目';       // 交货行项目
+    key DeliveryDocument      : String(16) @title: '交货单号';      // 交货单号
+    key DeliveryDocumentItem  : String(6) @title: '交货单行号';       // 交货单行号
     ActualGoodsMovementDate   : Date @title: '实际发货日期';            // 实际发货日期
     YY1_FD_SPZT               : String(2) @title: '财务审批状态';       // 财务审批状态
     Material                  : String(40) @title: '物料编码';      // 物料编码
@@ -339,7 +336,7 @@ entity DeliveryActualInfo {
 //调拨单
 entity PITransfer {
     key PIOrder                  : String(16) @title: 'PI单号';    // PI单号
-    key PIOrderItem              : String(6) @title: 'PI项目号';     // PI项目号
+    key PIOrderItem              : String(6) @title: 'PI单行号';     // PI单行号
     PostingDate                  : Date @title: '过账日期';               // 过账日期
     GoodsMovementCode            : String(3) @title: '移动类型代码';          // 移动类型代码
     Material                     : String(40) @title: '物料编号';         // 物料编号
@@ -355,27 +352,27 @@ entity PITransfer {
 //PI销售订单关系表
 entity PISalesOrderRel {
   key PIOrder                   : String(16) @title: 'PI单号';    // PI单号
-  key PIOrderItem               : String(6) @title: 'PI项目号';     // PI项目号
+  key PIOrderItem               : String(6) @title: 'PI单行号';     // PI单行号
       zrfc_logid                : UUID @title: '多步ID';           // 多步ID
-      SalesOrder                : String(10) @title: '销售订单号';    // 对外销售订单号
-      SalesOrderItem            : String(6) @title: '销售订单项目号';     // 对外销售订单项目号
+      SalesOrder                : String(10) @title: '对外销售订单号';    // 对外销售订单号
+      SalesOrderItem            : String(6) @title: '对外销售订单行号';     // 对外销售订单行号
       PurchaseOrder1            : String(10) @title: '采购订单号1';    // 采购订单号1
-      PurchaseOrderItem1        : String(6) @title: '采购订单项目号1';     // 采购订单项目号1
+      PurchaseOrderItem1        : String(6) @title: '采购订单行号1';     // 采购订单行号1
       SalesOrder1               : String(10) @title: '销售订单号1';    // 销售订单号1
-      SalesOrderItem1           : String(6) @title: '销售订单项目号1';     // 销售订单项目号1
+      SalesOrderItem1           : String(6) @title: '销售订单行号1';     // 销售订单行号1
       PurchaseOrder2            : String(10) @title: '采购订单号2';    // 采购订单号2
-      PurchaseOrderItem2        : String(6) @title: '采购订单项目号2';     // 采购订单项目号2
+      PurchaseOrderItem2        : String(6) @title: '采购订单行号2';     // 采购订单行号2
       SalesOrder2               : String(10) @title: '销售订单号2';    // 销售订单号2
-      SalesOrderItem2           : String(6) @title: '销售订单项目号2';     // 销售订单项目号2
+      SalesOrderItem2           : String(6) @title: '销售订单行号2';     // 销售订单行号2
       ProductionOrder           : String(12) @title: '生产订单';     // 生产订单
 }
 
 //PI交货单关系表
 entity PIDeliveryRel {
   key PIOrder                   : String(16) @title: 'PI单号';      // PI单号
-  key PIOrderItem               : String(6) @title: 'PI项目号';     // PI项目号
-  key DeliveryDocument          : String(16) @title: '交货单';      // 交货单
-  key DeliveryDocumentItem      : String(6) @title: '交货行项目';       // 交货行项目
+  key PIOrderItem               : String(6) @title: 'PI单行号';     // PI单行号
+  key DeliveryDocument          : String(16) @title: '交货单号';      // 交货单
+  key DeliveryDocumentItem      : String(6) @title: '交货单行号';       // 交货单行号
       ParentItem                : String(6) @title: '上层行项目号';       // 上层行项目号
       zrfc_logid                : UUID @title: '多步ID';            // 多步ID
       SalesOrderType            : String(4) @title: '销售订单类型';     // 销售订单类型

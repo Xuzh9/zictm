@@ -25,6 +25,18 @@
       "localDir": ".",
       "authenticationType": "xsuaa",
       "csrfProtection": false
+    },
+    {
+      "source": "^/so-rel/(.*)$",
+      "localDir": ".",
+      "authenticationType": "xsuaa",
+      "csrfProtection": false
+    },
+    {
+      "source": "^/dn-rel/(.*)$",
+      "localDir": ".",
+      "authenticationType": "xsuaa",
+      "csrfProtection": false
     }
   ]
 }
