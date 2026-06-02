@@ -174,6 +174,8 @@ class SalesOrderHeaderUpdateService {
     buildHeaderData(businessDataList, mptStepConfig) {
         const firstBusinessData = businessDataList[0];
         const headerData = {};
+
+        headerData.TransactionCurrency = firstBusinessData.TransactionCurrency;
         
         // 只有当字段有值时才添加到更新对象中
         if (firstBusinessData.YY1_FD_XMYQ) {

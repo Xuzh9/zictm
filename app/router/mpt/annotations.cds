@@ -13,14 +13,16 @@ annotate service.MPTTypeConfig with @(
             { $Type: 'UI.DataField', Label: '类型描述', Value: description },
             { $Type: 'UI.DataField', Label: '关联流程ID', Value: zrfcid },
             { $Type: 'UI.DataField', Label: '销售方', Value: zxsf },
-            { $Type: 'UI.DataField', Label: '发出方', Value: zfcf }
+            { $Type: 'UI.DataField', Label: '发出方', Value: zfcf },
+            { $Type: 'UI.DataField', Label: '系统', Value: system }
         ],
         Identification: [
             { $Type: 'UI.DataField', Label: '交易类型ID', Value: zdfjy, Editable: true },
             { $Type: 'UI.DataField', Label: '类型描述', Value: description, Editable: true },
             { $Type: 'UI.DataField', Label: '关联流程ID', Value: zrfcid, Editable: true },
             { $Type: 'UI.DataField', Label: '销售方', Value: zxsf, Editable: true },
-            { $Type: 'UI.DataField', Label: '发出方', Value: zfcf, Editable: true }
+            { $Type: 'UI.DataField', Label: '发出方', Value: zfcf, Editable: true },
+            { $Type: 'UI.DataField', Label: '系统', Value: system }
         ],
         Facets: [
             { $Type: 'UI.ReferenceFacet', Label: '基本信息', Target: '@UI.Identification' },
@@ -41,7 +43,6 @@ annotate service.MPTStepConfig with @(
             TypeNamePlural: '多方交易步骤配置列表'
         },
         LineItem: [
-            { $Type: 'UI.DataField', Label: '交易类型ID', Value: zdfjy, Editable: true },
             { $Type: 'UI.DataField', Label: '步骤编号', Value: canum, Editable: true },
             { $Type: 'UI.DataField', Label: '公司代码', Value: bukrs, Editable: true },
             { $Type: 'UI.DataField', Label: '销售组织', Value: vkorg, Editable: true },
@@ -60,7 +61,6 @@ annotate service.MPTStepConfig with @(
             { $Type: 'UI.DataField', Label: '价格方向', Value: zjgfx, Editable: true }
         ],
         Identification: [
-            { $Type: 'UI.DataField', Label: '交易类型ID', Value: zdfjy, Editable: true },
             { $Type: 'UI.DataField', Label: '步骤编号', Value: canum, Editable: true },
             { $Type: 'UI.DataField', Label: '公司代码', Value: bukrs, Editable: true },
             { $Type: 'UI.DataField', Label: '销售组织', Value: vkorg, Editable: true },

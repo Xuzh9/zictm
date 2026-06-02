@@ -85,6 +85,7 @@ entity MPTTypeConfig {
     zrfcid         : String(10) @title: '业务流程ID';     // 业务流程ID
     zxsf           : String(4) @title: '销售方';      // 销售方(公司代码)
     zfcf           : String(4) @title: '发出方';      // 发出方(公司代码)
+    system         : String(10) @title: '系统';      // 系统
     // 与 MPTStepConfig 的组合关系（一对多，行表）
     steps : Composition of many MPTStepConfig
         on steps.mptType.zdfjy = $self.zdfjy;

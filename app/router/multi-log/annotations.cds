@@ -67,7 +67,6 @@ annotate service.MultistepLog with @(
             { $Type: 'UI.DataField', Label: '对象号', Value: objkey, Editable: false }
         ],
         Identification: [
-            { $Type: 'UI.DataField', Label: '多步ID', Value: zrfc_logid, Editable: false },
             { $Type: 'UI.DataField', Label: '步骤编号', Value: canum, Editable: false },
             { $Type: 'UI.DataField', Label: '业务流程ID', Value: zrfcid, Editable: false },
             { $Type: 'UI.DataField', Label: '描述', Value: description, Editable: false },

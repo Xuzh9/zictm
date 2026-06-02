@@ -298,7 +298,7 @@ class SalesOrderPricingUpdateService {
             return [{
                 conditionType: 'PMP0',
                 valueField: 'PurchasePrice',
-                currencyField: null,
+                currencyField: 'TransactionCurrency',
                 quantityField: null
             }];
         }

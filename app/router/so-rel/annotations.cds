@@ -7,7 +7,7 @@ annotate service.PISalesOrderRel with @(
             TypeName: 'PI销售订单关系表',
             TypeNamePlural: 'PI销售订单关系列表'
         },
-        SelectionFields: [PIOrder,DeliveryDocument],
+        SelectionFields: [PIOrder,SalesOrder,PurchaseOrder1,SalesOrder1,PurchaseOrder2,SalesOrder2,ProductionOrder],
         LineItem: [
             { $Type: 'UI.DataField', Label: 'PI单号', Value: PIOrder },
             { $Type: 'UI.DataField', Label: 'PI单行号', Value: PIOrderItem },

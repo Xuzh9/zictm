@@ -7,7 +7,7 @@ annotate service.PIDeliveryRel with @(
             TypeName: 'PI交货单关系表',
             TypeNamePlural: 'PI交货单关系列表'
         },
-        SelectionFields: [PIOrder,DeliveryDocument],
+        SelectionFields: [PIOrder,DeliveryDocument,DeliveryNo1,InboundDeliveryNo1,DeliveryNo2,InboundDeliveryNo2],
         LineItem: [
             { $Type: 'UI.DataField', Label: 'PI单号', Value: PIOrder },
             { $Type: 'UI.DataField', Label: 'PI单行号', Value: PIOrderItem },
