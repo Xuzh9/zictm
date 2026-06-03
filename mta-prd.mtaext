@@ -2,4 +2,4 @@ _schema-version: 3.3.0
 ID: zictm-prd
 extends: zictm
 parameters:
-  domain: btp.sunlu3d.cn
+  domain: btp-prd.sunlu3d.cn

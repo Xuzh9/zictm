@@ -29,11 +29,13 @@
     "watch-multi-log": "cds watch --open multilog/index.html?sap-ui-xx-viewCache=false --livereload false",
     "watch-multi-log-hybrid": "cds watch --profile hybrid --open multilog/index.html?sap-ui-xx-viewCache=false --livereload false",
     "watch-so-rel": "cds watch --open sorel/index.html?sap-ui-xx-viewCache=false --livereload false",
-    "watch-dn-rel": "cds watch --open dnrel/index.html?sap-ui-xx-viewCache=false --livereload false"
+    "watch-dn-rel": "cds watch --open dnrel/index.html?sap-ui-xx-viewCache=false --livereload false",
+    "watch-bank": "cds watch --open bank/index.html?sap-ui-xx-viewCache=false --livereload false"
   },
   "cds": {
     "requires": {
       "db": "hana",
+      "schema_evolution": true,
       "auth": {
         "kind": "mocked"
       }
@@ -56,7 +58,8 @@
     "app/multi-log",
     "app/multi-log",
     "app/so-rel",
-    "app/dn-rel"
+    "app/dn-rel",
+    "app/bank"
   ],
   "devDependencies": {
     "cds-plugin-ui5": "^0.13.0"

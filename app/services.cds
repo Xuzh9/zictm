@@ -9,3 +9,5 @@ using from './router/multi-log/annotations';
 using from './router/so-rel/annotations';
 
 using from './router/dn-rel/annotations';
+
+using from './router/bank/annotations';

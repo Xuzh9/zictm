@@ -37,6 +37,12 @@
       "localDir": ".",
       "authenticationType": "xsuaa",
       "csrfProtection": false
+    },
+    {
+      "source": "^/bank/(.*)$",
+      "localDir": ".",
+      "authenticationType": "xsuaa",
+      "csrfProtection": false
     }
   ]
 }

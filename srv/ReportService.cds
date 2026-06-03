@@ -4,10 +4,10 @@ service ReportService {
     /**
      * PI销售订单关系表
      */
-    entity PISalesOrderRel as projection on db.PISalesOrderRel;
+    entity PISalesOrderRel @readonly as projection on db.PISalesOrderRel;
     
     /**
      * PI交货单关系表
      */
-    entity PIDeliveryRel as projection on db.PIDeliveryRel;
+    entity PIDeliveryRel @readonly as projection on db.PIDeliveryRel;
 }

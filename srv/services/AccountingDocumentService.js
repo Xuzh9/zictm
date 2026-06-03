@@ -220,6 +220,8 @@ class AccountingDocumentService {
         let debtorLines = ''; // 客户行
         let itemLines = ''; // 费用行
         let itemNumber = 1; // 统一的行号（客户行和费用行配对使用）
+        let debitCreditCode = ''; // 借贷方变量
+        let amount = 0; // 金额变量
 
         // 第一次循环
         for (const item of businessDataList) {
@@ -227,11 +229,14 @@ class AccountingDocumentService {
             switch (itemDocType) {
                 case 'YSD02_SYS':
                 case 'SKDLX01_SYS': {
+                    debitCreditCode = item.incomeExpenseType === '01' ? 'H' : 'S';
+                    amount = debitCreditCode === 'H' ? (item.receivableAmount || 0) * -1 : (item.receivableAmount || 0);
+                    
                     debtorLines += `
                         <DebtorItem>
                             <ReferenceDocumentItem>${itemNumber}</ReferenceDocumentItem>
-                            <AmountInTransactionCurrency currencyCode="${item.currency || ''}">${item.incomeExpenseType === '01' ? (item.receivableAmount || 0) * -1 : (item.receivableAmount || 0)}</AmountInTransactionCurrency>
-                            <DebitCreditCode>${item.incomeExpenseType === '01' ? 'H' : 'S'}</DebitCreditCode>
+                            <AmountInTransactionCurrency currencyCode="${item.currency || ''}">${amount}</AmountInTransactionCurrency>
+                            <DebitCreditCode>${debitCreditCode}</DebitCreditCode>
                             <Debtor>${item.receivingUnit || ''}</Debtor>
                             <DocumentItemText>${item.itemRemark || ''}</DocumentItemText>
                             <AssignmentReference>${item.receivingUnit || ''}</AssignmentReference>
@@ -240,35 +245,44 @@ class AccountingDocumentService {
                     itemNumber += 1;
                     break;
                 }
-                case 'SKDLX02_SYS':
+                case 'SKDLX02_SYS': {
+                    debitCreditCode = item.incomeExpenseType === '01' ? 'H' : 'S';
+                    amount = debitCreditCode === 'H' ? (item.receivableAmount || 0) * -1 : (item.receivableAmount || 0);
+                    
                     itemLines += `
                         <Item>
                             <ReferenceDocumentItem>${itemNumber}</ReferenceDocumentItem>
                             <GLAccount>${item.generalLedgerAccountNonCash}</GLAccount>
-                            <AmountInTransactionCurrency currencyCode="${item.currency}">${item.incomeExpenseType === '01' ? (item.receivableAmount || 0) * -1 : (item.receivableAmount || 0)}</AmountInTransactionCurrency>
-                            <DebitCreditCode>${item.incomeExpenseType === '01' ? 'H' : 'S'}</DebitCreditCode>
+                            <AmountInTransactionCurrency currencyCode="${item.currency}">${amount}</AmountInTransactionCurrency>
+                            <DebitCreditCode>${debitCreditCode}</DebitCreditCode>
                             <DocumentItemText>${item.itemRemark}</DocumentItemText>
                         </Item>
                     `;
                     itemNumber += 1;
                     break;
+                }
                 case 'FKDLX02_SYS':
                 case 'SKTKDLX01_SYS':
                 case 'SKTKDLX02_SYS':
                 case 'FKTKDLX02_SYS':
-                case 'FKTKDLX03_SYS':
+                case 'FKTKDLX03_SYS': {
+                    // 正常借贷方
+                    debitCreditCode = item.incomeExpenseType === '01' ? 'S' : 'H';
+                    amount = debitCreditCode === 'H' ? (item.receivableAmount || 0) * -1 : (item.receivableAmount || 0);
+                    
                     itemLines += `
                         <Item>
                             <ReferenceDocumentItem>${itemNumber}</ReferenceDocumentItem>
                             <GLAccount>${item.generalLedgerAccountCash}</GLAccount>
-                            <AmountInTransactionCurrency currencyCode="${item.currency}">${item.incomeExpenseType === '01' ? (item.receivableAmount || 0) * -1 : (item.receivableAmount || 0)}</AmountInTransactionCurrency>
-                            <DebitCreditCode>${item.incomeExpenseType === '01' ? 'H' : 'S'}</DebitCreditCode>
+                            <AmountInTransactionCurrency currencyCode="${item.currency}">${amount}</AmountInTransactionCurrency>
+                            <DebitCreditCode>${debitCreditCode}</DebitCreditCode>
                             <DocumentItemText>${item.itemRemark}</DocumentItemText>
                             <FinancialTransactionType>${item.financialTransactionType || ''}</FinancialTransactionType>
                         </Item>
                     `;
                     itemNumber += 1;
                     break;
+                }
             }
         }
 
@@ -280,7 +294,7 @@ class AccountingDocumentService {
             switch (documentType) {
                 case 'YSD02_SYS':
                 case 'FKDLX02_SYS':
-                case 'FKTKDLX02_SYS':
+                case 'FKTKDLX02_SYS': {
                     let assignmentReference = '';
                     let profitCenter = '';
                     if (gl.startsWith('600')) {
@@ -289,13 +303,20 @@ class AccountingDocumentService {
                     } else if (gl.startsWith('800')|| gl.startsWith('65') || gl.startsWith('2221')) {
                         assignmentReference = item.receivingUnit;
                     }
+                    
+                    // 设置借贷方变量
+                    debitCreditCode = (documentType === 'FKDLX02_SYS' || documentType === 'FKTKDLX02_SYS') 
+                        ? (item.incomeExpenseType === '02' ? 'S' : 'H') 
+                        : (item.incomeExpenseType === '01' ? 'S' : 'H');
+                    // 贷方(H)时金额乘-1
+                    amount = debitCreditCode === 'H' ? (item.receivableAmount || 0) * -1 : (item.receivableAmount || 0);
 
                     itemLines += `
                         <Item>
                             <ReferenceDocumentItem>${itemNumber}</ReferenceDocumentItem>
                             <GLAccount>${item.generalLedgerAccountNonCash}</GLAccount>
-                            <AmountInTransactionCurrency currencyCode="${item.currency}">${item.incomeExpenseType === '02' ? (item.receivableAmount || 0) * -1 : (item.receivableAmount || 0)}</AmountInTransactionCurrency>
-                            <DebitCreditCode>${item.incomeExpenseType === '01' ? 'S' : 'H'}</DebitCreditCode>
+                            <AmountInTransactionCurrency currencyCode="${item.currency}">${amount}</AmountInTransactionCurrency>
+                            <DebitCreditCode>${debitCreditCode}</DebitCreditCode>
                             <DocumentItemText>${item.itemRemark}</DocumentItemText>
                             <AssignmentReference>${assignmentReference}</AssignmentReference>
                             ${(gl.startsWith('600') || gl.startsWith('800')) ? `<AccountAssignment>${gl.startsWith('600') ? `<ProfitCenter>${profitCenter}</ProfitCenter>` : ''}${gl.startsWith('800') ? `<CostCenter>${item.expenseResponsibleDepartment}</CostCenter>` : ''}</AccountAssignment>` : ''}
@@ -304,29 +325,41 @@ class AccountingDocumentService {
                     `;
                     itemNumber += 1;
                     break;
+                }
                 case 'SKDLX01_SYS':
-                case 'SKDLX02_SYS':
+                case 'SKDLX02_SYS': {
+                    // 设置借贷方变量
+                    debitCreditCode = item.incomeExpenseType === '01' ? 'S' : 'H';
+                    // 贷方(H)时金额乘-1
+                    amount = debitCreditCode === 'H' ? (item.receivableAmount || 0) * -1 : (item.receivableAmount || 0);
+                    
                     itemLines += `
                         <Item>
                             <ReferenceDocumentItem>${itemNumber}</ReferenceDocumentItem>
                             <GLAccount>${item.generalLedgerAccountCash}</GLAccount>
-                            <AmountInTransactionCurrency currencyCode="${item.currency}">${item.incomeExpenseType === '02' ? (item.receivableAmount || 0) * -1 : (item.receivableAmount || 0)}</AmountInTransactionCurrency>
-                            <DebitCreditCode>${item.incomeExpenseType === '01' ? 'S' : 'H'}</DebitCreditCode>
+                            <AmountInTransactionCurrency currencyCode="${item.currency}">${amount}</AmountInTransactionCurrency>
+                            <DebitCreditCode>${debitCreditCode}</DebitCreditCode>
                             <DocumentItemText>${item.itemRemark}</DocumentItemText>
                             <FinancialTransactionType>${item.financialTransactionType || ''}</FinancialTransactionType>
                         </Item>
                     `;
                     itemNumber += 1;
                     break;
-                case 'SKTKDLX01_SYS': 
+                }
+                case 'SKTKDLX01_SYS': {
+                    // 设置借贷方变量
+                    debitCreditCode = item.incomeExpenseType === '01' ? 'H' : 'S';
+                    // 贷方(H)时金额乘-1
+                    amount = debitCreditCode === 'H' ? (item.receivableAmount || 0) * -1 : (item.receivableAmount || 0);
+                    
                     const glNonCash = String(item.generalLedgerAccountNonCash || '');
                     if (glNonCash === '1122010000') {
                         // 生成客户行                       
                         debtorLines += `
                             <DebtorItem>
                                 <ReferenceDocumentItem>${itemNumber}</ReferenceDocumentItem>
-                                <AmountInTransactionCurrency currencyCode="${item.currency || ''}">${item.incomeExpenseType === '02' ? (item.receivableAmount || 0) * -1 : (item.receivableAmount || 0)}</AmountInTransactionCurrency>
-                                <DebitCreditCode>${item.incomeExpenseType === '01' ? 'S' : 'H'}</DebitCreditCode>
+                                <AmountInTransactionCurrency currencyCode="${item.currency || ''}">${amount}</AmountInTransactionCurrency>
+                                <DebitCreditCode>${debitCreditCode}</DebitCreditCode>
                                 <Debtor>${item.receivingUnit || ''}</Debtor>
                                 <DocumentItemText>${item.itemRemark || ''}</DocumentItemText>
                                 <AssignmentReference>${item.receivingUnit || ''}</AssignmentReference>
@@ -339,8 +372,8 @@ class AccountingDocumentService {
                                 <ReferenceDocumentItem>${itemNumber}</ReferenceDocumentItem>
                                 <CompanyCode>${item.salesOrganization || item.procurementOrganization || firstBusinessData.receivingOrganization || ''}</CompanyCode>
                                 <GLAccount>${item.generalLedgerAccountNonCash}</GLAccount>
-                                <AmountInTransactionCurrency currencyCode="${item.currency}">${item.incomeExpenseType === '02' ? (item.receivableAmount || 0) * -1 : (item.receivableAmount || 0)}</AmountInTransactionCurrency>
-                                <DebitCreditCode>${item.incomeExpenseType === '01' ? 'S' : 'H'}</DebitCreditCode>
+                                <AmountInTransactionCurrency currencyCode="${item.currency}">${amount}</AmountInTransactionCurrency>
+                                <DebitCreditCode>${debitCreditCode}</DebitCreditCode>
                                 <DocumentItemText>${item.itemRemark}</DocumentItemText>
                                 <AssignmentReference>${item.receivingUnit || ''}</AssignmentReference>
                             </Item>
@@ -348,20 +381,27 @@ class AccountingDocumentService {
                     }
                     itemNumber += 1;
                     break;
+                }
                 case 'SKTKDLX02_SYS': 
-                case 'FKTKDLX03_SYS': 
+                case 'FKTKDLX03_SYS': {
+                    // 设置借贷方变量
+                    debitCreditCode = item.incomeExpenseType === '01' ? 'H' : 'S';
+                    // 贷方(H)时金额乘-1
+                    amount = debitCreditCode === 'H' ? (item.receivableAmount || 0) * -1 : (item.receivableAmount || 0);
+                    
                     itemLines += `
                          <Item>
                             <ReferenceDocumentItem>${itemNumber}</ReferenceDocumentItem>
                             <GLAccount>${item.generalLedgerAccountNonCash}</GLAccount>
-                            <AmountInTransactionCurrency currencyCode="${item.currency}">${item.incomeExpenseType === '02' ? (item.receivableAmount || 0) * -1 : (item.receivableAmount || 0)}</AmountInTransactionCurrency>
-                            <DebitCreditCode>${item.incomeExpenseType === '01' ? 'S' : 'H'}</DebitCreditCode>
+                            <AmountInTransactionCurrency currencyCode="${item.currency}">${amount}</AmountInTransactionCurrency>
+                            <DebitCreditCode>${debitCreditCode}</DebitCreditCode>
                             <DocumentItemText>${item.itemRemark}</DocumentItemText>
                             <AssignmentReference>${item.receivingUnit || ''}</AssignmentReference>
                          </Item>
                     `;
                     itemNumber += 1;
                     break;
+                }
             }
         }
         // 完整的 SOAP 请求 (根据 SAP JournalEntryBulkCreateRequest 官方格式)

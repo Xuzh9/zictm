@@ -40,6 +40,20 @@ class MultiStepProcessor {
                 };
             }
             
+            // 1.1 统一校验业务数据（在插入日志之前校验）
+            if (processConfig) {
+                const validateResult = await this.validateBusinessDataBeforeInsert(processConfig, businessTable1, businessTable2, businessTable3);
+                if (!validateResult.valid) {
+                    const errorMsg = validateResult.error;
+                    console.error('[MultiStepProcessor.processWithLogId]', errorMsg);
+                    return {
+                        code: 'E',
+                        message: errorMsg,
+                        zrfcLogid
+                    };
+                }
+            }
+            
             // 2. 使用事务机制同时插入 MultistepHeadLog 和业务表
             console.log('[MultiStepProcessor.processWithLogId] 使用事务机制同时插入 MultistepHeadLog 和业务表');
             await cds.tx(async (tx) => {
@@ -374,11 +388,6 @@ class MultiStepProcessor {
      */
     async insertBusinessDataByConfigWithTx(tx, processConfig, businessTable1Data, businessTable2Data, businessTable3Data, zrfcid, zrfcLogid, zdfjy = null) {
         try {
-            if (!processConfig) {
-                console.warn('[insertBusinessDataByConfigWithTx] processConfig 为空，跳过插入业务数据');
-                return;
-            }
-
             // 处理 businessTable1
             if (processConfig.businessTable1 && businessTable1Data) {
                 const table1Data = businessTable1Data.map(item => ({
@@ -418,29 +427,57 @@ class MultiStepProcessor {
     }
 
     /**
-     * 使用事务插入业务数据
+     * 统一校验业务数据（在插入表之前执行）
+     * @param {Object} processConfig - 业务流程配置
+     * @param {Array} businessTable1Data - 业务表1数据
+     * @param {Array} businessTable2Data - 业务表2数据
+     * @param {Array} businessTable3Data - 业务表3数据
+     * @returns {Object} { valid: boolean, error: string }
+     */
+    async validateBusinessDataBeforeInsert(processConfig, businessTable1Data, businessTable2Data, businessTable3Data) {
+        const tables = [
+            { name: processConfig.businessTable1, data: businessTable1Data },
+            { name: processConfig.businessTable2, data: businessTable2Data },
+            { name: processConfig.businessTable3, data: businessTable3Data }
+        ];
+        
+        let hasValidTable = false;
+        
+        for (const table of tables) {
+            const { name: tableName, data } = table;
+            
+            if (!tableName) {
+                continue;
+            }
+            
+            if (!data || !Array.isArray(data) || data.length === 0) {
+                continue;
+            }
+            
+            hasValidTable = true;
+            
+            const BusinessEntity = cds.entities[`com.sap.zictm.${tableName}`];
+            if (!BusinessEntity) {
+                return { valid: false, error: `业务表不存在: ${tableName}` };
+            }
+        }
+        
+        if (!hasValidTable) {
+            return { valid: false, error: '业务表配置无效：businessTable1、businessTable2、businessTable3 均未维护或数据为空' };
+        }
+        
+        return { valid: true, error: null };
+    }
+
+    /**
+     * 使用事务插入业务数据（校验已在 validateBusinessDataBeforeInsert 中统一完成）
      * @param {Object} tx - 事务对象
      * @param {string} tableName - 业务表名
      * @param {Array} data - 业务数据
      */
     async insertBusinessDataWithTx(tx, tableName, data) {
         try {
-            if (!tableName) {
-                console.warn('[insertBusinessDataWithTx] 业务表名为空');
-                return;
-            }
-
             const BusinessEntity = cds.entities[`com.sap.zictm.${tableName}`];
-            if (!BusinessEntity) {
-                console.warn(`[insertBusinessDataWithTx] 业务表不存在: ${tableName}`);
-                return;
-            }
-
-            if (!data || !Array.isArray(data) || data.length === 0) {
-                console.warn(`[insertBusinessDataWithTx] 业务数据为空: ${tableName}`);
-                return;
-            }
-
             await tx.run(INSERT.into(BusinessEntity).entries(data));
             console.log(`[insertBusinessDataWithTx] 插入业务表成功: ${tableName}, 数据量: ${data.length}`);
         } catch (error) {
@@ -511,21 +548,7 @@ class MultiStepProcessor {
      */
     async updateBusinessData(tableName, data) {
         try {
-            if (!tableName) {
-                console.warn('[updateBusinessData] 业务表名为空');
-                return;
-            }
-
             const BusinessEntity = cds.entities[`com.sap.zictm.${tableName}`];
-            if (!BusinessEntity) {
-                console.warn(`[updateBusinessData] 业务表不存在: ${tableName}`);
-                return;
-            }
-
-            if (!data || !Array.isArray(data) || data.length === 0) {
-                console.warn(`[updateBusinessData] 业务数据为空: ${tableName}`);
-                return;
-            }
 
             // 获取表的主键字段
             const keys = Object.keys(BusinessEntity.elements).filter(key => {

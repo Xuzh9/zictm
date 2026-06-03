@@ -386,3 +386,11 @@ entity PIDeliveryRel {
       InboundDeliveryNo2        : String(10) @title: '内向交货号2';    // 内向交货号2
       InboundDeliveryNoItem2    : String(6) @title: '内向交货项目号2';     // 内向交货项目号2
 }
+
+// 银行信息
+entity BankInfo {
+    key bankAccountNo : String(20) @title: '银行账号';      // 银行账号
+    key bankReceiptNo : String(20) @title: '银行回单编号';      // 银行回单编号
+    shortUrl : String(200) @title: '短URL';      // 短URL
+    memoLine : String(2000) @title: '长URL';      // 长URL
+}
