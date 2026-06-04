@@ -226,6 +226,7 @@ entity SalesOrderCreate {
     YY1_FD_ZTMWZ                  : String(2) @title: '粘贴美文纸';     // 粘贴美文纸
     YY1_FD_ZH                     : String(20) @title: '账户(下单店铺)';    // 账户(下单店铺)
     YY1_FD_ZDFJY                  : String(10) @title: '多方交易ID';    // 多方交易ID
+    YY1_FD_SPLLHH                 : String(20) @title: '审批联络函号';    // 审批联络函号
     SalesOrderItemCategory        : String(4) @title: '销售订单项目类别';     // 销售订单项目类别
     Material                      : String(40) @title: '物料号';    // 物料号
     MaterialByCustomer            : String(40) @title: '客户物料编号';    // 客户物料编号
@@ -346,6 +347,7 @@ entity PITransfer {
     GoodsMovementType            : String(3) @title: '移动类型' ;         // 移动类型
     QuantityInBaseUnit           : Decimal(13,3) @title: '数量';      // 数量
     IssuingOrReceivingStorageLoc : String(4) @title: '收货/发货库存地点';          // 收货/发货库存地点
+    UnloadingPointName           : String(25) @title: '卸货点';     // 卸货点
     zrfcid                       : String(10) @title: '业务流程ID';         // 业务流程ID
     zrfc_logid                   : UUID @title: '多步ID';               // 多步ID
 }

@@ -3,3 +3,28 @@ ID: zictm-dev
 extends: zictm
 parameters:
   domain: btp.sunlu3d.cn
+modules:
+  - name: zictm-srv
+    parameters:
+      disk-quota: 1024M
+      memory: 128M
+      routes:
+      - route: "zictm-srv.btp.sunlu3d.cn"
+      idle-routes:
+      - idle-route: "zictm-srv-idle.btp.sunlu3d.cn"
+    provides:
+      - name: srv-api
+        properties:
+          srv-url: https://zictm-srv.btp.sunlu3d.cn
+  - name: zictm
+    parameters:
+      disk-quota: 1024M
+      memory: 128M
+      routes:
+      - route: "zictm.btp.sunlu3d.cn"
+      idle-routes:
+      - idle-route: "zictm-idle.btp.sunlu3d.cn"
+resources:
+  - name: zictm-auth
+    parameters:
+      existing: true

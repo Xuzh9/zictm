@@ -433,6 +433,7 @@ class MaterialDocumentService {
                     IssuingOrReceivingStorageLoc: businessData.IssuingOrReceivingStorageLoc || '',
                     GoodsMovementType: businessData.GoodsMovementType || '',
                     QuantityInEntryUnit: String(batchItem.Quantity),
+                    UnloadingPointName: businessData.UnloadingPointName || '',
                     Batch: batchItem.Batch,
                     MaterialDocumentItemText: itemText
                 };

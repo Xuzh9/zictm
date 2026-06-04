@@ -4,6 +4,7 @@ version: 1.0.0
 description: "zictm"
 parameters:
   enable-parallel-deployments: true
+  domain: default.local 
 build-parameters:
   # before-all:
   #   - builder: custom
@@ -21,15 +22,15 @@ modules:
       disk-quota: 2048M
       memory: 128M
       routes:
-      - route: "zictm-srv.btp.sunlu3d.cn"
+      - route: "zictm-srv.${domain}"
       idle-routes:
-      - idle-route: "zictm-srv-idle.btp.sunlu3d.cn"
+      - idle-route: "zictm-srv-idle.${domain}"
     # build-parameters:
     #   builder: npm install
     provides:
       - name: srv-api
         properties:
-          srv-url: https://zictm-srv.btp.sunlu3d.cn
+          srv-url: https://zictm-srv.${domain}
     requires:
       - name: zictm-auth
       - name: zictm-db
@@ -50,13 +51,12 @@ modules:
     path: app/router
     parameters:
       buildpack: nodejs_buildpack
-      keep-existing-routes: true
       disk-quota: 2048M
       memory: 128M
       routes:
-      - route: "zictm.btp.sunlu3d.cn"
+      - route: "zictm.${domain}"
       idle-routes:
-      - idle-route: "zictm-idle.btp.sunlu3d.cn"
+      - idle-route: "zictm-idle.${domain}"
     requires:
       - name: srv-api
         group: destinations
@@ -79,6 +79,7 @@ resources:
       service: xsuaa
       service-plan: application
       path: ./xs-security.json
+      shared: true
       
   - name: zictm-db
     type: com.sap.xs.hdi-container

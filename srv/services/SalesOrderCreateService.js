@@ -360,6 +360,9 @@ class SalesOrderCreateService {
                 [apiConfig.itemField]: itemNumber,
                 Material: (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') ? (item.Material || "") : (item.Product || ""),
                 RequestedQuantity: item.RequestedQuantity ? parseFloat(item.RequestedQuantity).toString() : "0",
+                YY1_FD_FNSKU_SDI: item.YY1_FD_FNSKU || "",
+                YY1_FD_SKU_SDI: item.YY1_FD_SKU || "",
+                YY1_FD_DZKB_SDI: item.YY1_FD_DZKB || "",
                 to_PricingElement: {
                     results: pricingElements
                 }
@@ -387,6 +390,20 @@ class SalesOrderCreateService {
             TransactionCurrency: mainData.TransactionCurrency,
             YY1_FD_ZDFJY_SDH: (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') ? mainData.YY1_FD_ZDFJY : mptStepConfig?.zdfjy,
             YY1_FD_ZRFCID2_SDH: zrfcid,
+            YY1_FD_XMYQ_SDH: mainData.YY1_FD_XMYQ || "",              
+            YY1_FD_DBFS_SDH: mainData.YY1_FD_DBFS || "",                
+            YY1_FD_FHYQ_SDH: mainData.YY1_FD_FHYQ || "",
+            YY1_FD_FKG_SDH: mainData.YY1_FD_FKG || "",
+            YY1_FD_JSFS_SDH: mainData.YY1_FD_JSFS || "",
+            YY1_FD_PT_SDH: mainData.YY1_FD_PT || "",
+            YY1_FD_SFBG_SDH: mainData.YY1_FD_SFBG || "",
+            YY1_FD_SFHD_SDH: mainData.YY1_FD_SFHD || "",                
+            YY1_FD_TMBQ_SDH: mainData.YY1_FD_TMBQ || "",                 
+            YY1_FD_YDG_SDH: mainData.YY1_FD_YDG || "",                
+            YY1_FD_YSFS_SDH: mainData.YY1_FD_YSFS || "",                  
+            YY1_FD_ZTMWZ_SDH: mainData.YY1_FD_ZTMWZ || "",              
+            YY1_FD_ZH_SDH: mainData.YY1_FD_ZH || "",      
+            YY1_FD_SPLLHH: mainData.YY1_FD_SPLLHH || "",               
             to_Item: {
                 results: salesOrderItems
             }

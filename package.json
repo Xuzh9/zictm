@@ -24,20 +24,20 @@
     "build": "cds build --production",
     "build:mta": "mbt build --mtar archive",
     "deploy": "cf deploy mta_archives/archive.mtar --retries 1",
+    "build:mta:dev": "mbt build --mtar archive -e mta-dev.mtaext",
+    "build:mta:prd": "mbt build --mtar archive -e mta-prd.mtaext",
+    "deploy:dev": "npm run build:mta:dev && cf deploy mta_archives/archive.mtar --retries 1",
+    "deploy:prd": "npm run build:mta:prd && cf deploy mta_archives/archive.mtar --retries 1",
     "watch-mpt": "cds watch --open mpt/index.html?sap-ui-xx-viewCache=false --livereload false",
     "watch-multi-step": "cds watch --open multistep/index.html?sap-ui-xx-viewCache=false --livereload false",
     "watch-multi-log": "cds watch --open multilog/index.html?sap-ui-xx-viewCache=false --livereload false",
-    "watch-multi-log-hybrid": "cds watch --profile hybrid --open multilog/index.html?sap-ui-xx-viewCache=false --livereload false",
-    "watch-so-rel": "cds watch --open sorel/index.html?sap-ui-xx-viewCache=false --livereload false",
-    "watch-dn-rel": "cds watch --open dnrel/index.html?sap-ui-xx-viewCache=false --livereload false",
-    "watch-bank": "cds watch --open bank/index.html?sap-ui-xx-viewCache=false --livereload false"
+    "watch-multi-log-hybrid": "cds watch --profile hybrid --open multilog/index.html?sap-ui-xx-viewCache=false --livereload false"
   },
   "cds": {
     "requires": {
       "db": "hana",
-      "schema_evolution": true,
       "auth": {
-        "kind": "mocked"
+        "kind": "xsuaa"
       }
     },
     "server": {
@@ -56,10 +56,7 @@
     "app/mpt",
     "app/multi-step",
     "app/multi-log",
-    "app/multi-log",
-    "app/so-rel",
-    "app/dn-rel",
-    "app/bank"
+    "app/multi-log"
   ],
   "devDependencies": {
     "cds-plugin-ui5": "^0.13.0"
