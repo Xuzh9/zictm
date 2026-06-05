@@ -243,7 +243,7 @@ module.exports = cds.service.impl(async function () {
     // 使用 cds.run() 来查询不在当前服务中的实体
     const config = await cds.run(SELECT.one(MPTTypeConfig)
       .columns(['zrfcid', 'zdfjy'])
-      .where({ zdfjy: YY1_FD_ZDFJY }));
+      .where({ zdfjy: YY1_FD_ZDFJY, system: 'PI' }));
     
     if (!config) {
       req.error(400, `未找到多方交易类型配置：${YY1_FD_ZDFJY}`);

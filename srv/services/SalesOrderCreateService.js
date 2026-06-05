@@ -315,6 +315,12 @@ class SalesOrderCreateService {
                 break;
         }
         
+        // 业务表按 PIOrder 和 PIOrderItem 正序排序
+        businessDataList.sort((a, b) => {
+            const orderCompare = (a.PIOrder || '').localeCompare(b.PIOrder || '');
+            return orderCompare !== 0 ? orderCompare : (a.PIOrderItem || '').localeCompare(b.PIOrderItem || '');
+        });
+        
         // 构建行项目
         const salesOrderItems = businessDataList.map((item, index) => {
             // 使用业务表的行项目号字段
@@ -356,6 +362,16 @@ class SalesOrderCreateService {
                 });
             }
             
+            // 如果行项目类别是 CBXN，增加 ZKNP 定价条件
+            if (item.SalesOrderItemCategory === 'CBXN') {
+                pricingElements.push({
+                    ConditionType: "ZKNP",
+                    ConditionRateValue: "0",
+                    ConditionQuantity: "1",
+                    ConditionCurrency: item.ItemTransactionCurrency
+                });
+            }
+            
             const itemData = {
                 [apiConfig.itemField]: itemNumber,
                 Material: (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') ? (item.Material || "") : (item.Product || ""),
@@ -368,13 +384,28 @@ class SalesOrderCreateService {
                 }
             };
             
+            if (item.SalesOrderItemCategory === 'CBXN') {
+                itemData.MatlAccountAssignmentGroup = "03";
+            }
+            
             // 设置工厂字段（使用动态字段名）
             if (plantValue) {
                 itemData[plantField] = plantValue;
             }
             
             // 设置行项目类别（使用动态字段名）
-            itemData[itemCategoryField] = itemCategory;
+            itemData[itemCategoryField] = item.SalesOrderItemCategory || itemCategory;
+            
+            // 当 ItemRemark 有值时，添加行项目的 to_Text 结构
+            if (item.ItemRemark) {
+                itemData.to_Text = {
+                    results: [{
+                        Language: "ZH",
+                        LongTextID: "0001",
+                        LongText: item.ItemRemark
+                    }]
+                };
+            }
             
             return itemData;
         });
@@ -403,11 +434,22 @@ class SalesOrderCreateService {
             YY1_FD_YSFS_SDH: mainData.YY1_FD_YSFS || "",                  
             YY1_FD_ZTMWZ_SDH: mainData.YY1_FD_ZTMWZ || "",              
             YY1_FD_ZH_SDH: mainData.YY1_FD_ZH || "",      
-            YY1_FD_SPLLHH: mainData.YY1_FD_SPLLHH || "",               
+            YY1_FD_SPLLHH_SDH: mainData.YY1_FD_SPLLHH || "",               
             to_Item: {
                 results: salesOrderItems
             }
         };
+        
+        // 当 Remark 有值时，添加抬头的 to_Text 结构
+        if (mainData.Remark) {
+            salesOrderData.to_Text = {
+                results: [{
+                    Language: "ZH",
+                    LongTextID: "TX01",
+                    LongText: mainData.Remark
+                }]
+            };
+        }
         
         // 根据订单类型设置对应的订单类型字段（从 apiConfig 获取字段名）
         salesOrderData[apiConfig.orderTypeField] = salesOrderType || '';

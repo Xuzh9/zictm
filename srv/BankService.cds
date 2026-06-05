@@ -4,7 +4,8 @@ service BankService {
     /**
      * 银行信息
      */
-    entity BankInfo @readonly as projection on db.BankInfo ;
+    @readonly
+    entity BankInfo as projection on db.BankInfo ;
 
     action update(data: array of BankInfo) returns array of BankInfo;
 }

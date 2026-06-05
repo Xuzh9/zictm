@@ -8,5 +8,6 @@ service MultistepLogService {
     };
     
     // 明细表
-    entity MultistepLog @readonly as projection on db.MultistepLog;
+    @readonly
+    entity MultistepLog as projection on db.MultistepLog;
 }

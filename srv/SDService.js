@@ -472,7 +472,8 @@ module.exports = cds.service.impl(async function () {
       .columns(['zrfcid', 'zdfjy'])
       .where({
         zxsf: firstData.SalesOrganization,
-        zfcf: firstData.ReceivingPlant
+        zfcf: firstData.ReceivingPlant,
+        system: '数帝'
       }));
 
       if (!mptConfig) {

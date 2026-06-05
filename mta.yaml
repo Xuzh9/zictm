@@ -4,7 +4,6 @@ version: 1.0.0
 description: "zictm"
 parameters:
   enable-parallel-deployments: true
-  domain: default.local 
 build-parameters:
   # before-all:
   #   - builder: custom
@@ -21,10 +20,6 @@ modules:
       command: node node_modules/@sap/cds-dk/bin/cds.js run
       disk-quota: 2048M
       memory: 128M
-      routes:
-      - route: "zictm-srv.${domain}"
-      idle-routes:
-      - idle-route: "zictm-srv-idle.${domain}"
     # build-parameters:
     #   builder: npm install
     provides:
@@ -53,10 +48,6 @@ modules:
       buildpack: nodejs_buildpack
       disk-quota: 2048M
       memory: 128M
-      routes:
-      - route: "zictm.${domain}"
-      idle-routes:
-      - idle-route: "zictm-idle.${domain}"
     requires:
       - name: srv-api
         group: destinations

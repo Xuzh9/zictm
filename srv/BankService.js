@@ -13,6 +13,7 @@ module.exports = cds.service.impl(async function () {
    */
   this.on('update', async (req) => {
     console.log('[BankService.update] 开始处理银行信息更新请求');
+    const ApiInputLogHelper = require('./handlers/ApiInputLogHelper');
     
     try {
       const { data } = req.data;
@@ -21,16 +22,20 @@ module.exports = cds.service.impl(async function () {
       // 参数校验
       // --------------------------
       if (!data || !Array.isArray(data)) {
+        const id = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, '数据格式错误：data 必须是数组');
         return {
           code: 400,
-          message: '数据格式错误：data 必须是数组'
+          message: '数据格式错误：data 必须是数组',
+          id: id
         };
       }
 
       if (data.length === 0) {
+        const id = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, '数据不能为空');
         return {
           code: 400,
-          message: '数据不能为空'
+          message: '数据不能为空',
+          id: id
         };
       }
 
@@ -51,11 +56,19 @@ module.exports = cds.service.impl(async function () {
 
       // 如果有错误，一次性返回所有错误
       if (errors.length > 0) {
+        const errorMessages = errors.join('; ');
+        const id = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, errorMessages);
         return {
           code: 400,
-          message: errors.join('; ')
+          message: errorMessages,
+          id: id
         };
       }
+
+      // --------------------------
+      // 保存 ApiInputLog（在处理之前）
+      // --------------------------
+      const id = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, null);
 
       // --------------------------
       // 收集所有要查询的键
@@ -141,14 +154,17 @@ module.exports = cds.service.impl(async function () {
       // 返回结果（参考 PIService 格式）
       return {
         code: 200,
-        message: '处理成功'
+        message: '处理成功',
+        id: id
       };
 
     } catch (error) {
       console.error('[BankService.update] 处理失败:', error);
+      const id = await ApiInputLogHelper.saveApiInputLog({ businessTable1: req.data?.data }, error.message);
       return {
         code: 500,
-        message: error.message || '处理失败'
+        message: error.message || '处理失败',
+        id: id
       };
     }
   });

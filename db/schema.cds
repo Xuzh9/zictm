@@ -52,7 +52,7 @@ entity MultistepHeadLog {
     zrfcid              : String(10) @title: '业务流程ID';     // 业务流程ID
     zdfjy               : String(10) @title: '多方交易类型';     // 多方交易类型
     code                : String(2) @title: '消息状态';      // 消息状态(S成功/E失败)
-    message             : String(255) @title: '消息文本';    // 消息文本
+    message             : String(1000) @title: '消息文本';    // 消息文本
     executionAt         : Timestamp @title: '执行时间';      // 执行时间
     lastExecutionAt     : Timestamp @title: '最新执行时间';      // 最新执行时间
      // 与 MultistepLog 的组合关系（一对多，行表）
@@ -69,7 +69,7 @@ entity MultistepLog {
     zrfcid              : String(10) @title: '业务流程ID';     // 业务流程ID
     description         : String(50) @title: '步骤描述';      // 步骤描述
     code                : String(2) @title: '消息状态';      // 消息状态(S成功/E失败)
-    message             : String(255) @title: '消息文本';    // 消息文本
+    message             : String(1000) @title: '消息文本';    // 消息文本
     objtype             : String(5) @title: '对象类型';      // 对象类型
     objkey              : String(20) @title: '对象号';     // 对象号
     executionAt         : Timestamp @title: '执行时间';      // 执行时间
@@ -211,7 +211,7 @@ entity SalesOrderCreate {
     IncotermsLocation1            : String(40) @title: '国贸条款位置1';    // 国贸条款位置1
     CustomerTaxClassification1    : String(4) @title: '客户税分类';     // 客户税分类
     CustomerPaymentTerms          : String(8) @title: '付款条件';     // 付款条件
-    Remark                        : LargeString @title: '销售订单抬头文本备注';   // 销售订单抬头文本备注
+    Remark                        : String(1000) @title: '销售订单抬头文本备注';   // 销售订单抬头文本备注
     YY1_FD_XMYQ                   : String(2) @title: '箱唛要求';     // 箱唛要求
     YY1_FD_DBFS                   : String(2) @title: '打包方式';     // 打包方式
     YY1_FD_FHYQ                   : String(2) @title: '发货要求';     // 发货要求
@@ -234,7 +234,7 @@ entity SalesOrderCreate {
     RequestedQuantityUnit         : String(3) @title: '单位';     // 单位
     ProductionPlant               : String(4) @title: '工厂';     // 工厂
     StorageLocation               : String(4) @title: '库存地点';          // 库存地点
-    ItemRemark                    : LargeString @title: '销售订单行项目文本备注';   // 销售订单行项目文本备注
+    ItemRemark                    : String(1000) @title: '销售订单行项目文本备注';   // 销售订单行项目文本备注
     PurchaseOrderByShipToParty    : String(6) @title: '客户采购订单行项目';     // 客户采购订单行项目
     ProductTaxClassification1     : String(4) @title: '产品税分类';     // 产品税分类
     SalesDocumentRjcnReason       : String(4) @title: '销售订单拒绝原因';     // 销售订单拒绝原因
