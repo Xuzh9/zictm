@@ -129,7 +129,7 @@ class DeliveryOrderItemUpdateService {
                 console.log('[DeliveryOrderItemUpdateService] 获取行项目数据:', itemUrl);
                 const getResult = await executeHttpRequest(
                     {
-                        destinationName: 'ES_API'
+                        destinationName: this.commonUtils.getDestinationName()
                     },
                     {
                         method: 'GET',
@@ -195,7 +195,7 @@ class DeliveryOrderItemUpdateService {
                 // PATCH 更新行项目
                 const patchResult = await executeHttpRequest(
                     {
-                        destinationName: 'ES_API'
+                        destinationName: this.commonUtils.getDestinationName()
                     },
                     {
                         method: 'PATCH',
@@ -254,7 +254,7 @@ class DeliveryOrderItemUpdateService {
 
             const result = await executeHttpRequest(
                 {
-                    destinationName: 'ES_API'
+                    destinationName: this.commonUtils.getDestinationName()
                 },
                 {
                     method: 'GET',

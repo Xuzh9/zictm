@@ -119,7 +119,7 @@ class DeliveryOrderHeaderUpdateService {
             // 获取 CSRF token（同时获取 ETag）
             const csrfResult = await executeHttpRequest(
                 {
-                    destinationName: 'ES_API'
+                    destinationName: this.commonUtils.getDestinationName()
                 },
                 {
                     method: 'GET',
@@ -157,7 +157,7 @@ class DeliveryOrderHeaderUpdateService {
             // 调用交货单修改 API
             const result = await executeHttpRequest(
                 {
-                    destinationName: 'ES_API'
+                    destinationName: this.commonUtils.getDestinationName()
                 },
                 {
                     method: 'PATCH',

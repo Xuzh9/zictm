@@ -70,7 +70,7 @@ class DeliveryOrderBatchSplitService {
             // 获取 CSRF token 和交货单数据
             console.log('[DeliveryOrderBatchSplitService] 获取 CSRF token 和交货单数据:', apiUrl);
             const csrfResult = await executeHttpRequest(
-                { destinationName: 'ES_API' },
+                { destinationName: this.commonUtils.getDestinationName() },
                 {
                     method: 'GET',
                     url: apiUrl,
@@ -193,7 +193,7 @@ class DeliveryOrderBatchSplitService {
                     let itemEtag = null;
                     try {
                         const itemResult = await executeHttpRequest(
-                            { destinationName: 'ES_API' },
+                            { destinationName: this.commonUtils.getDestinationName() },
                             {
                                 method: 'GET',
                                 url: itemUrl,
@@ -229,7 +229,7 @@ class DeliveryOrderBatchSplitService {
 
                     // POST 调用 /CreateBatchSplitItem（需要 token 和 etag）
                     const createResult = await executeHttpRequest(
-                        { destinationName: 'ES_API' },
+                        { destinationName: this.commonUtils.getDestinationName() },
                         {
                             method: 'POST',
                             url: postUrl,

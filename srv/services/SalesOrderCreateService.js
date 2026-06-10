@@ -119,7 +119,7 @@ class SalesOrderCreateService {
             console.log('[SalesOrderCreateService] 开始获取 CSRF token...');
             const csrfResult = await executeHttpRequest(
                 {
-                    destinationName: 'ES_API'
+                    destinationName: this.commonUtils.getDestinationName()
                 },
                 {
                     method: 'GET',
@@ -140,7 +140,7 @@ class SalesOrderCreateService {
             console.log('[SalesOrderCreateService] 开始调用销售订单 API...');
             const result = await executeHttpRequest(
                 {
-                    destinationName: 'ES_API'
+                    destinationName: this.commonUtils.getDestinationName()
                 },
                 {
                     method: 'POST',

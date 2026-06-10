@@ -186,6 +186,7 @@ entity PaymentReceipt {
     documentName                : String(10) @title: '单据名称';     // 单据名称
     incomeExpenseType           : paymentType @title: '收支类型';    // 收支类型
     financialTransactionType    : String(3) @title: '金融交易类型';     // 金融交易类型
+    AccountingDocument          : String(20) @title: '会计凭证号';     // 会计凭证号
     zrfcid                      : String(10) @title: '业务流程ID';     // 业务流程ID
     zrfc_logid                  : UUID @title: '多步ID';           // 多步ID
 }
@@ -227,6 +228,7 @@ entity SalesOrderCreate {
     YY1_FD_ZH                     : String(20) @title: '账户(下单店铺)';    // 账户(下单店铺)
     YY1_FD_ZDFJY                  : String(10) @title: '多方交易ID';    // 多方交易ID
     YY1_FD_SPLLHH                 : String(20) @title: '审批联络函号';    // 审批联络函号
+    YY1_FD_XMZL                   : String(2) @title: '箱唛资料';     // 箱唛资料
     SalesOrderItemCategory        : String(4) @title: '销售订单项目类别';     // 销售订单项目类别
     Material                      : String(40) @title: '物料号';    // 物料号
     MaterialByCustomer            : String(40) @title: '客户物料编号';    // 客户物料编号

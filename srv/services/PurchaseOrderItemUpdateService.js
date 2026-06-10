@@ -75,7 +75,7 @@ class PurchaseOrderItemUpdateService {
                 // 获取 CSRF token 和当前数据（包括 DocumentCurrency）
                 const csrfResult = await executeHttpRequest(
                     {
-                        destinationName: 'ES_API'
+                        destinationName: this.commonUtils.getDestinationName()
                     },
                     {
                         method: 'GET',
@@ -112,7 +112,7 @@ class PurchaseOrderItemUpdateService {
                 // 调用采购订单行项目修改 API
                 const result = await executeHttpRequest(
                     {
-                        destinationName: 'ES_API'
+                        destinationName: this.commonUtils.getDestinationName()
                     },
                     {
                         method: 'PATCH',
@@ -120,7 +120,7 @@ class PurchaseOrderItemUpdateService {
                         data: itemData,
                         headers: {
                             'X-CSRF-Token': csrfToken,
-                            'Accept': 'application/json',
+                            'Content-Type': 'application/json;charset=UTF-8',
                             'Cookie': cookieString,
                             'sap-language': 'ZH',
                             'If-Match': etag || '*'

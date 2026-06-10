@@ -205,7 +205,7 @@ class DeliveryOrderCreateService {
             // 获取 CSRF token
             const csrfResult = await executeHttpRequest(
                 {
-                    destinationName: 'ES_API'
+                    destinationName: this.commonUtils.getDestinationName()
                 },
                 {
                     method: 'GET',
@@ -229,7 +229,7 @@ class DeliveryOrderCreateService {
             // 调用交货单创建 API（一次性创建一张交货单，含所有行项目）
             const result = await executeHttpRequest(
                 {
-                    destinationName: 'ES_API'
+                    destinationName: this.commonUtils.getDestinationName()
                 },
                 {
                     method: 'POST',

@@ -57,7 +57,7 @@ class PurchaseOrderService {
             // 获取 CSRF token
             const csrfResult = await executeHttpRequest(
                 {
-                    destinationName: 'ES_API'
+                    destinationName: this.commonUtils.getDestinationName()
                 },
                 {
                     method: 'GET',
@@ -85,7 +85,7 @@ class PurchaseOrderService {
             // 直接传递对象，跟 MaterialDocumentService 保持一致
             const result = await executeHttpRequest(
                 {
-                    destinationName: 'ES_API'
+                    destinationName: this.commonUtils.getDestinationName()
                 },
                 {
                     method: 'POST',
@@ -308,26 +308,45 @@ class PurchaseOrderService {
                 PurchaseOrderQuantityUnit: unitOfMeasure,
                 TaxCode: mptStepConfig?.mwskz || "",
                 OrderQuantity: item.RequestedQuantity ? parseFloat(item.RequestedQuantity) : 0,
-                NetPriceAmount: netPriceAmount,
-                DocumentCurrency: item.TransactionCurrency || "",
+                //NetPriceAmount: netPriceAmount,
+                //DocumentCurrency: item.TransactionCurrency || "",
                 _PurchaseOrderScheduleLineTP: [{
                     PurchaseOrderItem: poItemNumber,
                     ScheduleLine: "1",
                     ScheduleLineDeliveryDate: zrfcid === 'SD04' ? (item.DeliveryDate || "") : (item.ConfirmedDeliveryDate || "")
                 }],
-                _PurOrdPricingElement: mptStepConfig?.taxFreightAmt ? [{
-                    PurchaseOrderItem: poItemNumber,
-                    ConditionType: "ZQU1",
-                    ConditionBaseAmount: mptStepConfig.taxFreightAmt,
-                    ConditionCurrency: item.TransactionCurrency || "",
-                    FreightSupplier: "600000"
-                }, {
-                    PurchaseOrderItem: poItemNumber,
-                    ConditionType: "ZQU2",
-                    ConditionBaseAmount: mptStepConfig.taxFreightAmt,
-                    ConditionCurrency: item.TransactionCurrency || "",
-                    FreightSupplier: "600000"
-                }] : []
+                _PurOrdPricingElement: (() => {
+                    const pricingElements = [];
+                    
+                    // PMP0 定价条件（不受 taxFreightAmt 影响）
+                    if (item.PurchasePrice) {
+                        pricingElements.push({
+                            PurchaseOrderItem: poItemNumber,
+                            ConditionType: "PMP0",
+                            ConditionBaseAmount: netPriceAmount,
+                            ConditionCurrency: item.TransactionCurrency || ""
+                        });
+                    }
+                    
+                    // ZQU1/ZQU2 定价条件（受 taxFreightAmt 影响）
+                    if (mptStepConfig?.taxFreightAmt) {
+                        pricingElements.push({
+                            PurchaseOrderItem: poItemNumber,
+                            ConditionType: "ZQU1",
+                            ConditionBaseAmount: mptStepConfig.taxFreightAmt,
+                            ConditionCurrency: item.TransactionCurrency || "",
+                            FreightSupplier: "600000"
+                        }, {
+                            PurchaseOrderItem: poItemNumber,
+                            ConditionType: "ZQU2",
+                            ConditionBaseAmount: mptStepConfig.taxFreightAmt,
+                            ConditionCurrency: item.TransactionCurrency || "",
+                            FreightSupplier: "600000"
+                        });
+                    }
+                    
+                    return pricingElements;
+                })()
             });
         }
 
@@ -340,7 +359,7 @@ class PurchaseOrderService {
             PurchasingOrganization: isReturn ? (mptStepConfig?.bukrs || "") : (mptStepConfig?.ekorg || ""),
             PurchasingGroup: mptStepConfig?.ekgrp || "",
             Supplier: isReturn ? (mptStepConfig?.umwrk || "") : (mptStepConfig?.lifnr || ""),
-            DocumentCurrency: mainData.TransactionCurrency || "",
+            //DocumentCurrency: mainData.TransactionCurrency || "",
             YY1_FD_ZDFJY2_PDH: zdfjy,
             YY1_FD_ZRFCID_PDH: zrfcid,
             SupplyingPlant: isReturn ? (mptStepConfig?.umwrk || "") : (mptStepConfig?.lifnr || ""),
@@ -488,7 +507,7 @@ class PurchaseOrderService {
             console.log('[PurchaseOrderCreateService] 查询物料主数据:', url);
             
             const response = await executeHttpRequest({
-                destinationName: 'ES_API'
+                destinationName: this.commonUtils.getDestinationName()
             }, {
                 method: 'GET',
                 url: url,

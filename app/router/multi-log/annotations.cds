@@ -14,13 +14,13 @@ annotate service.MultistepHeadLog with @(
         SelectionFields: [zrfc_logid, zrfcid, code],
 
         LineItem: [
-            { $Type: 'UI.DataField', Label: '多步ID', Value: zrfc_logid },
-            { $Type: 'UI.DataField', Label: '业务流程ID', Value: zrfcid },
-            { $Type: 'UI.DataField', Label: '多方交易类型ID', Value: zdfjy },
-            { $Type: 'UI.DataField', Label: '执行状态', Value: code },
-            { $Type: 'UI.DataField', Label: '消息', Value: message },
-            { $Type: 'UI.DataField', Label: '执行时间', Value: executionAt },
-            { $Type: 'UI.DataField', Label: '最新执行时间', Value: lastExecutionAt },
+            { $Type: 'UI.DataField', Label: '多步ID', Value: zrfc_logid, Editable: false },
+            { $Type: 'UI.DataField', Label: '关联ID', Value: id, Editable: false },
+            { $Type: 'UI.DataField', Label: '业务流程ID', Value: zrfcid, Editable: false },
+            { $Type: 'UI.DataField', Label: '多方交易类型ID', Value: zdfjy, Editable: false },
+            { $Type: 'UI.DataField', Label: '执行状态', Value: code, Editable: false },
+            { $Type: 'UI.DataField', Label: '消息', Value: message, Editable: false },
+            { $Type: 'UI.DataField', Label: '最新执行时间', Value: lastExecutionAt, Editable: false },
             {
                 $Type: 'UI.DataFieldForAction',
                 Label: '重推',

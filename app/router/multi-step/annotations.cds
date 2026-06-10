@@ -40,7 +40,7 @@ annotate service.StepConfig with @(
             TypeNamePlural: '步骤配置列表'
         },
         LineItem: [
-            { $Type: 'UI.DataField', Label: '流程ID', Value: zrfcid },
+            { $Type: 'UI.DataField', Label: '流程ID', Value: zrfcid, Editable: true },
             { $Type: 'UI.DataField', Label: '步骤编号', Value: canum, Editable: true },
             { $Type: 'UI.DataField', Label: '步骤描述', Value: description, Editable: true },
             { $Type: 'UI.DataField', Label: '服务文件名', Value: serviceName, Editable: true },

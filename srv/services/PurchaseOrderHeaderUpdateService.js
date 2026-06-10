@@ -73,7 +73,7 @@ class PurchaseOrderHeaderUpdateService {
             // 获取 CSRF token（使用 OData V2 格式）
             const csrfResult = await executeHttpRequest(
                 {
-                    destinationName: 'ES_API'
+                    destinationName: this.commonUtils.getDestinationName()
                 },
                 {
                     method: 'GET',
@@ -96,7 +96,7 @@ class PurchaseOrderHeaderUpdateService {
             // 调用采购订单修改 API（OData V2 格式）
             const result = await executeHttpRequest(
                 {
-                    destinationName: 'ES_API'
+                    destinationName: this.commonUtils.getDestinationName()
                 },
                 {
                     method: 'PATCH',

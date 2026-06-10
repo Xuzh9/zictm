@@ -101,7 +101,7 @@ class SalesOrderPricingUpdateService {
                     
                     const pricingResult = await executeHttpRequest(
                         {
-                            destinationName: 'ES_API'
+                            destinationName: this.commonUtils.getDestinationName()
                         },
                         {
                             method: 'GET',
@@ -168,7 +168,7 @@ class SalesOrderPricingUpdateService {
 
                         const result = await executeHttpRequest(
                             {
-                                destinationName: 'ES_API'
+                                destinationName: this.commonUtils.getDestinationName()
                             },
                             {
                                 method: 'PATCH',
@@ -176,7 +176,7 @@ class SalesOrderPricingUpdateService {
                                 data: updateData,
                                 headers: {
                                     'X-CSRF-Token': csrfToken,
-                                    'Accept': 'application/json',
+                                    'Content-Type': 'application/json;charset=UTF-8',
                                     'Cookie': cookieString,
                                     'sap-language': 'ZH',
                                     'If-Match': '*'
@@ -551,7 +551,7 @@ class SalesOrderPricingUpdateService {
             
             const response = await executeHttpRequest(
                 {
-                    destinationName: 'ES_API'
+                    destinationName: this.commonUtils.getDestinationName()
                 },
                 {
                     method: 'GET',

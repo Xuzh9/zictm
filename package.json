@@ -31,7 +31,10 @@
     "watch-mpt": "cds watch --open mpt/index.html?sap-ui-xx-viewCache=false --livereload false",
     "watch-multi-step": "cds watch --open multistep/index.html?sap-ui-xx-viewCache=false --livereload false",
     "watch-multi-log": "cds watch --open multilog/index.html?sap-ui-xx-viewCache=false --livereload false",
-    "watch-multi-log-hybrid": "cds watch --profile hybrid --open multilog/index.html?sap-ui-xx-viewCache=false --livereload false"
+    "watch-multi-log-hybrid": "cds watch --profile hybrid --open multilog/index.html?sap-ui-xx-viewCache=false --livereload false",
+    "watch-transfer": "cds watch --open transfer/index.html?sap-ui-xx-viewCache=false --livereload false",
+    "watch-outbounddelivery": "cds watch --open outbounddelivery/index.html?sap-ui-xx-viewCache=false --livereload false",
+    "watch-paymentreceipt": "cds watch --open paymentreceipt/index.html?sap-ui-xx-viewCache=false --livereload false"
   },
   "cds": {
     "requires": {
@@ -56,7 +59,10 @@
     "app/mpt",
     "app/multi-step",
     "app/multi-log",
-    "app/multi-log"
+    "app/multi-log",
+    "app/transfer",
+    "app/outbounddelivery",
+    "app/paymentreceipt"
   ],
   "devDependencies": {
     "cds-plugin-ui5": "^0.13.0"

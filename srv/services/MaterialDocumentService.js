@@ -1,10 +1,12 @@
 const cds = require('@sap/cds');
 const { SELECT } = cds.ql;
 const { executeHttpRequest } = require('@sap-cloud-sdk/http-client');
+const CommonUtils = require('../handlers/CommonUtils');
 
 class MaterialDocumentService {
     constructor() {
         this.zrfcLogid = null;
+        this.commonUtils = new CommonUtils();
     }
 
     async initService(zrfcLogid, zrfcid, canum) {
@@ -60,7 +62,7 @@ class MaterialDocumentService {
             // 使用 SAP Cloud SDK 的 executeHttpRequest 方法获取 CSRF token
             const csrfResult = await executeHttpRequest(
                 {
-                    destinationName: 'ES_API'
+                    destinationName: this.commonUtils.getDestinationName()
                 },
                 {
                     method: 'GET',
@@ -82,7 +84,7 @@ class MaterialDocumentService {
             
             const result = await executeHttpRequest(
                 {
-                    destinationName: 'ES_API'
+                    destinationName: this.commonUtils.getDestinationName()
                 },
                 {
                     method: 'POST',
@@ -468,7 +470,7 @@ class MaterialDocumentService {
 
                 const result = await executeHttpRequest(
                     {
-                        destinationName: 'ES_API'
+                        destinationName: this.commonUtils.getDestinationName()
                     },
                     {
                         method: 'GET',

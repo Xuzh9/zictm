@@ -108,7 +108,7 @@ class DeliveryOrderPostingService {
             // 获取 CSRF token（同时获取 ETag）
             const csrfResult = await executeHttpRequest(
                 {
-                    destinationName: 'ES_API'
+                    destinationName: this.commonUtils.getDestinationName()
                 },
                 {
                     method: 'GET',
@@ -146,7 +146,7 @@ class DeliveryOrderPostingService {
             // 调用交货单过账 API
             const result = await executeHttpRequest(
                 {
-                    destinationName: 'ES_API'
+                    destinationName: this.commonUtils.getDestinationName()
                 },
                 {
                     method: 'POST',

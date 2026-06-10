@@ -43,6 +43,24 @@
       "localDir": ".",
       "authenticationType": "xsuaa",
       "csrfProtection": false
+    },
+    {
+      "source": "^/transfer/(.*)$",
+      "localDir": ".",
+      "authenticationType": "xsuaa",
+      "csrfProtection": false
+    },
+    {
+      "source": "^/outbounddelivery/(.*)$",
+      "localDir": ".",
+      "authenticationType": "xsuaa",
+      "csrfProtection": false
+    },
+    {
+      "source": "^/paymentreceipt/(.*)$",
+      "localDir": ".",
+      "authenticationType": "xsuaa",
+      "csrfProtection": false
     }
   ]
 }

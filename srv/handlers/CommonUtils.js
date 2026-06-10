@@ -6,6 +6,34 @@ class CommonUtils {
     }
 
     /**
+     * 根据空间名称获取对应的 SAP 目标系统
+     * @returns {string} 目标系统名称
+     */
+    getDestinationName() {
+        try {
+            // 从环境变量获取空间名称
+            const vcapApplication = JSON.parse(process.env.VCAP_APPLICATION || '{}');
+            const spaceName = vcapApplication.space_name || '';
+            
+            // 根据空间名称选择目标系统
+            let destinationName;
+            if (spaceName.toUpperCase().includes('PRD')) {
+                destinationName = 'ES_API_PRD';
+            } else {
+                destinationName = 'ES_API';
+            }
+            
+            // 打印空间名称和目标系统
+            console.log(`[CommonUtils.getDestinationName] 空间名称: '${spaceName}', 目标系统: '${destinationName}'`);
+            
+            return destinationName;
+        } catch (error) {
+            console.warn('[CommonUtils.getDestinationName] 获取空间名称失败，使用默认目标系统:', error.message);
+            return 'ES_API';
+        }
+    }
+
+    /**
      * 根据 readsteps 读取之前步骤的 objkey
      * @param {string} zrfcLogid - 多步ID
      * @param {string} zrfcid - 业务流程ID

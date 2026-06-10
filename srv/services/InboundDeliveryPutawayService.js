@@ -83,7 +83,7 @@ class InboundDeliveryPutawayService {
 
             const csrfResult = await executeHttpRequest(
                 {
-                    destinationName: 'ES_API'
+                    destinationName: this.commonUtils.getDestinationName()
                 },
                 {
                     method: 'GET',
@@ -121,7 +121,7 @@ class InboundDeliveryPutawayService {
                 try {
                     const itemEtagResult = await executeHttpRequest(
                         {
-                            destinationName: 'ES_API'
+                            destinationName: this.commonUtils.getDestinationName()
                         },
                         {
                             method: 'GET',

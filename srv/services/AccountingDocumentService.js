@@ -1,10 +1,19 @@
 const cds = require('@sap/cds');
-const { SELECT } = cds.ql;
+const { SELECT, UPDATE } = cds.ql;
 const { executeHttpRequest } = require('@sap-cloud-sdk/http-client');
+const CommonUtils = require('../handlers/CommonUtils');
+
+// --------------------------
+// 常量定义
+// --------------------------
+// 会计凭证最大行数限制为 999，每行业务数据生成约 2 行会计凭证行项目
+// 因此每批最多处理 490 行业务数据（490 * 2 = 980 < 999）
+const MAX_LINES_PER_DOC = 490;
 
 class AccountingDocumentService {
     constructor() {
         this.zrfcLogid = null;
+        this.commonUtils = new CommonUtils();
     }
 
     async initService(zrfcLogid, zrfcid, canum) {
@@ -42,68 +51,97 @@ class AccountingDocumentService {
             }
             const businessDataList = businessDataResult.businessData;
 
-            // 构建会计凭证 SOAP 请求数据
-            const soapRequest = await this.buildSoapRequest(businessDataList);
- 
-            // 使用 SAP Cloud SDK 的 executeHttpRequest 方法调用 SOAP 接口
-            console.log('开始调用 SOAP 接口 journalentrycreaterequestconfi...');
-            console.log('SOAP 请求数据:', soapRequest);
+            // --------------------------
+            // 分批处理逻辑
+            // 会计凭证最大行数: 999
+            // 每行业务数据生成约 2 行会计凭证行项目
+            // 因此每批最多处理 490 行业务数据
+            // --------------------------
+            const batches = [];
             
-            const result = await executeHttpRequest(
-                {
-                    destinationName: 'ES_API'
-                },
-                {
-                    method: 'POST',
-                    url: '/sap/bc/srt/scs_ext/sap/journalentrycreaterequestconfi',
-                    data: soapRequest,
-                    headers: {
-                        'Content-Type': 'text/xml; charset=UTF-8',
-                        'SOAPAction': 'http://sap.com/xi/SAPSCORE/SFIN/JournalEntryBulkCreateRequest',
-                        'sap-language': 'ZH'
-                    },
-                    validateStatus: function (status) {
-                        return true; // 接受所有状态码，以便查看详细的错误信息
-                    }
-                }
-            );
-            
-            console.log('SOAP 请求状态码:', result.status);
-            console.log('SOAP 响应头:', result.headers);
-            // 输出完整响应数据用于调试
-            const responseDataStr = typeof result.data === 'string' ? result.data : JSON.stringify(result.data);
-            console.log('SOAP 响应数据长度:', responseDataStr.length);
-            console.log('SOAP 响应数据:', responseDataStr.length > 2000 ? responseDataStr.substring(0, 2000) + '...[截断]' : responseDataStr);
-
-            if (result.status >= 200 && result.status < 300) {
-                // 解析 SOAP 响应，提取会计凭证号
-                const objkey = this.extractAccountingDocumentNumber(responseDataStr);
-                
-                // 调试日志：确认提取的凭证号
-                console.log(`提取的会计凭证号 objkey: "${objkey}"`);
-                
-                return {
-                    code: 'S',
-                    message: '会计凭证创建成功',
-                    objkey: objkey
-                };
-            } else {
-                // 提取详细的错误信息
-                let errorMessage = `SOAP API 调用失败: ${result.status}`;
-                const responseDataStr = typeof result.data === 'string' ? result.data : JSON.stringify(result.data);
-                // 解析 SOAP 错误响应
-                const errorInfo = this.parseSoapError(responseDataStr);
-                if (errorInfo) {
-                    errorMessage = errorInfo;
-                }
-                // 限制错误消息长度，避免超过系统限制
-                errorMessage = errorMessage.substring(0, 500);
-                return {
-                    code: 'E',
-                    message: errorMessage,
-                    objkey: ''
-                };
+            for (let i = 0; i < businessDataList.length; i += MAX_LINES_PER_DOC) {
+                batches.push(businessDataList.slice(i, i + MAX_LINES_PER_DOC));
             }
+
+            console.log(`业务数据共 ${businessDataList.length} 行，将分成 ${batches.length} 批处理`);
+
+            let lastObjkey = ''; // 只返回最后一张会计凭证号
+
+            // 逐批处理
+            for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+                const batchData = batches[batchIndex];
+                console.log(`处理第 ${batchIndex + 1}/${batches.length} 批，数据量: ${batchData.length} 行`);
+
+                // 构建会计凭证 SOAP 请求数据
+                const soapRequest = await this.buildSoapRequest(batchData);
+ 
+                // 使用 SAP Cloud SDK 的 executeHttpRequest 方法调用 SOAP 接口
+                console.log('开始调用 SOAP 接口 journalentrycreaterequestconfi...');
+                console.log('SOAP 请求数据:', soapRequest);
+                
+                const result = await executeHttpRequest(
+                    {
+                        destinationName: this.commonUtils.getDestinationName()
+                    },
+                    {
+                        method: 'POST',
+                        url: '/sap/bc/srt/scs_ext/sap/journalentrycreaterequestconfi',
+                        data: soapRequest,
+                        headers: {
+                            'Content-Type': 'text/xml; charset=UTF-8',
+                            'SOAPAction': 'http://sap.com/xi/SAPSCORE/SFIN/JournalEntryBulkCreateRequest',
+                            'sap-language': 'ZH'
+                        },
+                        validateStatus: function (status) {
+                            return true; // 接受所有状态码，以便查看详细的错误信息
+                        }
+                    }
+                );
+                
+                console.log('SOAP 请求状态码:', result.status);
+                console.log('SOAP 响应头:', result.headers);
+                // 输出完整响应数据用于调试
+                const responseDataStr = typeof result.data === 'string' ? result.data : JSON.stringify(result.data);
+                console.log('SOAP 响应数据长度:', responseDataStr.length);
+                console.log('SOAP 响应数据:', responseDataStr.length > 2000 ? responseDataStr.substring(0, 2000) + '...[截断]' : responseDataStr);
+
+                if (result.status >= 200 && result.status < 300) {
+                    // 解析 SOAP 响应，提取会计凭证号
+                    const currentObjkey = this.extractAccountingDocumentNumber(responseDataStr);
+                    
+                    // 调试日志：确认提取的凭证号
+                    console.log(`提取的会计凭证号 objkey: "${currentObjkey}"`);
+                    
+                    // 更新最后一个凭证号
+                    lastObjkey = currentObjkey;
+
+                    // 将当前批次的会计凭证号更新到业务表的 AccountingDocument 字段
+                    await this.updateAccountingDocument(businessTable, batchData, currentObjkey);
+                } else {
+                    // 提取详细的错误信息
+                    let errorMessage = `SOAP API 调用失败: ${result.status}`;
+                    const responseDataStr = typeof result.data === 'string' ? result.data : JSON.stringify(result.data);
+                    // 解析 SOAP 错误响应
+                    const errorInfo = this.parseSoapError(responseDataStr);
+                    if (errorInfo) {
+                        errorMessage = errorInfo;
+                    }
+                    // 限制错误消息长度，避免超过系统限制
+                    errorMessage = errorMessage.substring(0, 500);
+                    return {
+                        code: 'E',
+                        message: `第 ${batchIndex + 1} 批处理失败: ${errorMessage}`,
+                        objkey: lastObjkey // 返回已成功创建的最后一个凭证号
+                    };
+                }
+            }
+
+            // 所有批次处理完成，返回最后一个凭证号
+            return {
+                code: 'S',
+                message: '会计凭证创建成功',
+                objkey: lastObjkey
+            };
         } catch (error) {
             console.error('AccountingDocumentService 执行失败:', error);
             console.error('错误响应状态码:', error.response ? error.response.status : 'No status');
@@ -184,7 +222,7 @@ class AccountingDocumentService {
     async getProfitCenter(costCenter) {
         try {
             const result = await executeHttpRequest(
-                { destinationName: 'ES_API' },
+                { destinationName: this.commonUtils.getDestinationName() },
                 {
                     method: 'GET',
                     url: `/sap/opu/odata/sap/YY1_CD_COSTCENTER_CDS/YY1_CD_CostCenter?$filter=CostCenter eq '${encodeURIComponent(costCenter)}'`,
@@ -516,6 +554,54 @@ class AccountingDocumentService {
         }
         
         return null;
+    }
+
+    /**
+     * 将会计凭证号批量更新到 PaymentReceipt 业务表的 AccountingDocument 字段
+     * @param {string} businessTable - 业务表名
+     * @param {Array} batchData - 当前批次的业务数据
+     * @param {string} accountingDocument - 会计凭证号
+     */
+    async updateAccountingDocument(businessTable, batchData, accountingDocument) {
+        try {
+            if (!businessTable || !batchData || !accountingDocument || batchData.length === 0) {
+                console.warn('updateAccountingDocument 参数不完整或数据为空，跳过更新');
+                return;
+            }
+
+            // 构建主键值列表
+            const keyValues = [];
+
+            for (const item of batchData) {
+                if (item.paymentReceiptNo && item.paymentReceiptNoItem) {
+                    keyValues.push({ paymentReceiptNo: item.paymentReceiptNo, paymentReceiptNoItem: item.paymentReceiptNoItem });
+                } else {
+                    console.warn('业务数据缺少主键字段，跳过该条记录');
+                }
+            }
+
+            if (keyValues.length === 0) {
+                console.warn('没有有效主键数据，跳过更新');
+                return;
+            }
+
+            // 使用 CDS UPDATE API 一次性批量更新所有数据
+            const whereConditions = keyValues.map(kv => ({
+                paymentReceiptNo: kv.paymentReceiptNo,
+                paymentReceiptNoItem: kv.paymentReceiptNoItem
+            }));
+
+            const result = await cds.run(
+                UPDATE('com.sap.zictm.PaymentReceipt')
+                    .with({ AccountingDocument: accountingDocument })
+                    .where(whereConditions)
+            );
+
+            console.log(`成功批量更新 ${result.rowsUpdated} 条 PaymentReceipt 数据的 AccountingDocument 字段为: ${accountingDocument}`);
+        } catch (error) {
+            console.error('批量更新 PaymentReceipt AccountingDocument 字段失败:', error);
+            // 不抛出异常，继续处理后续批次
+        }
     }
 }
 

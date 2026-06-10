@@ -55,7 +55,7 @@ class ProductionOrderCreateService {
             // 获取 CSRF token（使用 OData V2 格式）
             const csrfResult = await executeHttpRequest(
                 {
-                    destinationName: 'ES_API'
+                    destinationName: this.commonUtils.getDestinationName()
                 },
                 {
                     method: 'GET',
@@ -75,11 +75,25 @@ class ProductionOrderCreateService {
             const createResults = [];
             const createdOrderNumbers = [];
             
+            // 循环前一次性查询所有已存在的生产工单
+            const existingOrdersMap = await this.getExistingProductionOrders(businessDataList);
+            
+            // 循环前批量查询所有 PISalesOrderRel 数据
+            const piSalesOrderRelMap = await this.getPISalesOrderRelMap(businessDataList);
+            
             for (let index = 0; index < businessDataList.length; index++) {
                 const businessData = businessDataList[index];
                 
+                // 从 Map 中获取已存在的生产工单
+                const key = `${businessData.PIOrder}-${businessData.PIOrderItem}`;
+                const existingOrder = existingOrdersMap.get(key);
+                if (existingOrder) {
+                    console.log(`跳过已存在生产工单的数据: PIOrder=${businessData.PIOrder}, PIOrderItem=${businessData.PIOrderItem}, ProductionOrder=${existingOrder}`);
+                    continue;
+                }
+                
                 // 构建生产工单创建数据（单行）
-                const productionOrderData = await this.buildProductionOrderData(businessData, mptStepConfig, zrfcid);
+                const productionOrderData = await this.buildProductionOrderData(businessData, mptStepConfig, zrfcid, piSalesOrderRelMap);
                 
                 console.log(`开始创建生产工单 ${index + 1}/${businessDataList.length}`);
                 console.log('生产工单数据:', JSON.stringify(productionOrderData, null, 2));
@@ -87,7 +101,7 @@ class ProductionOrderCreateService {
                 // 调用生产工单创建 API（OData V2 格式）
                 const result = await executeHttpRequest(
                     {
-                        destinationName: 'ES_API'
+                        destinationName: this.commonUtils.getDestinationName()
                     },
                     {
                         method: 'POST',
@@ -170,9 +184,10 @@ class ProductionOrderCreateService {
      * @param {Object} businessData - 单行业务数据
      * @param {Object} mptStepConfig - MPTStepConfig 配置
      * @param {string} zrfcid - 业务流程ID
+     * @param {Map} piSalesOrderRelMap - PISalesOrderRel 数据映射
      * @returns {Object} 生产工单创建数据
      */
-    async buildProductionOrderData(businessData, mptStepConfig, zrfcid) {
+    async buildProductionOrderData(businessData, mptStepConfig, zrfcid, piSalesOrderRelMap) {
         // 构建基本数据（单行）
         const productionOrderData = {
             // 生产订单类型
@@ -187,8 +202,10 @@ class ProductionOrderCreateService {
             MfgOrderPlannedStartDate: this.formatDateForSAP(businessData.ConfirmedDeliveryDate),
             // 计划结束日期（格式：/Date(timestamp)/）
             MfgOrderPlannedEndDate: this.formatDateForSAP(businessData.ConfirmedDeliveryDate),
-            //箱唛要求
-            YY1_FD_PP_XMYQ_ORD: businessData.YY1_FD_XMYQ,
+            //销售部门
+            YY1_FD_ZSalesGroupName_ORD: businessData.SalesOffice || '',
+            //客户编号
+            YY1_FD_ZSoldToParty_ORD: businessData.Customer || businessData.SalesDistrict || '',
             //打包要求
             YY1_FD_PP_FHYQ_ORD: businessData.YY1_FD_FHYQ,
             //条码标签
@@ -201,19 +218,19 @@ class ProductionOrderCreateService {
             YY1_FD_REQDATE_ORD: this.formatDateForSAP(businessData.RequestedDeliveryDate),
             //箱唛要求
             YY1_FD_PP_XMYQ_ORD: businessData.YY1_FD_XMYQ,
+            //箱唛资料
+            YY1_FD_XMZL_ORD: businessData.YY1_FD_XMZL,
             //备注（去除换行符和特殊字符，SAP API不接受）
             YY1_FD_REMARK_ORD: this.cleanRemark(businessData.Remark),
         };
 
-        const PISalesOrderRel = cds.entities['com.sap.zictm.PISalesOrderRel'];
+        // 从 Map 中获取 PISalesOrderRel 数据
         const piOrder = businessData.PIOrder || '';
         const piOrderItem = businessData.PIOrderItem || '';
 
-        if (piOrder && piOrderItem) {
-            const relRecord = await cds.run(
-                SELECT.one.from(PISalesOrderRel)
-                    .where({ PIOrder: piOrder, PIOrderItem: piOrderItem })
-            );
+        if (piOrder && piOrderItem && piSalesOrderRelMap) {
+            const key = `${piOrder}-${piOrderItem}`;
+            const relRecord = piSalesOrderRelMap.get(key);
 
             if (relRecord) {
                 switch (zrfcid) {
@@ -283,6 +300,86 @@ class ProductionOrderCreateService {
             }
         } catch (error) {
             console.error(`PISalesOrderRel 更新/插入失败:`, error);
+        }
+    }
+
+    /**
+     * 批量查询所有已存在的生产工单
+     * @param {Array} businessDataList - 业务数据列表
+     * @returns {Map} 生产工单映射，key 为 "PIOrder-PIOrderItem"，value 为 ProductionOrder
+     */
+    async getExistingProductionOrders(businessDataList) {
+        try {
+            const PISalesOrderRel = cds.entities['com.sap.zictm.PISalesOrderRel'];
+            const { SELECT } = cds.ql;
+            
+            // 获取第一个非空的 PIOrder（所有数据的 PIOrder 相同）
+            const firstItem = businessDataList.find(item => item.PIOrder);
+            if (!firstItem?.PIOrder) {
+                return new Map();
+            }
+            
+            const piOrder = firstItem.PIOrder;
+            
+            // 使用单个 PIOrder 条件查询
+            const results = await cds.run(
+                SELECT.from(PISalesOrderRel)
+                    .columns(['PIOrder', 'PIOrderItem', 'ProductionOrder'])
+                    .where({ PIOrder: piOrder })
+            );
+            
+            // 转换为 Map，key 为 "PIOrder-PIOrderItem"
+            const map = new Map();
+            for (const result of results) {
+                const key = `${result.PIOrder}-${result.PIOrderItem}`;
+                if (result.ProductionOrder) {
+                    map.set(key, result.ProductionOrder);
+                }
+            }
+            
+            return map;
+        } catch (error) {
+            console.error(`批量查询 PISalesOrderRel 失败:`, error);
+            return new Map();
+        }
+    }
+
+    /**
+     * 批量查询所有 PISalesOrderRel 完整数据
+     * @param {Array} businessDataList - 业务数据列表
+     * @returns {Map} PISalesOrderRel 数据映射，key 为 "PIOrder-PIOrderItem"
+     */
+    async getPISalesOrderRelMap(businessDataList) {
+        try {
+            const PISalesOrderRel = cds.entities['com.sap.zictm.PISalesOrderRel'];
+            const { SELECT } = cds.ql;
+            
+            // 提取所有不重复的 PIOrder
+            const piOrders = [...new Set(businessDataList
+                .filter(item => item.PIOrder)
+                .map(item => item.PIOrder))];
+            
+            if (piOrders.length === 0) {
+                return new Map();
+            }
+            
+            // 使用 IN 条件查询多个 PIOrder 的数据
+            const results = await cds.run(
+                SELECT.from(PISalesOrderRel)
+                    .where({ PIOrder: { in: piOrders } })
+            );
+            
+            // 转换为 Map，key 为 "PIOrder-PIOrderItem"
+            const map = new Map();
+            for (const result of results) {
+                const key = `${result.PIOrder}-${result.PIOrderItem}`;
+                map.set(key, result);
+            }
+            
+            return map;
+        } catch (error) {
+            console.error(`批量查询 PISalesOrderRel 完整数据失败:`, error);
+            return new Map();
         }
     }
 

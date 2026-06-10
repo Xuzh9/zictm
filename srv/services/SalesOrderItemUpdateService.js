@@ -88,7 +88,7 @@ class SalesOrderItemUpdateService {
             // 获取 CSRF token 和 ETag（使用 OData V2 格式）
             const csrfResult = await executeHttpRequest(
                 {
-                    destinationName: 'ES_API'
+                    destinationName: this.commonUtils.getDestinationName()
                 },
                 {
                     method: 'GET',
@@ -125,7 +125,7 @@ class SalesOrderItemUpdateService {
                 // 调用销售订单行项目修改 API（OData V2 格式）
                 const result = await executeHttpRequest(
                     {
-                        destinationName: 'ES_API'
+                        destinationName: this.commonUtils.getDestinationName()
                     },
                     {
                         method: 'PATCH',
@@ -133,7 +133,7 @@ class SalesOrderItemUpdateService {
                         data: itemData,
                         headers: {
                             'X-CSRF-Token': csrfToken,
-                            'Accept': 'application/json',
+                            'Content-Type': 'application/json',
                             'Cookie': cookieString,
                             'sap-language': 'ZH',
                             'If-Match': etag || '*'

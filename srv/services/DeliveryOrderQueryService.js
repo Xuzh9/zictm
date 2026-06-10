@@ -169,7 +169,7 @@ class DeliveryOrderQueryService {
             try {
                 const result = await executeHttpRequest(
                     {
-                        destinationName: 'ES_API'
+                        destinationName: this.commonUtils.getDestinationName()
                     },
                     {
                         method: 'GET',

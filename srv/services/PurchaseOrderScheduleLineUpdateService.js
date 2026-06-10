@@ -75,7 +75,7 @@ class PurchaseOrderScheduleLineUpdateService {
                 // 获取 CSRF token 和 ETag（为每个计划行单独获取）
                 const csrfResult = await executeHttpRequest(
                     {
-                        destinationName: 'ES_API'
+                        destinationName: this.commonUtils.getDestinationName()
                     },
                     {
                         method: 'GET',
@@ -97,7 +97,7 @@ class PurchaseOrderScheduleLineUpdateService {
                 // 调用采购订单计划行修改 API
                 const result = await executeHttpRequest(
                     {
-                        destinationName: 'ES_API'
+                        destinationName: this.commonUtils.getDestinationName()
                     },
                     {
                         method: 'PATCH',
@@ -105,7 +105,7 @@ class PurchaseOrderScheduleLineUpdateService {
                         data: scheduleLineData,
                         headers: {
                             'X-CSRF-Token': csrfToken,
-                            'Accept': 'application/json',
+                            'Content-Type': 'application/json;charset=UTF-8',
                             'Cookie': cookieString,
                             'sap-language': 'ZH',
                             'If-Match': etag || '*'

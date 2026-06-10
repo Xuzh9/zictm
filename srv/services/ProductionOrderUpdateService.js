@@ -43,7 +43,7 @@ class ProductionOrderCreateService {
             // 获取 CSRF token（使用 OData V2 格式）
             const csrfResult = await executeHttpRequest(
                 {
-                    destinationName: 'ES_API'
+                    destinationName: this.commonUtils.getDestinationName()
                 },
                 {
                     method: 'GET',
@@ -75,7 +75,7 @@ class ProductionOrderCreateService {
                 // 调用生产工单创建 API（OData V2 格式）
                 const result = await executeHttpRequest(
                     {
-                        destinationName: 'ES_API'
+                        destinationName: this.commonUtils.getDestinationName()
                     },
                     {
                         method: 'POST',
@@ -83,7 +83,7 @@ class ProductionOrderCreateService {
                         data: productionOrderData,
                         headers: {
                             'X-CSRF-Token': csrfToken,
-                            'Accept': 'application/json',
+                            'Content-Type': 'application/json',
                             'Cookie': cookieString,
                             'sap-language': 'ZH'
                         },
