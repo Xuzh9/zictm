@@ -3,7 +3,7 @@ const cds = require('@sap/cds');
 module.exports = cds.service.impl(async function () {
   const service = this;
   const { SELECT } = cds.ql;
-  const { SalesOrderCreate, SalesOrderChange, PISalesOrderRel } = this.entities;
+  const { SalesOrderCreate, SalesOrderChange, PISalesOrderRel, PITransfer } = this.entities;
 
   // 获取 MultistepLog 实体引用
   const MultistepLog = cds.entities['com.sap.zictm.MultistepLog'];
@@ -311,6 +311,9 @@ module.exports = cds.service.impl(async function () {
       if (!item.SalesOffice) {
         errors.push(`第 ${rowNum} 条数据缺少必填字段：SalesOffice`);
       }
+      if (!item.SalesGroup) {
+        errors.push(`第 ${rowNum} 条数据缺少必填字段：SalesGroup`);
+      }
       if (!item.DistributionChannel) {
         errors.push(`第 ${rowNum} 条数据缺少必填字段：DistributionChannel`);
       }
@@ -510,6 +513,9 @@ module.exports = cds.service.impl(async function () {
       if (!item.PIOrderItem) {
         errors.push(`第 ${rowNum} 条数据缺少必填字段：PIOrderItem`);
       }
+      if (!item.ID) {
+        errors.push(`第 ${rowNum} 条数据缺少必填字段：ID`);
+      }
       if (!item.Material) {
         errors.push(`第 ${rowNum} 条数据缺少必填字段：Material`);
       }
@@ -539,7 +545,7 @@ module.exports = cds.service.impl(async function () {
     const keyMap = new Map();
     data.forEach((item, index) => {
       const rowNum = index + 1;
-      const key = `${item.PIOrder}-${item.PIOrderItem}`;
+      const key = `${item.PIOrder}-${item.PIOrderItem}-${item.ID}`;
       if (keyMap.has(key)) {
         errors.push(`第 ${rowNum} 条数据与第 ${keyMap.get(key)} 条数据重复：主键 [${key}] 已存在`);
       } else {
@@ -563,8 +569,8 @@ module.exports = cds.service.impl(async function () {
     // --------------------------
     // 数据库已存在校验
     // --------------------------
-    const existingRecords = await service.run(SELECT.from(PISalesOrderRel)
-      .columns(['PIOrder', 'PIOrderItem', 'zrfc_logid'])
+    const existingRecords = await service.run(SELECT.from(PITransfer)
+      .columns(['PIOrder', 'PIOrderItem', 'ID', 'zrfc_logid'])
       .where({
         PIOrder: { in: data.map(p => p.PIOrder) }
       }));
@@ -586,7 +592,7 @@ module.exports = cds.service.impl(async function () {
     }
     
     existingRecords.forEach(existing => {
-      const key = `${existing.PIOrder}-${existing.PIOrderItem}`;
+      const key = `${existing.PIOrder}-${existing.PIOrderItem}-${existing.ID}`;
       if (keyMap.has(key)) {
         const headLogCode = headLogs[existing.zrfc_logid];
         if (headLogCode === 'S') {

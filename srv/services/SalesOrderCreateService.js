@@ -414,6 +414,7 @@ class SalesOrderCreateService {
         let salesOrderData = {
             SalesOrganization: mainData.SalesOrganization || mptStepConfig?.vkorg,
             SalesOffice: mainData.SalesOffice || "",
+            SalesGroup: mainData.SalesGroup || "",
             DistributionChannel: (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') ? (mainData.DistributionChannel) : (mptStepConfig?.vtweg),
             OrganizationDivision: (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') ? (mainData.OrganizationDivision || "00") : (mptStepConfig?.spart || "00"),
             SoldToParty: (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') ? (mainData.SalesDistrict || mptStepConfig?.kunnr) : (mainData.Customer || mptStepConfig?.kunnr),

@@ -200,7 +200,7 @@ entity SalesOrderCreate {
     DistributionChannel           : String(2) @title: '分销渠道';     // 分销渠道
     OrganizationDivision          : String(2) @title: '产品组';     // 产品组
     SalesOffice                   : String(10) @title: '销售办事处';    // 销售办事处
-    SalesGroup                    : String(10) @title: '销售组';    // 销售组
+    SalesGroup                    : String(3) @title: '销售组';    // 销售组
     SalesDistrict                 : String(10) @title: '售达方';    // 售达方
     PurchaseOrderByCustomer       : String(40) @title: '客户参考编号';    // 客户参考编号
     CustomerPurchaseOrderDate     : Date @title: '客户参考日期';          // 客户参考日期
@@ -339,8 +339,9 @@ entity DeliveryActualInfo {
 
 //调拨单
 entity PITransfer {
-    key PIOrder                  : String(16) @title: 'PI单号';    // PI单号
+    key PIOrder                  : String(16) @title: 'PI单号';      // PI单号
     key PIOrderItem              : String(6) @title: 'PI单行号';     // PI单行号
+    key ID                       : String(16) @title: 'ID';         // ID
     PostingDate                  : Date @title: '过账日期';               // 过账日期
     GoodsMovementCode            : String(3) @title: '移动类型代码';          // 移动类型代码
     Material                     : String(40) @title: '物料编号';         // 物料编号

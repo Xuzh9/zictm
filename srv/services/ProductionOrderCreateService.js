@@ -52,6 +52,24 @@ class ProductionOrderCreateService {
             const businessDataList = businessDataResult.businessData;
             console.log('[ProductionOrderCreateService] 业务数据条数:', businessDataList.length);
 
+            // 获取 SalesGroup 并调用外部接口获取映射关系
+            let salesGroupMap = new Map();
+            const firstBusinessData = businessDataList.find(item => item.SalesGroup);
+            if (firstBusinessData?.SalesGroup) {
+                console.log(`[ProductionOrderCreateService] SalesGroup 有值，调用外部接口：${firstBusinessData.SalesGroup}`);
+                const salesGroupResult = await this.callSalesGroupAPI(firstBusinessData.SalesGroup);
+                console.log('[ProductionOrderCreateService] 外部接口调用结果:', JSON.stringify(salesGroupResult, null, 2));
+                
+                // 解析返回结果，构建 value -> Description 映射
+                if (salesGroupResult?.d?.to_to_BO_BASICDATADETAIL?.results) {
+                    salesGroupResult.d.to_to_BO_BASICDATADETAIL.results.forEach(item => {
+                        if (item.value && item.Description) {
+                            salesGroupMap.set(item.value, item.Description);
+                        }
+                    });
+                }
+            }
+
             // 获取 CSRF token（使用 OData V2 格式）
             const csrfResult = await executeHttpRequest(
                 {
@@ -93,7 +111,7 @@ class ProductionOrderCreateService {
                 }
                 
                 // 构建生产工单创建数据（单行）
-                const productionOrderData = await this.buildProductionOrderData(businessData, mptStepConfig, zrfcid, piSalesOrderRelMap);
+                const productionOrderData = await this.buildProductionOrderData(businessData, mptStepConfig, zrfcid, piSalesOrderRelMap, salesGroupMap);
                 
                 console.log(`开始创建生产工单 ${index + 1}/${businessDataList.length}`);
                 console.log('生产工单数据:', JSON.stringify(productionOrderData, null, 2));
@@ -149,8 +167,7 @@ class ProductionOrderCreateService {
 
             // 检查所有工单创建结果
             const allSuccess = createResults.every(r => r.success);
-            const failedCount = createResults.filter(r => !r.success).length;
-            
+
             if (allSuccess) {
                 return {
                     code: 'S',
@@ -183,11 +200,12 @@ class ProductionOrderCreateService {
      * 构建生产工单创建数据
      * @param {Object} businessData - 单行业务数据
      * @param {Object} mptStepConfig - MPTStepConfig 配置
-     * @param {string} zrfcid - 业务流程ID
+     * @param {string} zrfcid - 业务流程 ID
      * @param {Map} piSalesOrderRelMap - PISalesOrderRel 数据映射
+     * @param {Map} salesGroupMap - SalesGroup 映射（value -> Description）
      * @returns {Object} 生产工单创建数据
      */
-    async buildProductionOrderData(businessData, mptStepConfig, zrfcid, piSalesOrderRelMap) {
+    async buildProductionOrderData(businessData, mptStepConfig, zrfcid, piSalesOrderRelMap, salesGroupMap) {
         // 构建基本数据（单行）
         const productionOrderData = {
             // 生产订单类型
@@ -202,8 +220,8 @@ class ProductionOrderCreateService {
             MfgOrderPlannedStartDate: this.formatDateForSAP(businessData.ConfirmedDeliveryDate),
             // 计划结束日期（格式：/Date(timestamp)/）
             MfgOrderPlannedEndDate: this.formatDateForSAP(businessData.ConfirmedDeliveryDate),
-            //销售部门
-            YY1_FD_ZSalesGroupName_ORD: businessData.SalesOffice || '',
+            //销售部门（根据 SalesGroup 从映射中获取 Description）
+            YY1_FD_ZSalesGroupName_ORD: salesGroupMap?.get(businessData.SalesGroup) || '',
             //客户编号
             YY1_FD_ZSoldToParty_ORD: businessData.Customer || businessData.SalesDistrict || '',
             //打包要求
@@ -380,6 +398,64 @@ class ProductionOrderCreateService {
         } catch (error) {
             console.error(`批量查询 PISalesOrderRel 完整数据失败:`, error);
             return new Map();
+        }
+    }
+
+    /**
+     * 调用外部 SAP 接口获取 SalesGroup 基础数据
+     * @param {string} salesGroup - 销售组
+     * @returns {Object} 接口返回结果
+     */
+    async callSalesGroupAPI(salesGroup) {
+        try {
+            // 使用相对路径，通过 destinationName 路由到目标系统
+            const apiUrl = '/sap/opu/odata/sap/YY1_BO_GET_BASICDATA_CDS/YY1_BO_GET_BASICDATA';
+            
+            // 第一步：获取 CSRF token
+            console.log('[ProductionOrderCreateService.callSalesGroupAPI] 开始获取 CSRF token...');
+            const csrfResult = await executeHttpRequest(
+                { destinationName: this.commonUtils.getDestinationName() },
+                {
+                    method: 'GET',
+                    url: apiUrl,
+                    headers: {
+                        'X-CSRF-Token': 'Fetch'
+                    }
+                }
+            );
+            
+            const cookies = csrfResult.headers['set-cookie'] || [];
+            const cookieString = cookies.map(cookie => cookie.split(';')[0]).join('; ');
+            const csrfToken = csrfResult.headers['x-csrf-token'];
+            
+            console.log('[ProductionOrderCreateService.callSalesGroupAPI] CSRF token 获取成功');
+            
+            // 第二步：POST 请求
+            const postBody = {
+                field1: 'SALESGROUP',
+                to_to_BO_BASICDATADETAIL: {
+                    results: []
+                }
+            };
+            
+            const postResult = await executeHttpRequest(
+                { destinationName: this.commonUtils.getDestinationName() },
+                {
+                    method: 'POST',
+                    url: apiUrl,
+                    headers: {
+                        'X-CSRF-Token': csrfToken,
+                        'Cookie': cookieString,
+                        'Content-Type': 'application/json'
+                    },
+                    data: postBody
+                }
+            );
+            
+            return postResult.data;
+        } catch (error) {
+            console.error('[ProductionOrderCreateService.callSalesGroupAPI] 调用外部接口失败:', error.message);
+            return null;
         }
     }
 
