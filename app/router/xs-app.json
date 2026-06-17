@@ -61,6 +61,36 @@
       "localDir": ".",
       "authenticationType": "xsuaa",
       "csrfProtection": false
+    },
+    {
+      "source": "^/apilog/(.*)$",
+      "localDir": ".",
+      "authenticationType": "xsuaa",
+      "csrfProtection": false
+    },
+    {
+      "source": "^/socreate/(.*)$",
+      "localDir": ".",
+      "authenticationType": "xsuaa",
+      "csrfProtection": false
+    },
+    {
+      "source": "^/sochange/(.*)$",
+      "localDir": ".",
+      "authenticationType": "xsuaa",
+      "csrfProtection": false
+    },
+    {
+      "source": "^/dninfo/(.*)$",
+      "localDir": ".",
+      "authenticationType": "xsuaa",
+      "csrfProtection": false
+    },
+    {
+      "source": "^/pitransfer/(.*)$",
+      "localDir": ".",
+      "authenticationType": "xsuaa",
+      "csrfProtection": false
     }
   ]
 }

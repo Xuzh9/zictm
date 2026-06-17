@@ -7,7 +7,7 @@ annotate service.PIDeliveryRel with @(
             TypeName: 'PI交货单关系表',
             TypeNamePlural: 'PI交货单关系列表'
         },
-        SelectionFields: [PIOrder,DeliveryDocument,DeliveryNo1,InboundDeliveryNo1,DeliveryNo2,InboundDeliveryNo2],
+        SelectionFields: [PIOrder,DeliveryDocument,DeliveryNo1,InboundDeliveryNo1,DeliveryNo2,InboundDeliveryNo2,code],
         LineItem: [
             { $Type: 'UI.DataField', Label: 'PI单号', Value: PIOrder },
             { $Type: 'UI.DataField', Label: 'PI单行号', Value: PIOrderItem },
@@ -20,6 +20,8 @@ annotate service.PIDeliveryRel with @(
             { $Type: 'UI.DataField', Label: '外向交货单行号1', Value: DeliveryNoItem1 },
             { $Type: 'UI.DataField', Label: '内向交货单号1', Value: InboundDeliveryNo1 },
             { $Type: 'UI.DataField', Label: '内向交货单行号1', Value: InboundDeliveryNoItem1 },
+            { $Type: 'UI.DataField', Label: '消息状态', Value: code },
+            { $Type: 'UI.DataField', Label: '消息文本', Value: message },
         ],
         Identification: [
             { $Type: 'UI.DataField', Label: 'PI单号', Value: PIOrder },
@@ -37,7 +39,9 @@ annotate service.PIDeliveryRel with @(
             { $Type: 'UI.DataField', Label: '外向交货单号2', Value: DeliveryNo2 },
             { $Type: 'UI.DataField', Label: '外向交货单行号2', Value: DeliveryNo2Item2 },
             { $Type: 'UI.DataField', Label: '内向交货单号2', Value: InboundDeliveryNo2 },
-            { $Type: 'UI.DataField', Label: '内向交货单行号2', Value: InboundDeliveryNoItem2 }
+            { $Type: 'UI.DataField', Label: '内向交货单行号2', Value: InboundDeliveryNoItem2 },
+            { $Type: 'UI.DataField', Label: '消息状态', Value: code },
+            { $Type: 'UI.DataField', Label: '消息文本', Value: message },
         ],
         Facets: [
             { $Type: 'UI.ReferenceFacet', Label: '基本信息', Target: '@UI.Identification' }

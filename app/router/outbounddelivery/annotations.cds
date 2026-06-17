@@ -7,7 +7,7 @@ annotate service.OutboundDelivery with @(
             TypeName: '销售出库单',
             TypeNamePlural: '销售出库单列表'
         },
-        SelectionFields: [SalesOrder,Customer,Product,SalesOrganization,SalesOffice,zrfcid,zrfc_logid],
+        SelectionFields: [SalesOrder,Customer,Product,SalesOrganization,SalesOffice,code,zrfcid,zrfc_logid],
         LineItem: [
             { $Type: 'UI.DataField', Label: '销售出库单号', Value: SalesOrder },
             { $Type: 'UI.DataField', Label: '销售出库单行号', Value: SalesOrderItem },
@@ -30,7 +30,9 @@ annotate service.OutboundDelivery with @(
             { $Type: 'UI.DataField', Label: '采购单价', Value: PurchasePrice },
             { $Type: 'UI.DataField', Label: '业务流程ID', Value: zrfcid },
             { $Type: 'UI.DataField', Label: '多步ID', Value: zrfc_logid },
-            { $Type: 'UI.DataField', Label: '多方交易类型ID', Value: zdfjy }
+            { $Type: 'UI.DataField', Label: '多方交易类型ID', Value: zdfjy },
+            { $Type: 'UI.DataField', Label: '消息状态', Value: code },
+            { $Type: 'UI.DataField', Label: '消息文本', Value: message },
         ],
         Identification: [
             { $Type: 'UI.DataField', Label: '销售出库单号', Value: SalesOrder },
@@ -54,7 +56,9 @@ annotate service.OutboundDelivery with @(
             { $Type: 'UI.DataField', Label: '采购单价', Value: PurchasePrice },
             { $Type: 'UI.DataField', Label: '业务流程ID', Value: zrfcid },
             { $Type: 'UI.DataField', Label: '多步ID', Value: zrfc_logid },
-            { $Type: 'UI.DataField', Label: '多方交易类型ID', Value: zdfjy }
+            { $Type: 'UI.DataField', Label: '多方交易类型ID', Value: zdfjy },
+            { $Type: 'UI.DataField', Label: '消息状态', Value: code },
+            { $Type: 'UI.DataField', Label: '消息文本', Value: message },
         ],
         Facets: [
             { $Type: 'UI.ReferenceFacet', Label: '基本信息', Target: '@UI.Identification' }

@@ -398,12 +398,22 @@ module.exports = cds.service.impl(async function () {
       });
     }
     
+    // 将已存在记录转换为 Map，方便快速查找
+    const existingKeyMap = new Map();
     existingRecords.forEach(existing => {
       const key = `${existing.PIOrder}-${existing.PIOrderItem}`;
-      if (keyMap.has(key)) {
-        const headLogCode = headLogs[existing.zrfc_logid];
+      existingKeyMap.set(key, existing.zrfc_logid);
+    });
+    
+    // 检查当前请求的数据是否在数据库中已存在且状态为成功
+    data.forEach((item, index) => {
+      const rowNum = index + 1;
+      const key = `${item.PIOrder}-${item.PIOrderItem}`;
+      if (existingKeyMap.has(key)) {
+        const zrfcLogid = existingKeyMap.get(key);
+        const headLogCode = headLogs[zrfcLogid];
         if (headLogCode === 'S') {
-          errors.push(`主键 [${key}] 已成功推送，无法重复推送`);
+          errors.push(`第 ${rowNum} 条数据的主键 [${key}] 已成功推送，无法重复推送`);
         }
       }
     });
@@ -591,12 +601,22 @@ module.exports = cds.service.impl(async function () {
       });
     }
     
+    // 将已存在记录转换为 Map，方便快速查找
+    const existingKeyMap = new Map();
     existingRecords.forEach(existing => {
       const key = `${existing.PIOrder}-${existing.PIOrderItem}-${existing.ID}`;
-      if (keyMap.has(key)) {
-        const headLogCode = headLogs[existing.zrfc_logid];
+      existingKeyMap.set(key, existing.zrfc_logid);
+    });
+    
+    // 检查当前请求的数据是否在数据库中已存在且状态为成功
+    data.forEach((item, index) => {
+      const rowNum = index + 1;
+      const key = `${item.PIOrder}-${item.PIOrderItem}-${item.ID}`;
+      if (existingKeyMap.has(key)) {
+        const zrfcLogid = existingKeyMap.get(key);
+        const headLogCode = headLogs[zrfcLogid];
         if (headLogCode === 'S') {
-          errors.push(`主键 [${key}] 已成功推送，无法重复推送`);
+          errors.push(`第 ${rowNum} 条数据的主键 [${key}] 已成功推送，无法重复推送`);
         }
       }
     });
@@ -750,12 +770,22 @@ module.exports = cds.service.impl(async function () {
       });
     }
     
+    // 将已存在记录转换为 Map，方便快速查找
+    const existingKeyMap = new Map();
     existingRecords.forEach(existing => {
       const key = `${existing.PIOrder}-${existing.PIOrderItem}`;
-      if (keyMap.has(key)) {
-        const headLogCode = headLogs[existing.zrfc_logid];
+      existingKeyMap.set(key, existing.zrfc_logid);
+    });
+    
+    // 检查当前请求的数据是否在数据库中已存在且状态为成功
+    data.forEach((item, index) => {
+      const rowNum = index + 1;
+      const key = `${item.PIOrder}-${item.PIOrderItem}`;
+      if (existingKeyMap.has(key)) {
+        const zrfcLogid = existingKeyMap.get(key);
+        const headLogCode = headLogs[zrfcLogid];
         if (headLogCode === 'S') {
-          errors.push(`主键 [${key}] 已成功推送，无法重复推送`);
+          errors.push(`第 ${rowNum} 条数据的主键 [${key}] 已成功推送，无法重复推送`);
         }
       }
     });

@@ -41,7 +41,8 @@ class MultiStepProcessor {
             }
             
             // 1.1 统一校验业务数据（在插入日志之前校验）
-            if (processConfig) {
+            // 只有在非重推时才校验业务数据
+            if (processConfig && !isRetry) {
                 const validateResult = await this.validateBusinessDataBeforeInsert(processConfig, businessTable1, businessTable2, businessTable3);
                 if (!validateResult.valid) {
                     const errorMsg = validateResult.error;
@@ -54,47 +55,54 @@ class MultiStepProcessor {
                 }
             }
             
-            // 2. 使用事务机制同时插入 MultistepHeadLog、业务表和步骤日志
-            console.log('[MultiStepProcessor.processWithLogId] 使用事务机制处理所有数据库操作');
-            await cds.tx(async (tx) => {
-                // 2.1 优先创建 MultistepHeadLog（初始状态）
-                const MultistepHeadLog = cds.entities['com.sap.zictm.MultistepHeadLog'];
-                const MultistepLog = cds.entities['com.sap.zictm.MultistepLog'];
-                const executionAt = new Date();
-                
-                // 先检查是否已存在
-                const existingHeadLog = await tx.run(
-                    SELECT.one.from(MultistepHeadLog).where({ zrfc_logid: zrfcLogid })
+            // 2. 先在事务外创建 MultistepHeadLog（确保即使业务表插入失败也能保存）
+            console.log('[MultiStepProcessor.processWithLogId] 先创建 MultistepHeadLog（事务外）');
+            const MultistepHeadLog = cds.entities['com.sap.zictm.MultistepHeadLog'];
+            const executionAt = new Date();
+            
+            // 先检查是否已存在
+            const existingHeadLog = await cds.run(
+                SELECT.one.from(MultistepHeadLog).where({ zrfc_logid: zrfcLogid })
+            );
+            
+            if (!existingHeadLog) {
+                // 不存在，执行插入 MultistepHeadLog
+                await cds.run(
+                    INSERT.into(MultistepHeadLog).entries({
+                        zrfc_logid: zrfcLogid,
+                        zrfcid: zrfcid,
+                        zdfjy: zdfjy || null,
+                        objkey: '',
+                        code: 'S',
+                        message: '处理中',
+                        executionAt: executionAt,
+                        lastExecutionAt: executionAt,
+                        id: id || null
+                    })
                 );
+                console.log('[MultiStepProcessor.processWithLogId] MultistepHeadLog 插入成功（事务外）');
+            } else {
+                console.log('[MultiStepProcessor.processWithLogId] MultistepHeadLog 已存在，跳过插入');
+            }
+            
+            // 3. 使用事务机制处理业务表和步骤日志
+            console.log('[MultiStepProcessor.processWithLogId] 使用事务机制处理业务表和步骤日志');
+            await cds.tx(async (tx) => {
+                const MultistepLog = cds.entities['com.sap.zictm.MultistepLog'];
                 
-                if (!existingHeadLog) {
-                    // 不存在，执行插入 MultistepHeadLog 和业务表
-                    await tx.run(
-                        INSERT.into(MultistepHeadLog).entries({
-                            zrfc_logid: zrfcLogid,
-                            zrfcid: zrfcid,
-                            zdfjy: zdfjy || null,
-                            objkey: '',
-                            code: 'S',
-                            message: '处理中',
-                            executionAt: executionAt,
-                            lastExecutionAt: executionAt,
-                            id: id || null
-                        })
-                    );
-                    console.log('[MultiStepProcessor.processWithLogId] MultistepHeadLog 插入成功');
-                    
-                    // 2.2 插入业务表数据
+                // 3.1 只有在非重推时才插入业务表数据
+                if (!isRetry) {
                     await this.insertBusinessDataByConfigWithTx(tx, processConfig, businessTable1, businessTable2, businessTable3, zrfcid, zrfcLogid, zdfjy);
                     console.log('[MultiStepProcessor.processWithLogId] 业务表插入成功');
-                } else {
-                    console.log('[MultiStepProcessor.processWithLogId] MultistepHeadLog 已存在，跳过插入');
                 }
                 
-                // 3. 如果是重推且传入了业务表数据，需要更新业务表
-                if (isRetry && processConfig && businessTable1) {
+                // 3.2 如果是重推且传入了业务表数据（数组），需要更新业务表
+                // 只有传入实际的业务数据数组时才更新，前台重推不更新表
+                if (isRetry && processConfig && businessTable1 && Array.isArray(businessTable1) && businessTable1.length > 0) {
                     console.log('[MultiStepProcessor.processWithLogId] 重推时更新业务表数据');
                     await this.updateBusinessDataByConfig(tx, processConfig, businessTable1, businessTable2, businessTable3, zrfcid, zrfcLogid, zdfjy);
+                } else if (isRetry) {
+                    console.log('[MultiStepProcessor.processWithLogId] 重推时未传入业务数据，跳过业务表更新');
                 }
                 
                 // 4. 按顺序执行每个步骤（在事务内执行）
@@ -532,17 +540,6 @@ class MultiStepProcessor {
         }
     }
 
-    /**
-     * 根据 ProcessConfig 配置分别更新 businessTable1、businessTable2、businessTable3 对应的数据表（覆盖更新）（带事务版本）
-     * @param {Object} tx - 事务对象
-     * @param {Object} processConfig - 业务流程配置
-     * @param {Array} businessTable1Data - 业务表1的数据
-     * @param {Array} businessTable2Data - 业务表2的数据
-     * @param {Array} businessTable3Data - 业务表3的数据
-     * @param {string} zrfcid - 业务流程ID
-     * @param {string} zrfcLogid - 日志ID
-     * @param {string} zdfjy - 多方交易类型ID（可选）
-     */
     /**
      * 根据 ProcessConfig 配置分别更新 businessTable1、businessTable2、businessTable3 对应的数据表（覆盖更新）
      * @param {Object} [tx] - 事务对象（可选）

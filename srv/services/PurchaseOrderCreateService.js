@@ -254,7 +254,7 @@ class PurchaseOrderService {
                 case 'SD01':
                     poItemNumber = item.PIOrderItem;
                     material = item.Material || "";
-                    netPriceAmount = item.PurchasePrice ? parseFloat(item.PurchasePrice) : 0;
+                    netPriceAmount = parseFloat((item.PurchasePrice ? parseFloat(item.PurchasePrice) : 0).toFixed(2));
                     unitOfMeasure = item.RequestedQuantityUnit;
                     break;
                 case 'SD04':
@@ -263,7 +263,7 @@ class PurchaseOrderService {
                     const netAmount = item.NetAmount ? parseFloat(item.NetAmount) : 0;
                     const requestedQty = item.RequestedQuantity ? parseFloat(item.RequestedQuantity) : 1;
                     const zjgbl = mptStepConfig?.zjgbl ? parseFloat(mptStepConfig.zjgbl) : 100;
-                    netPriceAmount = requestedQty > 0 ? (netAmount / requestedQty) * (zjgbl / 100) : 0;
+                    netPriceAmount = parseFloat(((requestedQty > 0 ? (netAmount / requestedQty) * (zjgbl / 100) : 0)).toFixed(2));
                     // SD04 需要通过物料主数据 API 获取单位
                     const baseUnit = await this.getMaterialBaseUnit(material);
                     unitOfMeasure = baseUnit || "EA";
@@ -273,7 +273,7 @@ class PurchaseOrderService {
                     material = item.Material || "";
                     const zp00Value = item.ZP00_Value ? parseFloat(item.ZP00_Value) : 0;
                     const sd06Zjgbl = mptStepConfig?.zjgbl ? parseFloat(mptStepConfig.zjgbl) : 100;
-                    netPriceAmount = zp00Value * (sd06Zjgbl / 100);
+                    netPriceAmount = parseFloat((zp00Value * (sd06Zjgbl / 100)).toFixed(2));
                     unitOfMeasure = item.RequestedQuantityUnit;
                     break;
                 case 'SD08': {
@@ -282,10 +282,10 @@ class PurchaseOrderService {
                     unitOfMeasure = item.RequestedQuantityUnit;
                     const step = parseInt(canum);
                     if (step === 10) {
-                        netPriceAmount = item.PurchasePrice ? parseFloat(item.PurchasePrice) : 0;
+                        netPriceAmount = parseFloat((item.PurchasePrice ? parseFloat(item.PurchasePrice) : 0).toFixed(2));
                     } else if (step === 40) {
                         const sd08Zjgbl = mptStepConfig?.zjgbl ? parseFloat(mptStepConfig.zjgbl) : 100;
-                        netPriceAmount = (item.PurchasePrice ? parseFloat(item.PurchasePrice) : 0) * (sd08Zjgbl / 100);
+                        netPriceAmount = parseFloat(((item.PurchasePrice ? parseFloat(item.PurchasePrice) : 0) * (sd08Zjgbl / 100)).toFixed(2));
                     } 
                     break;
                 }
@@ -318,8 +318,8 @@ class PurchaseOrderService {
                 _PurOrdPricingElement: (() => {
                     const pricingElements = [];
                     
-                    // PMP0 定价条件（不受 taxFreightAmt 影响）
-                    if (item.PurchasePrice) {
+                    // PMP0 定价条件
+                    if (netPriceAmount) {
                         pricingElements.push({
                             PurchaseOrderItem: poItemNumber,
                             ConditionType: "PMP0",
@@ -328,7 +328,7 @@ class PurchaseOrderService {
                         });
                     }
                     
-                    // ZQU1/ZQU2 定价条件（受 taxFreightAmt 影响）
+                    // ZQU1/ZQU2 定价条件
                     if (mptStepConfig?.taxFreightAmt) {
                         pricingElements.push({
                             PurchaseOrderItem: poItemNumber,

@@ -34,7 +34,12 @@
     "watch-multi-log-hybrid": "cds watch --profile hybrid --open multilog/index.html?sap-ui-xx-viewCache=false --livereload false",
     "watch-transfer": "cds watch --open transfer/index.html?sap-ui-xx-viewCache=false --livereload false",
     "watch-outbounddelivery": "cds watch --open outbounddelivery/index.html?sap-ui-xx-viewCache=false --livereload false",
-    "watch-paymentreceipt": "cds watch --open paymentreceipt/index.html?sap-ui-xx-viewCache=false --livereload false"
+    "watch-paymentreceipt": "cds watch --open paymentreceipt/index.html?sap-ui-xx-viewCache=false --livereload false",
+    "watch-apilog": "cds watch --open apilog/index.html?sap-ui-xx-viewCache=false --livereload false",
+    "watch-socreate": "cds watch --open socreate/index.html?sap-ui-xx-viewCache=false --livereload false",
+    "watch-sochange": "cds watch --open sochange/index.html?sap-ui-xx-viewCache=false --livereload false",
+    "watch-dninfo": "cds watch --open dninfo/index.html?sap-ui-xx-viewCache=false --livereload false",
+    "watch-pitransfer": "cds watch --open pitransfer/index.html?sap-ui-xx-viewCache=false --livereload false"
   },
   "cds": {
     "requires": {
@@ -44,7 +49,10 @@
       }
     },
     "server": {
-      "welcome": true
+      "welcome": true,
+      "body_parser": {
+        "limit": "10mb"
+      }
     },
     "services": {
       "MultistepLogService": {
@@ -62,7 +70,12 @@
     "app/multi-log",
     "app/transfer",
     "app/outbounddelivery",
-    "app/paymentreceipt"
+    "app/paymentreceipt",
+    "app/apilog",
+    "app/socreate",
+    "app/sochange",
+    "app/dninfo",
+    "app/pitransfer"
   ],
   "devDependencies": {
     "cds-plugin-ui5": "^0.13.0"

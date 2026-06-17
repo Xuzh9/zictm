@@ -7,7 +7,7 @@ annotate service.PISalesOrderRel with @(
             TypeName: 'PI销售订单关系表',
             TypeNamePlural: 'PI销售订单关系列表'
         },
-        SelectionFields: [PIOrder,SalesOrder,PurchaseOrder1,SalesOrder1,PurchaseOrder2,SalesOrder2,ProductionOrder],
+        SelectionFields: [PIOrder,SalesOrder,PurchaseOrder1,SalesOrder1,PurchaseOrder2,SalesOrder2,ProductionOrder,code],
         LineItem: [
             { $Type: 'UI.DataField', Label: 'PI单号', Value: PIOrder },
             { $Type: 'UI.DataField', Label: 'PI单行号', Value: PIOrderItem },
@@ -20,7 +20,9 @@ annotate service.PISalesOrderRel with @(
             { $Type: 'UI.DataField', Label: '采购订单行号1', Value: PurchaseOrderItem1 },
             { $Type: 'UI.DataField', Label: '销售订单号1', Value: SalesOrder1 },
             { $Type: 'UI.DataField', Label: '销售订单行号1', Value: SalesOrderItem1 },
-            { $Type: 'UI.DataField', Label: '生产订单', Value: ProductionOrder }
+            { $Type: 'UI.DataField', Label: '生产订单', Value: ProductionOrder },
+            { $Type: 'UI.DataField', Label: '消息状态', Value: code },
+            { $Type: 'UI.DataField', Label: '消息文本', Value: message },
         ],
         Identification: [
             { $Type: 'UI.DataField', Label: 'PI单号', Value: PIOrder },
@@ -38,7 +40,9 @@ annotate service.PISalesOrderRel with @(
             { $Type: 'UI.DataField', Label: '采购订单行号2', Value: PurchaseOrderItem2 },
             { $Type: 'UI.DataField', Label: '销售订单号2', Value: SalesOrder2 },
             { $Type: 'UI.DataField', Label: '销售订单行号2', Value: SalesOrderItem2 },
-            { $Type: 'UI.DataField', Label: '生产订单', Value: ProductionOrder }
+            { $Type: 'UI.DataField', Label: '生产订单', Value: ProductionOrder },
+            { $Type: 'UI.DataField', Label: '消息状态', Value: code },
+            { $Type: 'UI.DataField', Label: '消息文本', Value: message },
         ],
         Facets: [
             { $Type: 'UI.ReferenceFacet', Label: '基本信息', Target: '@UI.Identification' }

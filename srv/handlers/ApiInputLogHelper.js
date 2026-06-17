@@ -14,19 +14,22 @@ class ApiInputLogHelper {
         const id = cds.utils.uuid();
         
         let inputDataStr = JSON.stringify(inputData);
-        if (inputDataStr.length > 1000) {
-            inputDataStr = inputDataStr.substring(0, 1000) + '...';
+
+        try {
+            await cds.run(
+                INSERT.into(ApiInputLog).entries({
+                    id: id,
+                    inputData: inputDataStr,
+                    code: errorMessage ? 'E' : 'S',
+                    message: errorMessage || '入参处理成功',
+                    executionAt: new Date()
+                })
+            );
+            console.log(`ApiInputLog 保存成功: id=${id}`);
+        } catch (error) {
+            console.error(`ApiInputLog 保存失败: ${error.message}`);
+            // 即使保存失败，也要返回生成的 id，方便追踪
         }
-        
-        await cds.run(
-            INSERT.into(ApiInputLog).entries({
-                id: id,
-                inputData: inputDataStr,
-                code: errorMessage ? 'E' : 'S',
-                message: errorMessage || '入参处理成功',
-                executionAt: new Date()
-            })
-        );
         
         return id;
     }

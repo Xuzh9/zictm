@@ -3,6 +3,9 @@ const { SELECT } = cds.ql;
 const { executeHttpRequest } = require('@sap-cloud-sdk/http-client');
 const CommonUtils = require('../handlers/CommonUtils');
 
+// 简单的延迟函数
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 class DeliveryOrderPostingService {
     constructor() {
         this.zrfcLogid = null;
@@ -144,6 +147,10 @@ class DeliveryOrderPostingService {
             console.log(`[DeliveryOrderPostingService] 请求头:`, requestHeaders);
             
             // 调用交货单过账 API
+            // 等待 0.5 秒，确保交货单修改完成后再执行过账（避免 SAP 锁定问题）
+            console.log('[DeliveryOrderPostingService] 等待 500ms 确保交货单解锁...');
+            await sleep(500);
+            
             const result = await executeHttpRequest(
                 {
                     destinationName: this.commonUtils.getDestinationName()

@@ -17,3 +17,13 @@ using from './router/transfer/annotations';
 using from './router/outbounddelivery/annotations';
 
 using from './router/paymentreceipt/annotations';
+
+using from './router/apilog/annotations';
+
+using from './router/socreate/annotations';
+
+using from './router/sochange/annotations';
+
+using from './router/dninfo/annotations';
+
+using from './router/pitransfer/annotations';

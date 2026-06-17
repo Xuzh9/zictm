@@ -7,7 +7,7 @@ annotate service.PaymentReceipt with @(
             TypeName: '收付款单',
             TypeNamePlural: '收付款单列表'
         },
-        SelectionFields: [paymentReceiptNo,businessDate,documentType,receivingUnit,incomeExpenseType,zrfcid,zrfc_logid],
+        SelectionFields: [paymentReceiptNo,businessDate,documentType,receivingUnit,incomeExpenseType,code,zrfcid,zrfc_logid],
         LineItem: [
             { $Type: 'UI.DataField', Label: '单据编号', Value: paymentReceiptNo },
             { $Type: 'UI.DataField', Label: '单据行号', Value: paymentReceiptNoItem },
@@ -37,7 +37,9 @@ annotate service.PaymentReceipt with @(
             { $Type: 'UI.DataField', Label: '金融交易类型', Value: financialTransactionType },
             { $Type: 'UI.DataField', Label: '会计凭证号', Value: AccountingDocument },
             { $Type: 'UI.DataField', Label: '业务流程ID', Value: zrfcid },
-            { $Type: 'UI.DataField', Label: '多步ID', Value: zrfc_logid }
+            { $Type: 'UI.DataField', Label: '多步ID', Value: zrfc_logid },
+            { $Type: 'UI.DataField', Label: '消息状态', Value: code },
+            { $Type: 'UI.DataField', Label: '消息文本', Value: message },
         ],
         Identification: [
             { $Type: 'UI.DataField', Label: '单据编号', Value: paymentReceiptNo },
@@ -68,7 +70,9 @@ annotate service.PaymentReceipt with @(
             { $Type: 'UI.DataField', Label: '金融交易类型', Value: financialTransactionType },
             { $Type: 'UI.DataField', Label: '会计凭证号', Value: AccountingDocument },
             { $Type: 'UI.DataField', Label: '业务流程ID', Value: zrfcid },
-            { $Type: 'UI.DataField', Label: '多步ID', Value: zrfc_logid }
+            { $Type: 'UI.DataField', Label: '多步ID', Value: zrfc_logid },
+            { $Type: 'UI.DataField', Label: '消息状态', Value: code },
+            { $Type: 'UI.DataField', Label: '消息文本', Value: message },
         ],
         // 详情页面板
         Facets: [
