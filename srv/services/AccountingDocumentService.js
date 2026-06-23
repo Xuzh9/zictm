@@ -1,6 +1,5 @@
 const cds = require('@sap/cds');
 const { SELECT, UPDATE } = cds.ql;
-const { executeHttpRequest } = require('@sap-cloud-sdk/http-client');
 const CommonUtils = require('../handlers/CommonUtils');
 
 // --------------------------
@@ -79,7 +78,7 @@ class AccountingDocumentService {
                 console.log('开始调用 SOAP 接口 journalentrycreaterequestconfi...');
                 console.log('SOAP 请求数据:', soapRequest);
                 
-                const result = await executeHttpRequest(
+                const result = await this.commonUtils.executeHttpRequestWithRetry(
                     {
                         destinationName: this.commonUtils.getDestinationName()
                     },
@@ -221,7 +220,7 @@ class AccountingDocumentService {
 
     async getProfitCenter(costCenter) {
         try {
-            const result = await executeHttpRequest(
+            const result = await this.commonUtils.executeHttpRequestWithRetry(
                 { destinationName: this.commonUtils.getDestinationName() },
                 {
                     method: 'GET',

@@ -1,6 +1,5 @@
 const cds = require('@sap/cds');
 const { SELECT } = cds.ql;
-const { executeHttpRequest } = require('@sap-cloud-sdk/http-client');
 const CommonUtils = require('../handlers/CommonUtils');
 
 // 简单的延迟函数
@@ -109,7 +108,7 @@ class DeliveryOrderPostingService {
             console.log(`[DeliveryOrderPostingService] 获取 CSRF token URL: ${csrfUrl}`);
 
             // 获取 CSRF token（同时获取 ETag）
-            const csrfResult = await executeHttpRequest(
+            const csrfResult = await this.commonUtils.executeHttpRequestWithRetry(
                 {
                     destinationName: this.commonUtils.getDestinationName()
                 },
@@ -151,7 +150,7 @@ class DeliveryOrderPostingService {
             console.log('[DeliveryOrderPostingService] 等待 500ms 确保交货单解锁...');
             await sleep(500);
             
-            const result = await executeHttpRequest(
+            const result = await this.commonUtils.executeHttpRequestWithRetry(
                 {
                     destinationName: this.commonUtils.getDestinationName()
                 },

@@ -1,6 +1,5 @@
 const cds = require('@sap/cds');
 const { SELECT } = cds.ql;
-const { executeHttpRequest } = require('@sap-cloud-sdk/http-client');
 const CommonUtils = require('../handlers/CommonUtils');
 
 class InboundDeliveryPutawayService {
@@ -81,7 +80,7 @@ class InboundDeliveryPutawayService {
             const csrfUrl = `${apiPath}/A_InbDeliveryHeader('${deliveryDocument}')`;
             console.log('[InboundDeliveryPutawayService] 获取 CSRF token URL:', csrfUrl);
 
-            const csrfResult = await executeHttpRequest(
+            const csrfResult = await this.commonUtils.executeHttpRequestWithRetry(
                 {
                     destinationName: this.commonUtils.getDestinationName()
                 },
@@ -119,7 +118,7 @@ class InboundDeliveryPutawayService {
                 const itemEtagUrl = `${apiPath}/A_InbDeliveryItem(DeliveryDocument='${deliveryDocument}',DeliveryDocumentItem='${deliveryDocumentItem}')`;
                 let itemEtag; 
                 try {
-                    const itemEtagResult = await executeHttpRequest(
+                    const itemEtagResult = await this.commonUtils.executeHttpRequestWithRetry(
                         {
                             destinationName: this.commonUtils.getDestinationName()
                         },
@@ -161,7 +160,7 @@ class InboundDeliveryPutawayService {
                 };
 
                 // 调用 PutawayOneItem API
-                const result = await executeHttpRequest(
+                const result = await this.commonUtils.executeHttpRequestWithRetry(
                     {
                         destinationName: 'ES_API'
                     },

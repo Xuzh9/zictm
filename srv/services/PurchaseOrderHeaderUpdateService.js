@@ -1,5 +1,4 @@
 const cds = require('@sap/cds');
-const { executeHttpRequest } = require('@sap-cloud-sdk/http-client');
 const CommonUtils = require('../handlers/CommonUtils');
 
 class PurchaseOrderHeaderUpdateService {
@@ -71,7 +70,7 @@ class PurchaseOrderHeaderUpdateService {
             }
 
             // 获取 CSRF token（使用 OData V2 格式）
-            const csrfResult = await executeHttpRequest(
+            const csrfResult = await this.commonUtils.executeHttpRequestWithRetry(
                 {
                     destinationName: this.commonUtils.getDestinationName()
                 },
@@ -94,7 +93,7 @@ class PurchaseOrderHeaderUpdateService {
             console.log('修改数据:', JSON.stringify(updateData, null, 2));
 
             // 调用采购订单修改 API（OData V2 格式）
-            const result = await executeHttpRequest(
+            const result = await this.commonUtils.executeHttpRequestWithRetry(
                 {
                     destinationName: this.commonUtils.getDestinationName()
                 },

@@ -1,6 +1,5 @@
 const cds = require('@sap/cds');
 const { SELECT } = cds.ql;
-const { executeHttpRequest } = require('@sap-cloud-sdk/http-client');
 const CommonUtils = require('../handlers/CommonUtils');
 
 class MaterialDocumentService {
@@ -60,7 +59,7 @@ class MaterialDocumentService {
             const materialDocData = await this.buildMaterialDocumentData(businessDataList, zrfcid);
  
             // 使用 SAP Cloud SDK 的 executeHttpRequest 方法获取 CSRF token
-            const csrfResult = await executeHttpRequest(
+            const csrfResult = await this.commonUtils.executeHttpRequestWithRetry(
                 {
                     destinationName: this.commonUtils.getDestinationName()
                 },
@@ -82,7 +81,7 @@ class MaterialDocumentService {
             
             console.log('[MaterialDocumentService] 物料凭证API调用请求JSON:', JSON.stringify(materialDocData, null, 2));
             
-            const result = await executeHttpRequest(
+            const result = await this.commonUtils.executeHttpRequestWithRetry(
                 {
                     destinationName: this.commonUtils.getDestinationName()
                 },
@@ -468,7 +467,7 @@ class MaterialDocumentService {
                 
                 console.log('[MaterialDocumentService] queryBatchStockForMaterials - 查询URL:', url);
 
-                const result = await executeHttpRequest(
+                const result = await this.commonUtils.executeHttpRequestWithRetry(
                     {
                         destinationName: this.commonUtils.getDestinationName()
                     },

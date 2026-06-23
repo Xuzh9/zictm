@@ -1,5 +1,4 @@
 const cds = require('@sap/cds');
-const { executeHttpRequest } = require('@sap-cloud-sdk/http-client');
 const CommonUtils = require('../handlers/CommonUtils');
 
 class SalesOrderPricingUpdateService {
@@ -99,7 +98,7 @@ class SalesOrderPricingUpdateService {
                     const itemPricingUrl = `/sap/opu/odata/sap/API_SALES_ORDER_SRV/A_SalesOrderItem(SalesOrder='${mappingSalesOrder}',SalesOrderItem='${salesOrderItem}')/to_PricingElement?$filter=ConditionType eq '${conditionType}'`;
                     console.log('查询定价元素 URL:', itemPricingUrl);
                     
-                    const pricingResult = await executeHttpRequest(
+                    const pricingResult = await this.commonUtils.executeHttpRequestWithRetry(
                         {
                             destinationName: this.commonUtils.getDestinationName()
                         },
@@ -166,7 +165,7 @@ class SalesOrderPricingUpdateService {
                         
                         console.log('更新数据:', JSON.stringify(updateData));
 
-                        const result = await executeHttpRequest(
+                        const result = await this.commonUtils.executeHttpRequestWithRetry(
                             {
                                 destinationName: this.commonUtils.getDestinationName()
                             },
@@ -549,7 +548,7 @@ class SalesOrderPricingUpdateService {
             const itemPricingUrl = `/sap/opu/odata/sap/API_SALES_ORDER_SRV/A_SalesOrder('${salesOrderNumber}')/to_Item`;
             console.log('查询销售订单行项目 URL:', itemPricingUrl);
             
-            const response = await executeHttpRequest(
+            const response = await this.commonUtils.executeHttpRequestWithRetry(
                 {
                     destinationName: this.commonUtils.getDestinationName()
                 },

@@ -11,7 +11,7 @@ annotate service.MultistepHeadLog with @(
             TypeName: '多步日志',
             TypeNamePlural: '多步日志列表'
         },
-        SelectionFields: [zrfc_logid, zrfcid, code],
+        SelectionFields: [zrfc_logid,zrfcid,code,lastExecutionAt],
 
         LineItem: [
             { $Type: 'UI.DataField', Label: '多步ID', Value: zrfc_logid, Editable: false },

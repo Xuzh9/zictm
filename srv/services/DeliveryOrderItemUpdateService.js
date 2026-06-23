@@ -1,6 +1,5 @@
 const cds = require('@sap/cds');
 const { SELECT } = cds.ql;
-const { executeHttpRequest } = require('@sap-cloud-sdk/http-client');
 const CommonUtils = require('../handlers/CommonUtils');
 
 class DeliveryOrderItemUpdateService {
@@ -127,7 +126,7 @@ class DeliveryOrderItemUpdateService {
 
                 // GET 获取行项目数据（同时获取 CSRF token 和 etag）
                 console.log('[DeliveryOrderItemUpdateService] 获取行项目数据:', itemUrl);
-                const getResult = await executeHttpRequest(
+                const getResult = await this.commonUtils.executeHttpRequestWithRetry(
                     {
                         destinationName: this.commonUtils.getDestinationName()
                     },
@@ -193,7 +192,7 @@ class DeliveryOrderItemUpdateService {
                 console.log('[DeliveryOrderItemUpdateService] 更新数据:', JSON.stringify(updateData));
 
                 // PATCH 更新行项目
-                const patchResult = await executeHttpRequest(
+                const patchResult = await this.commonUtils.executeHttpRequestWithRetry(
                     {
                         destinationName: this.commonUtils.getDestinationName()
                     },
@@ -252,7 +251,7 @@ class DeliveryOrderItemUpdateService {
             const poUrl = `/sap/opu/odata4/sap/api_purchaseorder_2/srvd_a2x/sap/purchaseorder/0001/PurchaseOrderItem/${purchaseOrder}/${itemDeliveryAddress}`;
             console.log(`[DeliveryOrderItemUpdateService] 获取采购订单库存地点: ${poUrl}`);
 
-            const result = await executeHttpRequest(
+            const result = await this.commonUtils.executeHttpRequestWithRetry(
                 {
                     destinationName: this.commonUtils.getDestinationName()
                 },

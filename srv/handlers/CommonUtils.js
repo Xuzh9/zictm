@@ -1,8 +1,62 @@
 const cds = require('@sap/cds');
 const { SELECT, INSERT, UPDATE, DELETE } = cds.ql;
+const { executeHttpRequest } = require('@sap-cloud-sdk/http-client');
 
 class CommonUtils {
     constructor() {
+    }
+
+    /**
+     * 带重试机制的 HTTP 请求（自动处理 503 错误）
+     * @param {Object} destinationConfig - 目的地配置
+     * @param {Object} requestConfig - 请求配置
+     * @param {number} maxRetries - 最大重试次数（默认 3）
+     * @param {number} retryDelay - 重试间隔毫秒（默认 1000）
+     * @returns {Promise<Object>} - 请求结果
+     */
+    async executeHttpRequestWithRetry(destinationConfig, requestConfig, maxRetries = 3, retryDelay = 1000) {
+        let lastError = null;
+        
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                const result = await executeHttpRequest(destinationConfig, requestConfig);
+                
+                // 检查是否是 503 错误
+                if (result.status === 503) {
+                    console.warn(`[CommonUtils.executeHttpRequestWithRetry] HTTP 503 错误，第 ${attempt} 次尝试，等待 ${retryDelay}ms 后重试...`);
+                    
+                    if (attempt < maxRetries) {
+                        await new Promise(resolve => setTimeout(resolve, retryDelay));
+                        continue;
+                    }
+                    
+                    // 最后一次尝试仍然失败
+                    lastError = new Error(`HTTP 503 Service Unavailable (重试 ${maxRetries} 次后仍失败)`);
+                    lastError.status = 503;
+                    lastError.data = result.data;
+                    throw lastError;
+                }
+                
+                return result;
+            } catch (error) {
+                // 检查是否是 503 错误（可能在 catch 中捕获）
+                if (error.status === 503 || error.message?.includes('503')) {
+                    console.warn(`[CommonUtils.executeHttpRequestWithRetry] HTTP 503 错误，第 ${attempt} 次尝试，等待 ${retryDelay}ms 后重试...`);
+                    
+                    if (attempt < maxRetries) {
+                        await new Promise(resolve => setTimeout(resolve, retryDelay));
+                        lastError = error;
+                        continue;
+                    }
+                }
+                
+                // 非 503 错误直接抛出
+                throw error;
+            }
+        }
+        
+        // 所有重试都失败
+        throw lastError || new Error('HTTP 请求失败');
     }
 
     /**

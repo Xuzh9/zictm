@@ -7,7 +7,7 @@ annotate service.Transfer with @(
             TypeName: '调拨单',
             TypeNamePlural: '调拨单列表'
         },
-        SelectionFields: [TransferOrder,Material,Plant,Customer,code,zrfcid,zrfc_logid],
+        SelectionFields: [TransferOrder,Material,Plant,Customer,PostingDate,code,zrfcid,zrfc_logid],
         // 列表展示字段（表格列）
         LineItem: [
             { $Type: 'UI.DataField', Label: '调拨单', Value: TransferOrder },
@@ -21,9 +21,10 @@ annotate service.Transfer with @(
             { $Type: 'UI.DataField', Label: '移动类型', Value: GoodsMovementType },
             { $Type: 'UI.DataField', Label: '数量', Value: QuantityInBaseUnit },
             { $Type: 'UI.DataField', Label: '收货/发货库存地点', Value: IssuingOrReceivingStorageLoc },
+            { $Type: 'UI.DataField', Label: '物料凭证号&&年度', Value: MaterialDocument },
             { $Type: 'UI.DataField', Label: '业务流程ID', Value: zrfcid },
             { $Type: 'UI.DataField', Label: '多步ID', Value: zrfc_logid },
-             { $Type: 'UI.DataField', Label: '消息状态', Value: code },
+            { $Type: 'UI.DataField', Label: '消息状态', Value: code },
             { $Type: 'UI.DataField', Label: '消息文本', Value: message },
         ],
         // 详情页标识字段
@@ -39,6 +40,7 @@ annotate service.Transfer with @(
             { $Type: 'UI.DataField', Label: '移动类型', Value: GoodsMovementType },
             { $Type: 'UI.DataField', Label: '数量', Value: QuantityInBaseUnit },
             { $Type: 'UI.DataField', Label: '收货/发货库存地点', Value: IssuingOrReceivingStorageLoc },
+            { $Type: 'UI.DataField', Label: '物料凭证号&&年度', Value: MaterialDocument },
             { $Type: 'UI.DataField', Label: '业务流程ID', Value: zrfcid },
             { $Type: 'UI.DataField', Label: '多步ID', Value: zrfc_logid },
             { $Type: 'UI.DataField', Label: '消息状态', Value: code },

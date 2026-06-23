@@ -70,6 +70,9 @@ service ReportService {
     entity Transfer as select from db.Transfer
         left outer join db.MultistepHeadLog
             on Transfer.zrfc_logid = MultistepHeadLog.zrfc_logid
+        left outer join db.MultistepLog
+            on Transfer.zrfc_logid = MultistepLog.zrfc_logid
+            and MultistepLog.canum = 10
         {
             key Transfer.TransferOrder,
             key Transfer.TransferOrderItem,
@@ -84,8 +87,9 @@ service ReportService {
             Transfer.IssuingOrReceivingStorageLoc,
             Transfer.zrfcid,
             Transfer.zrfc_logid,
+            MultistepLog.objkey as MaterialDocument,
             MultistepHeadLog.code,
-            MultistepHeadLog.message
+            MultistepHeadLog.message,
         };
 
     /**
@@ -160,7 +164,7 @@ service ReportService {
             PaymentReceipt.zrfcid,
             PaymentReceipt.zrfc_logid,
             MultistepHeadLog.code,
-            MultistepHeadLog.message
+            MultistepHeadLog.message,
         };
 
     /**

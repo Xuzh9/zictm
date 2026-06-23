@@ -1,6 +1,5 @@
 const cds = require('@sap/cds');
 const { SELECT, UPDATE, INSERT } = cds.ql;
-const { executeHttpRequest } = require('@sap-cloud-sdk/http-client');
 const CommonUtils = require('../handlers/CommonUtils');
 
 class PurchaseOrderService {
@@ -55,7 +54,7 @@ class PurchaseOrderService {
             console.log('[PurchaseOrderService] 请求数据:', JSON.stringify(purchaseOrderData, null, 2));
  
             // 获取 CSRF token
-            const csrfResult = await executeHttpRequest(
+            const csrfResult = await this.commonUtils.executeHttpRequestWithRetry(
                 {
                     destinationName: this.commonUtils.getDestinationName()
                 },
@@ -83,7 +82,7 @@ class PurchaseOrderService {
             });
             
             // 直接传递对象，跟 MaterialDocumentService 保持一致
-            const result = await executeHttpRequest(
+            const result = await this.commonUtils.executeHttpRequestWithRetry(
                 {
                     destinationName: this.commonUtils.getDestinationName()
                 },
@@ -506,7 +505,7 @@ class PurchaseOrderService {
             const url = `/sap/opu/odata/sap/API_PRODUCT_SRV/A_Product('${materialNumber}')`;
             console.log('[PurchaseOrderCreateService] 查询物料主数据:', url);
             
-            const response = await executeHttpRequest({
+            const response = await this.commonUtils.executeHttpRequestWithRetry({
                 destinationName: this.commonUtils.getDestinationName()
             }, {
                 method: 'GET',

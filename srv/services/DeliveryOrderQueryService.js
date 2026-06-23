@@ -1,5 +1,4 @@
 const cds = require('@sap/cds');
-const { executeHttpRequest } = require('@sap-cloud-sdk/http-client');
 const CommonUtils = require('../handlers/CommonUtils');
 
 class DeliveryOrderQueryService {
@@ -167,7 +166,7 @@ class DeliveryOrderQueryService {
 
         for (let retryCount = 0; retryCount < maxRetries; retryCount++) {
             try {
-                const result = await executeHttpRequest(
+                const result = await this.commonUtils.executeHttpRequestWithRetry(
                     {
                         destinationName: this.commonUtils.getDestinationName()
                     },

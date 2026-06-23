@@ -19,7 +19,8 @@
     "lodash": "^4.18.1"
   },
   "scripts": {
-    "start": "node node_modules/@sap/cds-dk/bin/cds.js run",
+    "start": "node server.js",
+    "start:cds": "node node_modules/@sap/cds-dk/bin/cds.js run",
     "undeploy": "cf undeploy zictm --delete-services --delete-service-keys --delete-service-brokers",
     "build": "cds build --production",
     "build:mta": "mbt build --mtar archive",
@@ -34,12 +35,7 @@
     "watch-multi-log-hybrid": "cds watch --profile hybrid --open multilog/index.html?sap-ui-xx-viewCache=false --livereload false",
     "watch-transfer": "cds watch --open transfer/index.html?sap-ui-xx-viewCache=false --livereload false",
     "watch-outbounddelivery": "cds watch --open outbounddelivery/index.html?sap-ui-xx-viewCache=false --livereload false",
-    "watch-paymentreceipt": "cds watch --open paymentreceipt/index.html?sap-ui-xx-viewCache=false --livereload false",
-    "watch-apilog": "cds watch --open apilog/index.html?sap-ui-xx-viewCache=false --livereload false",
-    "watch-socreate": "cds watch --open socreate/index.html?sap-ui-xx-viewCache=false --livereload false",
-    "watch-sochange": "cds watch --open sochange/index.html?sap-ui-xx-viewCache=false --livereload false",
-    "watch-dninfo": "cds watch --open dninfo/index.html?sap-ui-xx-viewCache=false --livereload false",
-    "watch-pitransfer": "cds watch --open pitransfer/index.html?sap-ui-xx-viewCache=false --livereload false"
+    "watch-paymentreceipt": "cds watch --open paymentreceipt/index.html?sap-ui-xx-viewCache=false --livereload false"
   },
   "cds": {
     "requires": {
@@ -49,35 +45,29 @@
       }
     },
     "server": {
-      "welcome": true,
-      "body_parser": {
-        "limit": "10mb"
-      }
+      "welcome": true
     },
-    "services": {
-      "MultistepLogService": {
-        "path": "/odata/v4/multistep-log"
-      }
-    }
-  },
-  "workspaces": [
+    "workspaces": [
     "app/*"
   ],
   "sapux": [
     "app/mpt",
     "app/multi-step",
     "app/multi-log",
-    "app/multi-log",
     "app/transfer",
     "app/outbounddelivery",
     "app/paymentreceipt",
-    "app/apilog",
+    "app/bank",
+    "app/dn-rel",
+    "app/so-rel",
+    "app/transfer",
+    "app/pitransfer",
     "app/socreate",
     "app/sochange",
-    "app/dninfo",
-    "app/pitransfer"
+    "app/dninfo"
   ],
   "devDependencies": {
     "cds-plugin-ui5": "^0.13.0"
   }
+}
 }

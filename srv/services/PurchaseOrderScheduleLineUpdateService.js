@@ -1,5 +1,4 @@
 const cds = require('@sap/cds');
-const { executeHttpRequest } = require('@sap-cloud-sdk/http-client');
 const CommonUtils = require('../handlers/CommonUtils');
 
 class PurchaseOrderScheduleLineUpdateService {
@@ -73,7 +72,7 @@ class PurchaseOrderScheduleLineUpdateService {
                 }
                 
                 // 获取 CSRF token 和 ETag（为每个计划行单独获取）
-                const csrfResult = await executeHttpRequest(
+                const csrfResult = await this.commonUtils.executeHttpRequestWithRetry(
                     {
                         destinationName: this.commonUtils.getDestinationName()
                     },
@@ -95,7 +94,7 @@ class PurchaseOrderScheduleLineUpdateService {
                 console.log('修改数据:', JSON.stringify(scheduleLineData, null, 2));
 
                 // 调用采购订单计划行修改 API
-                const result = await executeHttpRequest(
+                const result = await this.commonUtils.executeHttpRequestWithRetry(
                     {
                         destinationName: this.commonUtils.getDestinationName()
                     },

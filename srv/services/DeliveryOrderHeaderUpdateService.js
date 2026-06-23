@@ -1,6 +1,5 @@
 const cds = require('@sap/cds');
 const { SELECT } = cds.ql;
-const { executeHttpRequest } = require('@sap-cloud-sdk/http-client');
 const CommonUtils = require('../handlers/CommonUtils');
 
 class DeliveryOrderHeaderUpdateService {
@@ -117,7 +116,7 @@ class DeliveryOrderHeaderUpdateService {
             console.log(`[DeliveryOrderUpdateService] 获取 CSRF token URL: ${csrfUrl}`);
 
             // 获取 CSRF token（同时获取 ETag）
-            const csrfResult = await executeHttpRequest(
+            const csrfResult = await this.commonUtils.executeHttpRequestWithRetry(
                 {
                     destinationName: this.commonUtils.getDestinationName()
                 },
@@ -155,7 +154,7 @@ class DeliveryOrderHeaderUpdateService {
             };
 
             // 调用交货单修改 API
-            const result = await executeHttpRequest(
+            const result = await this.commonUtils.executeHttpRequestWithRetry(
                 {
                     destinationName: this.commonUtils.getDestinationName()
                 },

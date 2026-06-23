@@ -1,5 +1,4 @@
 const cds = require('@sap/cds');
-const { executeHttpRequest } = require('@sap-cloud-sdk/http-client');
 const CommonUtils = require('../handlers/CommonUtils');
 
 class DeliveryOrderCreateService {
@@ -203,7 +202,7 @@ class DeliveryOrderCreateService {
             }
 
             // 获取 CSRF token
-            const csrfResult = await executeHttpRequest(
+            const csrfResult = await this.commonUtils.executeHttpRequestWithRetry(
                 {
                     destinationName: this.commonUtils.getDestinationName()
                 },
@@ -227,7 +226,7 @@ class DeliveryOrderCreateService {
             console.log('交货单数据:', JSON.stringify(deliveryOrderData, null, 2));
 
             // 调用交货单创建 API（一次性创建一张交货单，含所有行项目）
-            const result = await executeHttpRequest(
+            const result = await this.commonUtils.executeHttpRequestWithRetry(
                 {
                     destinationName: this.commonUtils.getDestinationName()
                 },

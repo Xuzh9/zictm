@@ -1,5 +1,5 @@
 const cds = require('@sap/cds');
-const { executeHttpRequest } = require('@sap-cloud-sdk/http-client');
+
 const CommonUtils = require('../handlers/CommonUtils');
 
 class ProductionOrderCreateService {
@@ -71,7 +71,7 @@ class ProductionOrderCreateService {
             }
 
             // 获取 CSRF token（使用 OData V2 格式）
-            const csrfResult = await executeHttpRequest(
+            const csrfResult = await this.commonUtils.executeHttpRequestWithRetry(
                 {
                     destinationName: this.commonUtils.getDestinationName()
                 },
@@ -117,7 +117,7 @@ class ProductionOrderCreateService {
                 console.log('生产工单数据:', JSON.stringify(productionOrderData, null, 2));
 
                 // 调用生产工单创建 API（OData V2 格式）
-                const result = await executeHttpRequest(
+                const result = await this.commonUtils.executeHttpRequestWithRetry(
                     {
                         destinationName: this.commonUtils.getDestinationName()
                     },
@@ -413,7 +413,7 @@ class ProductionOrderCreateService {
             
             // 第一步：获取 CSRF token
             console.log('[ProductionOrderCreateService.callSalesGroupAPI] 开始获取 CSRF token...');
-            const csrfResult = await executeHttpRequest(
+            const csrfResult = await this.commonUtils.executeHttpRequestWithRetry(
                 { destinationName: this.commonUtils.getDestinationName() },
                 {
                     method: 'GET',
@@ -438,7 +438,7 @@ class ProductionOrderCreateService {
                 }
             };
             
-            const postResult = await executeHttpRequest(
+            const postResult = await this.commonUtils.executeHttpRequestWithRetry(
                 { destinationName: this.commonUtils.getDestinationName() },
                 {
                     method: 'POST',

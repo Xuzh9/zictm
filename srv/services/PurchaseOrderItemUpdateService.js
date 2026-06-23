@@ -1,5 +1,4 @@
 const cds = require('@sap/cds');
-const { executeHttpRequest } = require('@sap-cloud-sdk/http-client');
 const CommonUtils = require('../handlers/CommonUtils');
 
 class PurchaseOrderItemUpdateService {
@@ -73,7 +72,7 @@ class PurchaseOrderItemUpdateService {
                 }
                 
                 // 获取 CSRF token 和当前数据（包括 DocumentCurrency）
-                const csrfResult = await executeHttpRequest(
+                const csrfResult = await this.commonUtils.executeHttpRequestWithRetry(
                     {
                         destinationName: this.commonUtils.getDestinationName()
                     },
@@ -110,7 +109,7 @@ class PurchaseOrderItemUpdateService {
                 console.log('修改数据:', JSON.stringify(itemData, null, 2));
 
                 // 调用采购订单行项目修改 API
-                const result = await executeHttpRequest(
+                const result = await this.commonUtils.executeHttpRequestWithRetry(
                     {
                         destinationName: this.commonUtils.getDestinationName()
                     },

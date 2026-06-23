@@ -1,6 +1,5 @@
 const cds = require('@sap/cds');
 const { SELECT } = cds.ql;
-const { executeHttpRequest } = require('@sap-cloud-sdk/http-client');
 const CommonUtils = require('../handlers/CommonUtils');
 
 class DeliveryOrderBatchSplitService {
@@ -69,7 +68,7 @@ class DeliveryOrderBatchSplitService {
 
             // 获取 CSRF token 和交货单数据
             console.log('[DeliveryOrderBatchSplitService] 获取 CSRF token 和交货单数据:', apiUrl);
-            const csrfResult = await executeHttpRequest(
+            const csrfResult = await this.commonUtils.executeHttpRequestWithRetry(
                 { destinationName: this.commonUtils.getDestinationName() },
                 {
                     method: 'GET',
@@ -192,7 +191,7 @@ class DeliveryOrderBatchSplitService {
                     const itemUrl = `${apiPath}/A_OutbDeliveryItem(DeliveryDocument='${deliveryDocument}',DeliveryDocumentItem='${deliveryItem.DeliveryDocumentItem}')`;
                     let itemEtag = null;
                     try {
-                        const itemResult = await executeHttpRequest(
+                        const itemResult = await this.commonUtils.executeHttpRequestWithRetry(
                             { destinationName: this.commonUtils.getDestinationName() },
                             {
                                 method: 'GET',
@@ -228,7 +227,7 @@ class DeliveryOrderBatchSplitService {
                     console.log('[DeliveryOrderBatchSplitService] POST URL:', postUrl);
 
                     // POST 调用 /CreateBatchSplitItem（需要 token 和 etag）
-                    const createResult = await executeHttpRequest(
+                    const createResult = await this.commonUtils.executeHttpRequestWithRetry(
                         { destinationName: this.commonUtils.getDestinationName() },
                         {
                             method: 'POST',

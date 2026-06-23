@@ -55,48 +55,20 @@ class MultiStepProcessor {
                 }
             }
             
-            // 2. 先在事务外创建 MultistepHeadLog（确保即使业务表插入失败也能保存）
-            console.log('[MultiStepProcessor.processWithLogId] 先创建 MultistepHeadLog（事务外）');
-            const MultistepHeadLog = cds.entities['com.sap.zictm.MultistepHeadLog'];
-            const executionAt = new Date();
-            
-            // 先检查是否已存在
-            const existingHeadLog = await cds.run(
-                SELECT.one.from(MultistepHeadLog).where({ zrfc_logid: zrfcLogid })
-            );
-            
-            if (!existingHeadLog) {
-                // 不存在，执行插入 MultistepHeadLog
-                await cds.run(
-                    INSERT.into(MultistepHeadLog).entries({
-                        zrfc_logid: zrfcLogid,
-                        zrfcid: zrfcid,
-                        zdfjy: zdfjy || null,
-                        objkey: '',
-                        code: 'S',
-                        message: '处理中',
-                        executionAt: executionAt,
-                        lastExecutionAt: executionAt,
-                        id: id || null
-                    })
-                );
-                console.log('[MultiStepProcessor.processWithLogId] MultistepHeadLog 插入成功（事务外）');
-            } else {
-                console.log('[MultiStepProcessor.processWithLogId] MultistepHeadLog 已存在，跳过插入');
-            }
-            
-            // 3. 使用事务机制处理业务表和步骤日志
+            // 2. 使用事务机制处理业务表和步骤日志
             console.log('[MultiStepProcessor.processWithLogId] 使用事务机制处理业务表和步骤日志');
+            const executionAt = new Date();
             await cds.tx(async (tx) => {
                 const MultistepLog = cds.entities['com.sap.zictm.MultistepLog'];
+                const MultistepHeadLog = cds.entities['com.sap.zictm.MultistepHeadLog'];
                 
-                // 3.1 只有在非重推时才插入业务表数据
+                // 2.1 只有在非重推时才插入业务表数据
                 if (!isRetry) {
                     await this.insertBusinessDataByConfigWithTx(tx, processConfig, businessTable1, businessTable2, businessTable3, zrfcid, zrfcLogid, zdfjy);
                     console.log('[MultiStepProcessor.processWithLogId] 业务表插入成功');
                 }
                 
-                // 3.2 如果是重推且传入了业务表数据（数组），需要更新业务表
+                // 2.2 如果是重推且传入了业务表数据（数组），需要更新业务表
                 // 只有传入实际的业务数据数组时才更新，前台重推不更新表
                 if (isRetry && processConfig && businessTable1 && Array.isArray(businessTable1) && businessTable1.length > 0) {
                     console.log('[MultiStepProcessor.processWithLogId] 重推时更新业务表数据');
@@ -105,7 +77,7 @@ class MultiStepProcessor {
                     console.log('[MultiStepProcessor.processWithLogId] 重推时未传入业务数据，跳过业务表更新');
                 }
                 
-                // 4. 按顺序执行每个步骤（在事务内执行）
+                // 3. 按顺序执行每个步骤（在事务内执行）
                 // 先查询该 zrfcLogid 的所有日志记录，提高效率
                 const allLogs = await tx.run(
                     SELECT.from(MultistepLog).where({ zrfc_logid: zrfcLogid })
@@ -133,8 +105,10 @@ class MultiStepProcessor {
                     
                     // 如果日志存在且执行成功（code 为 'S'），跳过该步骤
                     if (existingLog && (existingLog.code === 'S' || existingLog.code === 's')) {
-                        // 更新上一步对象号，以便后续步骤使用
+                        // 更新上一步对象号、消息和代码，以便后续步骤使用
                         lastObjKey = existingLog.objkey || lastObjKey;
+                        lastMessage = existingLog.message || lastMessage;
+                        lastCode = existingLog.code || lastCode;
                         console.log('[MultiStepProcessor] 跳过步骤（已成功）:', step.canum);
                         continue;
                     }
@@ -156,7 +130,7 @@ class MultiStepProcessor {
                     await this.saveLog(tx, zrfcLogid, zrfcid, step.canum, {
                         ...executionResult,
                         message: logMessage
-                    }, executionTime, stepExecutionAt, isRetry, step.objtype, step.description, id, zdfjy);
+                    }, executionTime, stepExecutionAt, isRetry, step.objtype, step.description);
                     
                     // 更新上一步对象号、消息和代码
                     lastObjKey = executionResult.objkey || lastObjKey;
@@ -165,31 +139,43 @@ class MultiStepProcessor {
                     
                     // 如果当前步骤失败，停止执行后续步骤
                     if (executionResult.code === 'E') {
-                        // 更新抬头日志状态为失败
-                        await tx.run(
-                            UPDATE(MultistepHeadLog)
-                                .set({
-                                    code: 'E',
-                                    message: executionResult.message || '步骤执行失败',
-                                    lastExecutionAt: stepExecutionAt
-                                })
-                                .where({ zrfc_logid: zrfcLogid })
-                        );
+                        console.log('[MultiStepProcessor] 步骤失败，停止执行:', step.canum);
                         break;
                     }
                 }
                 
-                // 如果所有步骤都成功，更新抬头日志状态
-                if (lastCode === 'S' || lastCode === '') {
+                // 更新或插入抬头日志（与步骤日志保持同步）
+                console.log('[MultiStepProcessor.processWithLogId] 更新/插入抬头日志, lastCode:', lastCode, ', lastMessage:', lastMessage);
+                const existingHeadLog = await tx.run(
+                    SELECT.one.from(MultistepHeadLog).where({ zrfc_logid: zrfcLogid })
+                );
+                
+                if (existingHeadLog) {
+                    // 更新现有记录
                     await tx.run(
                         UPDATE(MultistepHeadLog)
                             .set({
-                                code: 'S',
-                                message: lastMessage || '处理成功',
+                                code: lastCode === 'E' ? 'E' : 'S',
+                                message: lastCode === 'E' ? (lastMessage || '处理失败') : (lastMessage || '处理成功'),
                                 objkey: lastObjKey,
                                 lastExecutionAt: executionAt
                             })
                             .where({ zrfc_logid: zrfcLogid })
+                    );
+                } else {
+                    // 插入新记录
+                    await tx.run(
+                        INSERT.into(MultistepHeadLog).entries({
+                            zrfc_logid: zrfcLogid,
+                            zrfcid: zrfcid,
+                            zdfjy: zdfjy || null,
+                            objkey: lastObjKey || '',
+                            code: lastCode === 'E' ? 'E' : 'S',
+                            message: lastCode === 'E' ? (lastMessage || '处理失败') : (lastMessage || '处理成功'),
+                            executionAt: executionAt,
+                            lastExecutionAt: executionAt,
+                            id: id || null
+                        })
                     );
                 }
             });
@@ -207,7 +193,7 @@ class MultiStepProcessor {
             await this.saveLog(null, zrfcLogid, zrfcid, '0', {
                 code: 'E',
                 message: errorMessage
-            }, 0, new Date(), isRetry, null, '', id);
+            }, 0, new Date(), isRetry);
 
             return {
                 code: 'E',
@@ -299,19 +285,16 @@ class MultiStepProcessor {
      * @param {boolean} isRetry - 是否为重推操作
      * @param {string} objtype - 对象类型（从StepConfig获取）
      * @param {string} description - 步骤描述（从StepConfig获取）
-     * @param {string} id - ApiInputLog的ID，用于与MultistepHeadLog关联
-     * @param {string} zdfjy - 多方交易类型ID
      */
-    async saveLog(tx, zrfcLogid, zrfcid, canum, executionResult, executionTime, executionAt, isRetry = false, objtype = null, description = null, id = null, zdfjy = null) {
+    async saveLog(tx, zrfcLogid, zrfcid, canum, executionResult, executionTime, executionAt, isRetry = false, objtype = null, description = null) {
         const MultistepLog = cds.entities['com.sap.zictm.MultistepLog'];
-        const MultistepHeadLog = cds.entities['com.sap.zictm.MultistepHeadLog'];
-         
+        
         // 截断 message 字段，确保不超过 5000 字符
         const truncatedMessage = executionResult.message ? executionResult.message.substring(0, 5000) : '';
 
         // 定义保存日志的核心逻辑
         const doSave = async (currentTx) => {
-            await this._saveLogInternal(currentTx, MultistepLog, MultistepHeadLog, zrfcLogid, zrfcid, canum, executionResult, truncatedMessage, executionTime, executionAt, isRetry, objtype, description, id, zdfjy);
+            await this._saveLogInternal(currentTx, MultistepLog, zrfcLogid, zrfcid, canum, executionResult, truncatedMessage, executionTime, executionAt, isRetry, objtype, description);
         };
 
         // 如果没有传入事务对象，创建一个新的独立事务来保存日志
@@ -327,7 +310,7 @@ class MultiStepProcessor {
     /**
      * 内部方法：保存日志的实际逻辑
      */
-    async _saveLogInternal(tx, MultistepLog, MultistepHeadLog, zrfcLogid, zrfcid, canum, executionResult, truncatedMessage, executionTime, executionAt, isRetry, objtype, description, id, zdfjy) {
+    async _saveLogInternal(tx, MultistepLog, zrfcLogid, zrfcid, canum, executionResult, truncatedMessage, executionTime, executionAt, isRetry, objtype, description) {
         // 检查日志是否已存在（主键为 zrfc_logid + canum）
         const existingLog = await tx.run(
             SELECT.one.from(MultistepLog)
@@ -373,62 +356,8 @@ class MultiStepProcessor {
                 })
             );
         }
-        
-        // 只有当不在事务中时才更新抬头日志（事务内由主流程统一更新）
-        if (!tx) {
-            await this.updateMultistepHeadLog(zrfcLogid, zrfcid, executionResult, executionAt, id, zdfjy);
-        }
     }
     
-    /**
-     * 更新多步执行日志抬头表
-     * @param {string} zrfcLogid - 多步ID
-     * @param {string} zrfcid - 业务流程ID
-     * @param {Object} executionResult - 执行结果
-     * @param {Date} executionAt - 执行时间戳
-     * @param {string} id - ApiInputLog的ID，用于与MultistepHeadLog关联（可选）
-     * @param {string} zdfjy - 多方交易类型ID（可选）
-     */
-    async updateMultistepHeadLog(zrfcLogid, zrfcid, executionResult, executionAt, id = null, zdfjy = null) {
-        const MultistepHeadLog = cds.entities['com.sap.zictm.MultistepHeadLog'];
-        
-        // 检查抬头日志是否已存在
-        const existingHeadLog = await cds.run(
-            SELECT.one.from(MultistepHeadLog)
-                .where({ zrfc_logid: zrfcLogid })
-        );
-        
-        if (existingHeadLog) {
-            // 如果抬头日志已存在，更新执行结果（executionAt 只在首次创建时设置）
-            await cds.run(
-                UPDATE(MultistepHeadLog)
-                    .set({
-                        id: existingHeadLog.id, // 保留原有的id（与ApiInputLog的关联不变）
-                        zrfcid: zrfcid,
-                        zdfjy: zdfjy || existingHeadLog.zdfjy, // 更新或保留原有的zdfjy
-                        code: executionResult.code,
-                        message: executionResult.message,
-                        lastExecutionAt: executionAt // 只更新最后执行时间
-                    })
-                    .where({ zrfc_logid: zrfcLogid })
-            );
-        } else {
-            // 如果抬头日志不存在，插入新记录（使用传入的id作为id）
-            await cds.run(
-                INSERT.into(MultistepHeadLog).entries({
-                    zrfc_logid: zrfcLogid,
-                    id: id, // 使用传入的id
-                    zrfcid: zrfcid,
-                    zdfjy: zdfjy,
-                    code: executionResult.code,
-                    message: executionResult.message,
-                    executionAt,
-                    lastExecutionAt: executionAt
-                })
-            );
-        }
-    }
-
     /**
      * 使用事务插入业务数据（按配置）
      * @param {Object} tx - 事务对象

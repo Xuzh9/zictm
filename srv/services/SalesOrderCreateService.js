@@ -1,6 +1,5 @@
 const cds = require('@sap/cds');
 const { SELECT, UPDATE, INSERT } = cds.ql;
-const { executeHttpRequest } = require('@sap-cloud-sdk/http-client');
 const CommonUtils = require('../handlers/CommonUtils');
 
 class SalesOrderCreateService {
@@ -117,7 +116,7 @@ class SalesOrderCreateService {
  
             // 获取 CSRF token
             console.log('[SalesOrderCreateService] 开始获取 CSRF token...');
-            const csrfResult = await executeHttpRequest(
+            const csrfResult = await this.commonUtils.executeHttpRequestWithRetry(
                 {
                     destinationName: this.commonUtils.getDestinationName()
                 },
@@ -138,7 +137,7 @@ class SalesOrderCreateService {
             
             // 调用销售订单创建 API
             console.log('[SalesOrderCreateService] 开始调用销售订单 API...');
-            const result = await executeHttpRequest(
+            const result = await this.commonUtils.executeHttpRequestWithRetry(
                 {
                     destinationName: this.commonUtils.getDestinationName()
                 },
