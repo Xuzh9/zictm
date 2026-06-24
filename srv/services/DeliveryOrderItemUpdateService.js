@@ -112,6 +112,32 @@ class DeliveryOrderItemUpdateService {
             let csrfToken = null;
             let cookieString = null;
 
+            // 获取 CSRF token（只获取一次）
+            const firstBusinessData = businessDataList.find(bd => bd.SalesOrderItem || bd.DeliveryDocumentItem);
+            if (firstBusinessData) {
+                const firstItemUrl = `${apiPath}/${itemEntity}(DeliveryDocument='${deliveryDocument}',DeliveryDocumentItem='${firstBusinessData.SalesOrderItem || firstBusinessData.DeliveryDocumentItem}')`;
+                console.log('[DeliveryOrderItemUpdateService] 获取 CSRF token:', firstItemUrl);
+                const csrfResult = await this.commonUtils.executeHttpRequestWithRetry(
+                    {
+                        destinationName: this.commonUtils.getDestinationName()
+                    },
+                    {
+                        method: 'GET',
+                        url: firstItemUrl,
+                        headers: {
+                            'X-CSRF-Token': 'Fetch',
+                            'sap-language': 'ZH'
+                        },
+                        validateStatus: function (status) {
+                            return true;
+                        }
+                    }
+                );
+                csrfToken = csrfResult.headers['x-csrf-token'];
+                cookieString = csrfResult.headers['set-cookie'] ? csrfResult.headers['set-cookie'].join('; ') : '';
+                console.log('[DeliveryOrderItemUpdateService] CSRF token 获取成功:', csrfToken);
+            }
+
             // 循环更新每个行项目
             for (const businessData of businessDataList) {
                 const deliveryDocumentItem = businessData.SalesOrderItem || businessData.DeliveryDocumentItem || '';
@@ -123,43 +149,6 @@ class DeliveryOrderItemUpdateService {
 
                 // 构建更新 URL
                 const itemUrl = `${apiPath}/${itemEntity}(DeliveryDocument='${deliveryDocument}',DeliveryDocumentItem='${deliveryDocumentItem}')`;
-
-                // GET 获取行项目数据（同时获取 CSRF token 和 etag）
-                console.log('[DeliveryOrderItemUpdateService] 获取行项目数据:', itemUrl);
-                const getResult = await this.commonUtils.executeHttpRequestWithRetry(
-                    {
-                        destinationName: this.commonUtils.getDestinationName()
-                    },
-                    {
-                        method: 'GET',
-                        url: itemUrl,
-                        headers: {
-                            'X-CSRF-Token': csrfToken ? csrfToken : 'Fetch',
-                            'Cookie': cookieString,
-                            'sap-language': 'ZH'
-                        },
-                        validateStatus: function (status) {
-                            return true;
-                        }
-                    }
-                );
-
-                // 第一次请求时获取 CSRF token 和 cookie
-                if (!csrfToken) {
-                    csrfToken = getResult.headers['x-csrf-token'];
-                    cookieString = getResult.headers['set-cookie'] ? getResult.headers['set-cookie'].join('; ') : '';
-                    console.log('[DeliveryOrderItemUpdateService] CSRF token 获取成功:', csrfToken);
-                }
-
-                // 获取 etag（SAP OData 的 If-Match header）
-                const etag = getResult.headers['etag'] || getResult.headers['Etag'];
-                console.log('[DeliveryOrderItemUpdateService] 获取到 etag:', etag);
-
-                if (getResult.status !== 200) {
-                    const errorMessage = this.parseError(getResult.data);
-                    console.error('[DeliveryOrderItemUpdateService] 获取行项目数据失败:', deliveryDocumentItem, errorMessage);
-                    continue;
-                }
 
                 // 构建更新数据
                 const updateData = {};
@@ -204,7 +193,7 @@ class DeliveryOrderItemUpdateService {
                             'Cookie': cookieString,
                             'Accept': 'application/json',
                             'sap-language': 'ZH',
-                            'If-Match': etag || '*'
+                            'If-Match': '*'
                         },
                         data: updateData,
                         validateStatus: function (status) {

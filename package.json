@@ -45,7 +45,10 @@
       }
     },
     "server": {
-      "welcome": true
+      "welcome": true,
+      "body_parser": {
+        "limit": "10mb"
+      }
     },
     "workspaces": [
     "app/*"

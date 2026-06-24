@@ -7,7 +7,7 @@ modules:
   - name: zictm-srv
     parameters:
       disk-quota: 1024M
-      memory: 128M
+      memory: 384M
       routes:
       - route: "zictm-srv.btp.sunlu3d.cn"
       idle-routes:
@@ -19,7 +19,7 @@ modules:
   - name: zictm
     parameters:
       disk-quota: 1024M
-      memory: 128M
+      memory: 32M
       routes:
       - route: "zictm.btp.sunlu3d.cn"
       idle-routes:

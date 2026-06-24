@@ -16,8 +16,6 @@ modules:
       command: node node_modules/@sap/cds-dk/bin/cds.js run
       disk-quota: 2048M
       memory: 256M 
-      properties:
-        CDS_SERVER_BODY_PARSER_LIMIT: 10mb
     provides:
       - name: srv-api
         properties:
@@ -43,9 +41,7 @@ modules:
     parameters:
       buildpack: nodejs_buildpack
       disk-quota: 2048M
-      memory: 128M
-      properties:
-        MAX_REQUEST_SIZE: 10mb
+      memory: 64M
     requires:
       - name: srv-api
         group: destinations

@@ -10,11 +10,11 @@ class CommonUtils {
      * 带重试机制的 HTTP 请求（自动处理 503 错误）
      * @param {Object} destinationConfig - 目的地配置
      * @param {Object} requestConfig - 请求配置
-     * @param {number} maxRetries - 最大重试次数（默认 3）
-     * @param {number} retryDelay - 重试间隔毫秒（默认 1000）
+     * @param {number} maxRetries - 最大重试次数（默认 10）
+     * @param {number} retryDelay - 重试间隔毫秒（默认 10000）
      * @returns {Promise<Object>} - 请求结果
      */
-    async executeHttpRequestWithRetry(destinationConfig, requestConfig, maxRetries = 3, retryDelay = 1000) {
+    async executeHttpRequestWithRetry(destinationConfig, requestConfig, maxRetries = 10, retryDelay = 10000) {
         let lastError = null;
         
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
