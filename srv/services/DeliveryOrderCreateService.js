@@ -191,12 +191,12 @@ class DeliveryOrderCreateService {
             
             // 根据 zrfcid、canum 和销售订单类型确定 API 配置
             let csrfUrl, createUrl;
-            if (((zrfcid === 'SD04' && canum === 140) || (zrfcid === 'SD07' && canum === 50)) && salesOrderType === 'CBRE') {
-                // SD04 140 CBRE / SD07 50 CBRE 使用退货交货单 API
+            if (((zrfcid === 'SD04' && canum === 140) || (zrfcid === 'SD07' && canum === 50) || (zrfcid === 'SD11' && canum === 50)) && salesOrderType === 'CBRE') {
+                // 使用退货交货单 API
                 csrfUrl = '/sap/opu/odata/sap/API_CUSTOMER_RETURNS_DELIVERY_SRV;v=2/A_ReturnsDeliveryHeader';
                 createUrl = '/sap/opu/odata/sap/API_CUSTOMER_RETURNS_DELIVERY_SRV;v=2/A_ReturnsDeliveryHeader';
             } else {
-                // 默认使用外向交货单 API
+                // 使用外向交货单 API
                 csrfUrl = '/sap/opu/odata/sap/API_OUTBOUND_DELIVERY_SRV;v=0002/';
                 createUrl = '/sap/opu/odata/sap/API_OUTBOUND_DELIVERY_SRV;v=0002/A_OutbDeliveryHeader';
             }
@@ -308,12 +308,12 @@ class DeliveryOrderCreateService {
         // 构建行项目
         const deliveryItems = businessDataList.map((item) => {
             // SD02、SD04 使用 SalesOrderItem，其他使用 PIOrderItem
-            const referenceItem = (zrfcid === 'SD02' || zrfcid === 'SD04') 
+            const referenceItem = (zrfcid === 'SD02' || zrfcid === 'SD04' || zrfcid === 'SD11') 
                 ? item.SalesOrderItem 
                 : item.PIOrderItem;
             
-            // SD04 且 canum = 50 (STO) 使用 5 位数，其他情况使用 6 位数
-            const digitCount = (zrfcid === 'SD04' && canum === 50) ? 5 : 6;
+            // (STO) 使用 5 位数，其他情况使用 6 位数
+            const digitCount = (zrfcid === 'SD04' && canum === 50) || (zrfcid === 'SD11' && canum === 90) ? 5 : 6;
             
             return {
                 ReferenceSDDocument: sourceDocument,
@@ -451,7 +451,7 @@ class DeliveryOrderCreateService {
      */
     parseError(errorData) {
         if (!errorData) return '未知错误';
-        
+
         if (typeof errorData === 'string') {
             try {
                 errorData = JSON.parse(errorData);
@@ -460,12 +460,25 @@ class DeliveryOrderCreateService {
             }
         }
 
+        const messages = [];
+        // 取主错误消息
         if (errorData?.error?.message?.value) {
-            return errorData.error.message.value;
+            messages.push(errorData.error.message.value);
         } else if (errorData?.error?.message) {
-            return errorData.error.message;
+            messages.push(errorData.error.message);
         } else if (errorData?.message) {
-            return errorData.message;
+            messages.push(errorData.message);
+        }
+        // 取 errordetails 中的消息
+        if (errorData?.error?.innererror?.errordetails && errorData.error.innererror.errordetails.length > 0) {
+            const detailMessages = errorData.error.innererror.errordetails.map(d => d.message).filter(m => m);
+            if (detailMessages.length > 0) {
+                messages.push(...detailMessages);
+            }
+        }
+        // 拼接所有消息
+        if (messages.length > 0) {
+            return messages.join('; ');
         } else {
             return JSON.stringify(errorData);
         }

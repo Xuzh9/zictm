@@ -60,7 +60,7 @@ class SalesOrderPricingUpdateService {
                 if (skipResult) {
                    return skipResult;
                 }
-            } else if (zrfcid === 'SD04') {
+            } else if (zrfcid === 'SD04' || zrfcid === 'SD11') {
                 piSalesOrderRelRecords = await this.getSalesOrderItemsFromAPI(salesOrderNumber);
             }
 
@@ -292,8 +292,8 @@ class SalesOrderPricingUpdateService {
     getPricingTypes(zrfcid, canum) {
         const step = parseInt(canum);
         
-        // SD01、SD04、SD06 或 SD03（步骤为 50）：更新 PMP0（当 PurchasePrice 有值时）
-        if (zrfcid === 'SD01' || zrfcid === 'SD04' || zrfcid === 'SD06' || zrfcid === 'SD08' || (zrfcid === 'SD03' && step === 50)) {
+        // 更新 PMP0（当 PurchasePrice 有值时）
+        if (zrfcid === 'SD01' || zrfcid === 'SD04' || zrfcid === 'SD06' || zrfcid === 'SD08' || zrfcid === 'SD11' || (zrfcid === 'SD03' && step === 50)) {
             return [{
                 conditionType: 'PMP0',
                 valueField: 'PurchasePrice',
@@ -455,7 +455,7 @@ class SalesOrderPricingUpdateService {
             let salesOrder, salesOrderItem;
             
             // 使用业务数据中的 SalesOrderItem 从 API 获取的数据中查找对应记录
-            if (zrfcid === 'SD04') {
+            if (zrfcid === 'SD04' || zrfcid === 'SD11') {
                 const businessSalesOrderItem = String(businessData.SalesOrderItem || '');
                 
                 // 从 API 获取的数据中查找匹配的行项目
@@ -539,7 +539,7 @@ class SalesOrderPricingUpdateService {
     }
 
     /**
-     * SD04: 通过 OData API 获取销售订单行项目数据
+     * 通过 OData API 获取销售订单行项目数据
      * @param {string} salesOrderNumber - 销售订单号
      * @returns {Array} - 行项目记录数组，结构与 PISalesOrderRel 兼容
      */
@@ -570,10 +570,10 @@ class SalesOrderPricingUpdateService {
                 SalesOrderItem1: null
             }));
             
-            console.log(`SD04: 获取到 ${records.length} 条销售订单行项目`);
+            console.log(`获取到 ${records.length} 条销售订单行项目`);
             return records;
         } catch (error) {
-            console.error('SD04: 获取销售订单行项目失败:', error);
+            console.error('获取销售订单行项目失败:', error);
             return [];
         }
     }

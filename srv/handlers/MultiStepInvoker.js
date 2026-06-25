@@ -184,6 +184,28 @@ class MultiStepInvoker {
                 await this.processor.processWithLogId(zrfcLogid, zrfcid, startStepNum, isRetry, zdfjy, id, processConfig, businessTable1, businessTable2, businessTable3);
             } catch (error) {
                 console.error('异步处理异常:', error);
+                // 确保异步调用失败时也能保存日志
+                try {
+                    const cds = require('@sap/cds');
+                    const { INSERT } = cds.ql;
+                    const MultistepLog = cds.entities['com.sap.zictm.MultistepLog'];
+                    await cds.tx(async (tx) => {
+                        await tx.run(
+                            INSERT.into(MultistepLog).entries({
+                                zrfc_logid: zrfcLogid,
+                                canum: '0',
+                                zrfcid: zrfcid,
+                                code: 'E',
+                                message: error.message ? error.message.substring(0, 500) : '异步处理异常',
+                                executionAt: new Date(),
+                                lastExecutionAt: new Date()
+                            })
+                        );
+                    });
+                    console.log(`[MultiStepInvoker.executeAsync] 异步处理失败日志保存成功, zrfcLogid: ${zrfcLogid}`);
+                } catch (logError) {
+                    console.error(`[MultiStepInvoker.executeAsync] 保存失败日志失败: ${logError.message}`);
+                }
             }
         }, 100);
     }

@@ -93,16 +93,16 @@ class RetryHandler {
             if (isAsync) {
                 // 异步执行重推
                 console.log('[RetryHandler.retry] 开始异步重推');
-                this.executeAsync(zrfcLogid, zrfcid, failedStepNum, zdfjy, id);
+                this.executeAsync(zrfcLogid, zrfcid, failedStepNum, zdfjy, id, processConfig);
                 result = {
                     code: 'S',
                     message: '重推请求已提交，正在异步处理中',
                     zrfcLogid
                 };
             } else {
-                // 同步执行重推（传递 zdfjy 和 id）
+                // 同步执行重推（传递 zdfjy、id 和 processConfig）
                 console.log('[RetryHandler.retry] 开始同步重推');
-                result = await this.processor.processWithLogId(zrfcLogid, zrfcid, failedStepNum, true, zdfjy, id);
+                result = await this.processor.processWithLogId(zrfcLogid, zrfcid, failedStepNum, true, zdfjy, id, processConfig);
                 console.log('[RetryHandler.retry] 同步重推完成, result:', result);
             }
 
@@ -128,13 +128,36 @@ class RetryHandler {
      * @param {number} failedStepNum - 失败步骤编号
      * @param {string} zdfjy - 多方交易类型ID
      * @param {string} id - ApiInputLog的ID（可选）
+     * @param {Object} processConfig - 业务流程配置（可选）
      */
-    executeAsync(zrfcLogid, zrfcid, failedStepNum, zdfjy, id = null) {
+    executeAsync(zrfcLogid, zrfcid, failedStepNum, zdfjy, id = null, processConfig = null) {
         setTimeout(async () => {
             try {
-                await this.processor.processWithLogId(zrfcLogid, zrfcid, failedStepNum, true, zdfjy, id);
+                await this.processor.processWithLogId(zrfcLogid, zrfcid, failedStepNum, true, zdfjy, id, processConfig);
             } catch (error) {
                 console.error('异步重推处理异常:', error);
+                // 确保异步重推失败时也能保存日志
+                try {
+                    const cds = require('@sap/cds');
+                    const { INSERT } = cds.ql;
+                    const MultistepLog = cds.entities['com.sap.zictm.MultistepLog'];
+                    await cds.tx(async (tx) => {
+                        await tx.run(
+                            INSERT.into(MultistepLog).entries({
+                                zrfc_logid: zrfcLogid,
+                                canum: '0',
+                                zrfcid: zrfcid,
+                                code: 'E',
+                                message: error.message ? error.message.substring(0, 500) : '异步重推处理异常',
+                                executionAt: new Date(),
+                                lastExecutionAt: new Date()
+                            })
+                        );
+                    });
+                    console.log(`[RetryHandler.executeAsync] 异步重推失败日志保存成功, zrfcLogid: ${zrfcLogid}`);
+                } catch (logError) {
+                    console.error(`[RetryHandler.executeAsync] 保存失败日志失败: ${logError.message}`);
+                }
             }
         }, 100);
     }

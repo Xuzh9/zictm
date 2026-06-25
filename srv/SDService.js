@@ -544,8 +544,12 @@ module.exports = cds.service.impl(async function () {
     const MultiStepInvoker = require('./handlers/MultiStepInvoker');
     const invoker = new MultiStepInvoker();
     
+    // 根据条件决定 zrfcid：SD04 + CBRE 则使用 SD11
+    const targetZrfcid = (mptConfig.zrfcid === 'SD04' && firstData.SalesOrderType === 'CBRE') ? 'SD11' : mptConfig.zrfcid;
+    console.log(`[SDService.TrCreate] 判断 zrfcid - mptConfig.zrfcid: ${mptConfig.zrfcid}, SalesOrderType: ${firstData.SalesOrderType}, targetZrfcid: ${targetZrfcid}`);
+    
     // 调用 MultiStepInvoker，传入业务流程ID、数据和 zdfjy
-    const invokerResult = await invoker.process(mptConfig.zrfcid, data, null, null, mptConfig.zdfjy, id);
+    const invokerResult = await invoker.process(targetZrfcid, data, null, null, mptConfig.zdfjy, id);
 
     // --------------------------
     // 返回创建成功的数据

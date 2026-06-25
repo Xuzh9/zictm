@@ -41,7 +41,7 @@ entity ApiInputLog {
     key id         : UUID @title: 'ID';                // ID
     inputData      : LargeString @title: '入参数据';    // 入参数据，JSON格式
     code           : String(2) @title: '消息状态';      // 消息状态(S成功/E失败)
-    message        : String(255) @title: '消息文本';    // 消息文本
+    message        : String(1000) @title: '消息文本';    // 消息文本
     executionAt    : Timestamp @title: '执行时间';      // 执行时间
 }
 
@@ -52,7 +52,7 @@ entity MultistepHeadLog {
     zrfcid              : String(10) @title: '业务流程ID';     // 业务流程ID
     zdfjy               : String(10) @title: '多方交易类型';     // 多方交易类型
     code                : String(2) @title: '消息状态';      // 消息状态(S成功/E失败)
-    message             : String(1000) @title: '消息文本';    // 消息文本
+    message             : String(5000) @title: '消息文本';    // 消息文本
     executionAt         : Timestamp @title: '执行时间';      // 执行时间
     lastExecutionAt     : Timestamp @title: '最新执行时间';      // 最新执行时间
      // 与 MultistepLog 的组合关系（一对多，行表）
@@ -69,7 +69,7 @@ entity MultistepLog {
     zrfcid              : String(10) @title: '业务流程ID';     // 业务流程ID
     description         : String(50) @title: '步骤描述';      // 步骤描述
     code                : String(2) @title: '消息状态';      // 消息状态(S成功/E失败)
-    message             : String(1000) @title: '消息文本';    // 消息文本
+    message             : String(5000) @title: '消息文本';    // 消息文本
     objtype             : String(5) @title: '对象类型';      // 对象类型
     objkey              : String(20) @title: '对象号';     // 对象号
     executionAt         : Timestamp @title: '执行时间';      // 执行时间
@@ -200,7 +200,7 @@ entity SalesOrderCreate {
     DistributionChannel           : String(2) @title: '分销渠道';     // 分销渠道
     OrganizationDivision          : String(2) @title: '产品组';     // 产品组
     SalesOffice                   : String(10) @title: '销售办事处';    // 销售办事处
-    SalesGroup                    : String(3) @title: '销售组';    // 销售组
+    SalesGroup                    : String(10) @title: '销售组';    // 销售组
     SalesDistrict                 : String(10) @title: '售达方';    // 售达方
     PurchaseOrderByCustomer       : String(40) @title: '客户参考编号';    // 客户参考编号
     CustomerPurchaseOrderDate     : Date @title: '客户参考日期';          // 客户参考日期

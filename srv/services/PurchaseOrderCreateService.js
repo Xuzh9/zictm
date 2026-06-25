@@ -2,7 +2,7 @@ const cds = require('@sap/cds');
 const { SELECT, UPDATE, INSERT } = cds.ql;
 const CommonUtils = require('../handlers/CommonUtils');
 
-class PurchaseOrderService {
+class PurchaseOrderCreateService {
     constructor() {
         this.zrfcLogid = null;
         this.commonUtils = new CommonUtils();
@@ -110,7 +110,7 @@ class PurchaseOrderService {
                 if (zrfcid === 'SD01' || zrfcid === 'SD06' || zrfcid === 'SD08') {
                     // 更新 PISalesOrderRel 表
                     await this.updatePISalesOrderRel(purchaseOrder, businessDataList, itemPrices, zrfcid, canum);
-                } else if (zrfcid === 'SD04') {
+                } else if (zrfcid === 'SD04' || zrfcid === 'SD11') {
                     // 更新 OutboundDelivery 的 PurchasePrice（使用之前计算好的价格）
                     await this.updateOutboundDeliveryPurchasePrice(itemPrices);
                 }
@@ -124,20 +124,23 @@ class PurchaseOrderService {
                 let errorMessage = `API 调用失败: ${result.status}`;
                 if (result.data && result.data.error) {
                     const error = result.data.error;
-                    // 优先取 details 中的消息
+                    const messages = [];
+                    // 取主错误消息
+                    if (error.message && error.message.value) {
+                        messages.push(error.message.value);
+                    } else if (error.message) {
+                        messages.push(error.message);
+                    }
+                    // 取 details 中的消息
                     if (error.details && error.details.length > 0) {
                         const detailMessages = error.details.map(d => d.message).filter(m => m);
                         if (detailMessages.length > 0) {
-                            errorMessage = detailMessages.join('; ');
+                            messages.push(...detailMessages);
                         }
                     }
-                    // 如果没有 details 消息，则取主消息
-                    if (errorMessage === `API 调用失败: ${result.status}`) {
-                        if (error.message && error.message.value) {
-                            errorMessage = error.message.value;
-                        } else if (error.message) {
-                            errorMessage = error.message;
-                        }
+                    // 拼接所有消息
+                    if (messages.length > 0) {
+                        errorMessage = messages.join('; ');
                     }
                     if (error.code) {
                         errorMessage = `${errorMessage} (${error.code})`;
@@ -172,10 +175,23 @@ class PurchaseOrderService {
             let errorMessage = error.message ? error.message.substring(0, 500) : '未知错误';
             if (error.response && error.response.data && error.response.data.error) {
                 const errorData = error.response.data.error;
+                const messages = [];
+                // 取主错误消息
                 if (errorData.message && errorData.message.value) {
-                    errorMessage = errorData.message.value;
+                    messages.push(errorData.message.value);
                 } else if (errorData.message) {
-                    errorMessage = errorData.message;
+                    messages.push(errorData.message);
+                }
+                // 取 details 中的消息
+                if (errorData.details && errorData.details.length > 0) {
+                    const detailMessages = errorData.details.map(d => d.message).filter(m => m);
+                    if (detailMessages.length > 0) {
+                        messages.push(...detailMessages);
+                    }
+                }
+                // 拼接所有消息
+                if (messages.length > 0) {
+                    errorMessage = messages.join('; ');
                 }
                 if (errorData.code) {
                     errorMessage = `${errorMessage} (${errorData.code})`;
@@ -257,13 +273,14 @@ class PurchaseOrderService {
                     unitOfMeasure = item.RequestedQuantityUnit;
                     break;
                 case 'SD04':
+                case 'SD11':
                     poItemNumber = item.SalesOrderItem;
                     material = item.Product || "";
                     const netAmount = item.NetAmount ? parseFloat(item.NetAmount) : 0;
                     const requestedQty = item.RequestedQuantity ? parseFloat(item.RequestedQuantity) : 1;
                     const zjgbl = mptStepConfig?.zjgbl ? parseFloat(mptStepConfig.zjgbl) : 100;
                     netPriceAmount = parseFloat(((requestedQty > 0 ? (netAmount / requestedQty) * (zjgbl / 100) : 0)).toFixed(2));
-                    // SD04 需要通过物料主数据 API 获取单位
+                    // 需要通过物料主数据 API 获取单位
                     const baseUnit = await this.getMaterialBaseUnit(material);
                     unitOfMeasure = baseUnit || "EA";
                     break;
@@ -303,7 +320,7 @@ class PurchaseOrderService {
                 PurchaseOrderItem: poItemNumber,
                 Material: material,
                 Plant: isReturn ? (mptStepConfig?.lifnr || "") : (mptStepConfig?.umwrk || ""),
-                StorageLocation: mptStepConfig?.umlgo || item.StorageLocation || "", 
+                StorageLocation: item.ReceivingStorageLocation || item.StorageLocation || mptStepConfig?.umlgo || "", 
                 PurchaseOrderQuantityUnit: unitOfMeasure,
                 TaxCode: mptStepConfig?.mwskz || "",
                 OrderQuantity: item.RequestedQuantity ? parseFloat(item.RequestedQuantity) : 0,
@@ -312,7 +329,7 @@ class PurchaseOrderService {
                 _PurchaseOrderScheduleLineTP: [{
                     PurchaseOrderItem: poItemNumber,
                     ScheduleLine: "1",
-                    ScheduleLineDeliveryDate: zrfcid === 'SD04' ? (item.DeliveryDate || "") : (item.ConfirmedDeliveryDate || "")
+                    ScheduleLineDeliveryDate: zrfcid === 'SD04' || zrfcid === 'SD11' ? (item.DeliveryDate || "") : (item.ConfirmedDeliveryDate || "")
                 }],
                 _PurOrdPricingElement: (() => {
                     const pricingElements = [];
@@ -526,4 +543,4 @@ class PurchaseOrderService {
     }
 }
 
-module.exports = PurchaseOrderService;
+module.exports = PurchaseOrderCreateService;
