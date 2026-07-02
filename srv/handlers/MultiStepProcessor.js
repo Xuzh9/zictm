@@ -189,6 +189,18 @@ class MultiStepProcessor {
                 if (executionResult.code === 'E') {
                     console.log('[MultiStepProcessor] 步骤失败，停止执行:', step.canum);
                     
+                    // 只有 SalesOrderAsyncResultService 失败时，才将上一步骤更新为失败状态
+                    // 因为异步调用的 URL 一旦获取到结果就会失效，需要重新执行创建步骤
+                    // 使用 step.readsteps 获取上一步步骤编号
+                    if (step.serviceName === 'SalesOrderAsyncResultService' && step.readsteps) {
+                        console.log('[MultiStepProcessor] 将上一步骤', step.readsteps, '更新为失败状态');
+                        await this.saveLog(null, zrfcLogid, zrfcid, step.readsteps, {
+                            code: 'E',
+                            message: '后续步骤失败，需重新执行',
+                            objkey: ''
+                        }, 0, new Date(), isRetry);
+                    }
+                    
                     // 更新 MultistepHeadLog 标记为失败
                     await this.saveHeadLog(null, zrfcLogid, zrfcid, zdfjy, id, 'E', lastMessage || '处理失败', executionAt);
                     break;

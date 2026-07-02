@@ -18,6 +18,8 @@ const DeliveryOrderQueryService = require('./DeliveryOrderQueryService');
 const DeliveryOrderItemUpdateService = require('./DeliveryOrderItemUpdateService');
 const InboundDeliveryPutawayService = require('./InboundDeliveryPutawayService');
 const DeliveryOrderBatchSplitService = require('./DeliveryOrderBatchSplitService');
+const SalesOrderAsyncCreateService = require('./SalesOrderAsyncCreateService');
+const SalesOrderAsyncResultService = require('./SalesOrderAsyncResultService');
 
 class StepServiceFactory {
     constructor() {
@@ -77,6 +79,10 @@ class StepServiceFactory {
                 return new InboundDeliveryPutawayService();
             case 'DeliveryOrderBatchSplitService':
                 return new DeliveryOrderBatchSplitService();
+            case 'SalesOrderAsyncCreateService':
+                return new SalesOrderAsyncCreateService();
+            case 'SalesOrderAsyncResultService':
+                return new SalesOrderAsyncResultService();
             default:
                 // 未知的服务类
                 return null;

@@ -93,15 +93,15 @@ class DeliveryOrderItemUpdateService {
             let itemEntity;
             let isInboundDelivery = false; // 新增：标识是否为内向交货单
             
-            if ((zrfcid === 'SD04' && canum === 110) || 
+            if ((zrfcid === 'SD04' && canum === 120) || 
                 (zrfcid === 'SD07' && canum === 30) || 
                 zrfcid === 'SD09' || 
                 (zrfcid === 'SD10' && (canum === 30 || canum === 130)) ||
-                (zrfcid === 'SD11' && canum === 150)) {
+                (zrfcid === 'SD11' && canum === 160)) {
                 apiPath = '/sap/opu/odata/sap/API_INBOUND_DELIVERY_SRV;v=0002';
                 itemEntity = 'A_InbDeliveryItem';
                 isInboundDelivery = true; // 设置为内向交货单
-            } else if (((zrfcid === 'SD11' && canum === 70) || (zrfcid === 'SD07' && canum === 70)) && salesOrderType === 'CBRE') {
+            } else if (((zrfcid === 'SD11' && canum === 80) || (zrfcid === 'SD07' && canum === 70)) && salesOrderType === 'CBRE') {
                 apiPath = '/sap/opu/odata/sap/API_CUSTOMER_RETURNS_DELIVERY_SRV;v=2';
                 itemEntity = 'A_ReturnsDeliveryItem';
             } else {

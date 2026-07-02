@@ -356,7 +356,6 @@ class SalesOrderCreateService {
                 pricingElements.push({
                     ConditionType: "ZP10",
                     ConditionRateValue: String(item.NetAmount) || "0",
-                    ConditionQuantity: "1",
                     ConditionCurrency: item.ItemTransactionCurrency
                 });
             }

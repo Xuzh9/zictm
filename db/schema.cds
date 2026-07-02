@@ -71,7 +71,7 @@ entity MultistepLog {
     code                : String(2) @title: '消息状态';      // 消息状态(S成功/E失败)
     message             : String(5000) @title: '消息文本';    // 消息文本
     objtype             : String(5) @title: '对象类型';      // 对象类型
-    objkey              : String(20) @title: '对象号';     // 对象号
+    objkey              : String(200) @title: '对象号';     // 对象号
     executionAt         : Timestamp @title: '执行时间';      // 执行时间
     executionTime       : Decimal(10,2) @title: '运行时间(秒)';  // 运行时间(秒)
     lastExecutionAt     : Timestamp @title: '最新执行时间';      // 最新执行时间

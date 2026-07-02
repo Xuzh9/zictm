@@ -140,6 +140,13 @@
                     "route": "MultistepLogObjectPage"
                   }
                 }
+              },
+              "controlConfiguration": {
+                "items/@com.sap.vocabularies.UI.v1.LineItem": {
+                  "tableSettings": {
+                    "type": "GridTable"
+                  }
+                }
               }
             }
           }
@@ -151,7 +158,14 @@
           "options": {
             "settings": {
               "editableHeaderContent": false,
-              "contextPath": "/MultistepHeadLog/items"
+              "contextPath": "/MultistepHeadLog/items",
+              "controlConfiguration": {
+                "@com.sap.vocabularies.UI.v1.LineItem": {
+                  "tableSettings": {
+                    "type": "GridTable"
+                  }
+                }
+              }
             }
           }
         }

@@ -327,18 +327,18 @@ class DeliveryOrderPostingService {
      */
     getApiConfig(salesOrderType, zrfcid, canum) {
         console.log(`[DeliveryOrderPostingService.getApiConfig] 入参 - salesOrderType: ${salesOrderType}, zrfcid: ${zrfcid}, canum: ${canum}, 类型 - zrfcid: ${typeof zrfcid}, canum: ${typeof canum}`);
-        if ((zrfcid === 'SD04' && canum === 130) ||
+        if ((zrfcid === 'SD04' && canum === 140) ||
             (zrfcid === 'SD07' && canum === 50) ||
             zrfcid === 'SD09' ||
             (zrfcid === 'SD10' && (canum === 50 || canum === 150)) ||
-            (zrfcid === 'SD11' && canum === 170)) {
+            (zrfcid === 'SD11' && canum === 180)) {
             // 内向交货单过账API
             return {
                 csrfUrl: '/sap/opu/odata/sap/API_INBOUND_DELIVERY_SRV;v=0002/A_InbDeliveryHeader(\'{DeliveryDocument}\')',
                 postingUrl: '/sap/opu/odata/sap/API_INBOUND_DELIVERY_SRV;v=0002/PostGoodsReceipt?DeliveryDocument='
             };
-        } else if (((zrfcid === 'SD11' && canum === 80) || (zrfcid === 'SD07' && (canum === 80 || canum === 90)) || (zrfcid === 'SD10' && canum === 90)) && salesOrderType === 'CBRE') {
-            // 退货交货单过账API
+        } else if (((zrfcid === 'SD11' && canum === 90) || (zrfcid === 'SD07' && (canum === 80 || canum === 90)) || (zrfcid === 'SD10' && canum === 90)) && salesOrderType === 'CBRE') {
+            // 退货交货单过账API    
             return {
                 csrfUrl: '/sap/opu/odata/sap/API_CUSTOMER_RETURNS_DELIVERY_SRV;v=2/A_ReturnsDeliveryHeader(\'{DeliveryDocument}\')',
                 postingUrl: '/sap/opu/odata/sap/API_CUSTOMER_RETURNS_DELIVERY_SRV;v=2/PostGoodsReceipt?DeliveryDocument='

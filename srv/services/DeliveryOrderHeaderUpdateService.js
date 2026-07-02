@@ -265,17 +265,17 @@ class DeliveryOrderHeaderUpdateService {
      */
     getApiConfig(zrfcid, canum, salesOrderType) {
         // 根据 zrfcid 和 canum 获取对应的 API 配置
-        if ((zrfcid === 'SD04' && canum === 100) || 
+        if ((zrfcid === 'SD04' && canum === 110) || 
             (zrfcid === 'SD07' && canum === 20) || 
             zrfcid === 'SD09' || 
             (zrfcid === 'SD10' && (canum === 20 || canum === 120)) ||
-            (zrfcid === 'SD11' && canum === 140) ) {
+            (zrfcid === 'SD11' && canum === 150) ) {
             //内向交货单 API
             return {
                 csrfUrl: '/sap/opu/odata/sap/API_INBOUND_DELIVERY_SRV;v=0002/A_InbDeliveryHeader(\'{DeliveryDocument}\')',
                 updateUrl: "/sap/opu/odata/sap/API_INBOUND_DELIVERY_SRV;v=0002/A_InbDeliveryHeader('{DeliveryDocument}')"
             };
-        } else if (((zrfcid === 'SD11' && canum === 60) || (zrfcid === 'SD07' && canum === 60) ) && salesOrderType === 'CBRE') {
+        } else if (((zrfcid === 'SD11' && canum === 70) || (zrfcid === 'SD07' && canum === 60) ) && salesOrderType === 'CBRE') {
             //退货交货单 API
             return {
                 csrfUrl: '/sap/opu/odata/sap/API_CUSTOMER_RETURNS_DELIVERY_SRV;v=2/A_ReturnsDeliveryHeader(\'{DeliveryDocument}\')',

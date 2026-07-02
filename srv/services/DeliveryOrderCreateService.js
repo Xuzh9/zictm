@@ -191,7 +191,7 @@ class DeliveryOrderCreateService {
             
             // 根据 zrfcid、canum 和销售订单类型确定 API 配置
             let csrfUrl, createUrl;
-            if (((zrfcid === 'SD04' && canum === 140) || (zrfcid === 'SD07' && canum === 50) || (zrfcid === 'SD11' && canum === 50)) && salesOrderType === 'CBRE') {
+            if (((zrfcid === 'SD04' && canum === 150) || (zrfcid === 'SD07' && canum === 50) || (zrfcid === 'SD11' && canum === 60)) && salesOrderType === 'CBRE') {
                 // 使用退货交货单 API
                 csrfUrl = '/sap/opu/odata/sap/API_CUSTOMER_RETURNS_DELIVERY_SRV;v=2/A_ReturnsDeliveryHeader';
                 createUrl = '/sap/opu/odata/sap/API_CUSTOMER_RETURNS_DELIVERY_SRV;v=2/A_ReturnsDeliveryHeader';
@@ -313,7 +313,7 @@ class DeliveryOrderCreateService {
                 : item.PIOrderItem;
             
             // (STO) 使用 5 位数，其他情况使用 6 位数
-            const digitCount = (zrfcid === 'SD04' && canum === 50) || (zrfcid === 'SD11' && canum === 90) ? 5 : 6;
+            const digitCount = (zrfcid === 'SD04' && canum === 60) || (zrfcid === 'SD11' && canum === 100) ? 5 : 6;
             
             return {
                 ReferenceSDDocument: sourceDocument,
