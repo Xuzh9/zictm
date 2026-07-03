@@ -62,10 +62,10 @@ annotate service.MultistepLog with @(
             { $Type: 'UI.DataField', Label: '步骤编号', Value: canum, Editable: false },
             { $Type: 'UI.DataField', Label: '描述', Value: description, Editable: false },
             { $Type: 'UI.DataField', Label: '最新执行时间', Value: lastExecutionAt, Editable: false },
-            { $Type: 'UI.DataField', Label: '最新运行时间(秒)', Value: lastExecutionTime, Editable: false},
             { $Type: 'UI.DataField', Label: '对象号', Value: objkey, Editable: false },
             { $Type: 'UI.DataField', Label: '消息状态', Value: code, Editable: false },
-            { $Type: 'UI.DataField', Label: '消息文本', Value: message, Editable: false }
+            { $Type: 'UI.DataField', Label: '消息文本', Value: message, Editable: false },
+            { $Type: 'UI.DataField', Label: '最新运行时间(秒)', Value: lastExecutionTime, Editable: false},
         ],
         Identification: [
             { $Type: 'UI.DataField', Label: '步骤编号', Value: canum, Editable: false },

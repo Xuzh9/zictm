@@ -144,7 +144,9 @@
               "controlConfiguration": {
                 "items/@com.sap.vocabularies.UI.v1.LineItem": {
                   "tableSettings": {
-                    "type": "GridTable"
+                    "type": "GridTable",
+                    "rowCount": 10,
+                    "rowCountMode": "Fixed"
                   }
                 }
               }
