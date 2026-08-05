@@ -8,7 +8,6 @@ const CommonUtils = require('../handlers/CommonUtils');
 // 会计凭证最大行数限制为 999，每行业务数据生成约 2 行会计凭证行项目
 // 因此每批最多处理 490 行业务数据（490 * 2 = 980 < 999）
 const MAX_LINES_PER_DOC = 490;
-
 class AccountingDocumentService {
     constructor() {
         this.zrfcLogid = null;
@@ -106,16 +105,16 @@ class AccountingDocumentService {
 
                 if (result.status >= 200 && result.status < 300) {
                     // 解析 SOAP 响应，提取会计凭证号
-                    const currentObjkey = this.extractAccountingDocumentNumber(responseDataStr);
+                    const { objkey: currentObjkey, docNumber } = this.extractAccountingDocumentNumber(responseDataStr);
                     
                     // 调试日志：确认提取的凭证号
-                    console.log(`提取的会计凭证号 objkey: "${currentObjkey}"`);
+                    console.log(`提取的会计凭证号 objkey: "${currentObjkey}", docNumber: "${docNumber}"`);
                     
                     // 更新最后一个凭证号
                     lastObjkey = currentObjkey;
 
                     // 将当前批次的会计凭证号更新到业务表的 AccountingDocument 字段
-                    await this.updateAccountingDocument(businessTable, batchData, currentObjkey);
+                    await this.updateAccountingDocument(businessTable, batchData, docNumber);
                 } else {
                     // 提取详细的错误信息
                     let errorMessage = `SOAP API 调用失败: ${result.status}`;
@@ -499,7 +498,8 @@ class AccountingDocumentService {
                 const companyCode = companyCodeMatch ? companyCodeMatch[1].trim() : '';
                 const fiscalYear = fiscalYearMatch ? fiscalYearMatch[1].trim() : '';
                 // 拼接格式: AccountingDocument + CompanyCode + FiscalYear
-                return `${docNumber}${companyCode}${fiscalYear}`;
+                const objkey = `${docNumber}${companyCode}${fiscalYear}`;
+                return { objkey, docNumber };
             }
         }
         
@@ -556,10 +556,10 @@ class AccountingDocumentService {
     }
 
     /**
-     * 将会计凭证号批量更新到 PaymentReceipt 业务表的 AccountingDocument 字段
+     * 将会计凭证号批量更新到业务表的 AccountingDocument 字段
      * @param {string} businessTable - 业务表名
      * @param {Array} batchData - 当前批次的业务数据
-     * @param {string} accountingDocument - 会计凭证号
+     * @param {string} accountingDocument - 会计凭证号（纯凭证号，不含公司代码和年度）
      */
     async updateAccountingDocument(businessTable, batchData, accountingDocument) {
         try {
@@ -568,38 +568,37 @@ class AccountingDocumentService {
                 return;
             }
 
-            // 构建主键值列表
-            const keyValues = [];
-
-            for (const item of batchData) {
-                if (item.paymentReceiptNo && item.paymentReceiptNoItem) {
-                    keyValues.push({ paymentReceiptNo: item.paymentReceiptNo, paymentReceiptNoItem: item.paymentReceiptNoItem });
-                } else {
-                    console.warn('业务数据缺少主键字段，跳过该条记录');
-                }
-            }
-
-            if (keyValues.length === 0) {
-                console.warn('没有有效主键数据，跳过更新');
+            const BusinessEntity = cds.entities[businessTable];
+            if (!BusinessEntity) {
+                console.error(`业务表实体不存在: ${businessTable}`);
                 return;
             }
 
-            // 使用 CDS UPDATE API 一次性批量更新所有数据
-            const whereConditions = keyValues.map(kv => ({
-                paymentReceiptNo: kv.paymentReceiptNo,
-                paymentReceiptNoItem: kv.paymentReceiptNoItem
-            }));
+            let updatedCount = 0;
+            for (const item of batchData) {
+                if (!item.paymentReceiptNo || !item.paymentReceiptNoItem) {
+                    console.warn('业务数据缺少主键字段，跳过该条记录');
+                    continue;
+                }
 
-            const result = await cds.run(
-                UPDATE('com.sap.zictm.PaymentReceipt')
-                    .with({ AccountingDocument: accountingDocument })
-                    .where(whereConditions)
-            );
+                const result = await cds.run(
+                    UPDATE(BusinessEntity)
+                        .set({ AccountingDocument: accountingDocument })
+                        .where({
+                            paymentReceiptNo: item.paymentReceiptNo,
+                            paymentReceiptNoItem: item.paymentReceiptNoItem
+                        })
+                );
 
-            console.log(`成功批量更新 ${result.rowsUpdated} 条 PaymentReceipt 数据的 AccountingDocument 字段为: ${accountingDocument}`);
+                if (result > 0) {
+                    updatedCount++;
+                }
+                console.log(`更新 PaymentReceipt: paymentReceiptNo=${item.paymentReceiptNo}, paymentReceiptNoItem=${item.paymentReceiptNoItem}, AccountingDocument=${accountingDocument}, 结果=${result}`);
+            }
+
+            console.log(`成功批量更新 ${updatedCount}/${batchData.length} 条数据的 AccountingDocument 字段为: ${accountingDocument}`);
         } catch (error) {
-            console.error('批量更新 PaymentReceipt AccountingDocument 字段失败:', error);
-            // 不抛出异常，继续处理后续批次
+            console.error('批量更新 AccountingDocument 字段失败:', error);
         }
     }
 }
