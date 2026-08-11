@@ -66,6 +66,10 @@ async function main() {
     console.log('\n=== 开始 CDS 构建 ===');
     execSync('cds build', { stdio: 'inherit' });
 
+    // ===================== 预安装依赖（避免 MBT 10分钟超时） =====================
+    console.log('\n=== 预安装 gen/srv 依赖 ===');
+    execSync('npm install --prefix gen/srv --omit=dev', { stdio: 'inherit' });
+
     // ===================== 纯构建，不加扩展文件 =====================
     console.log('\n=== 开始构建 MTA ===');
     execSync('mbt build --mtar archive', { stdio: 'inherit' });

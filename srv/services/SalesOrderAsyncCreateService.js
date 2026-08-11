@@ -237,7 +237,24 @@ class SalesOrderAsyncCreateService {
                 if (!baseUnit) {
                     throw new Error(`物料 ${productId} 未找到基础单位`);
                 }
-                return baseUnit;
+                // 转换单位为 ISO 码
+                let unit;
+                switch (baseUnit) {
+                    case 'G' : unit = 'GRM'; break;
+                    case 'BOT': unit = 'BO'; break;
+                    case 'ML' : unit = 'MLT'; break;
+                    case 'MM' : unit = 'MMT'; break;
+                    case 'KG': unit = 'KGM'; break;
+                    case 'L' : unit = 'LTR'; break;
+                    case 'CM' : unit = 'CMT'; break;
+                    case 'M' : unit = 'MTR'; break;
+                    case 'KM' : unit = 'KMT'; break;
+                    default:
+                        unit = baseUnit;
+                        break;
+                }
+                console.log(`[SalesOrderAsyncCreateService] 物料 ${productId}: ${baseUnit} → ${unit}`);
+                return unit;
             } else {
                 throw new Error(`查询物料主数据失败，状态码: ${result.status}`);
             }

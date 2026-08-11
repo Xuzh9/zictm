@@ -209,7 +209,11 @@ class MultiStepProcessor {
             
             // 6. 如果所有步骤都成功，更新 MultistepHeadLog 为成功
             if (lastCode !== 'E') {
-                await this.saveHeadLog(null, zrfcLogid, zrfcid, zdfjy, id, 'S', lastMessage || '处理成功', executionAt);
+                try {
+                    await this.saveHeadLog(null, zrfcLogid, zrfcid, zdfjy, id, 'S', lastMessage || '处理成功', executionAt);
+                } catch (headLogError) {
+                    console.error('[MultiStepProcessor.processWithLogId] 更新HeadLog为成功失败:', headLogError.message);
+                }
             }
 
             // 同步调用返回最终结果
@@ -231,6 +235,13 @@ class MultiStepProcessor {
             } catch (logError) {
                 // 如果日志保存也失败，至少记录到控制台
                 console.error(`[MultiStepProcessor.processWithLogId] 错误日志保存失败: ${logError.message}, 原始错误: ${errorMessage}`);
+            }
+
+            // 更新 MultistepHeadLog 标记为失败
+            try {
+                await this.saveHeadLog(null, zrfcLogid, zrfcid, zdfjy, id, 'E', errorMessage, new Date());
+            } catch (headLogError) {
+                console.error(`[MultiStepProcessor.processWithLogId] 更新HeadLog失败: ${headLogError.message}`);
             }
 
             return {

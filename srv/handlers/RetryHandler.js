@@ -158,6 +158,12 @@ class RetryHandler {
                 } catch (logError) {
                     console.error(`[RetryHandler.executeAsync] 保存失败日志失败: ${logError.message}`);
                 }
+                // 更新 MultistepHeadLog 标记为失败
+                try {
+                    await this.processor.saveHeadLog(null, zrfcLogid, zrfcid, zdfjy, id, 'E', error.message ? error.message.substring(0, 500) : '异步重推处理异常', new Date());
+                } catch (headLogError) {
+                    console.error(`[RetryHandler.executeAsync] 更新HeadLog失败: ${headLogError.message}`);
+                }
             }
         }, 100);
     }

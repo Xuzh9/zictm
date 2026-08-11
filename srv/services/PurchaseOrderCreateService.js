@@ -92,6 +92,7 @@ class PurchaseOrderCreateService {
                     data: purchaseOrderData,
                     headers: {
                         'X-CSRF-Token': csrfToken,
+                        'Content-Type': 'application/json',
                         'Accept': 'application/json',
                         'Cookie': cookieString,
                         'sap-language': 'ZH'
@@ -317,50 +318,50 @@ class PurchaseOrderCreateService {
             });
 
             purchaseOrderItems.push({
-                PurchaseOrderItem: poItemNumber,
+                PurchaseOrderItem: poItemNumber || "",
                 Material: material,
                 Plant: isReturn ? (mptStepConfig?.lifnr || "") : (mptStepConfig?.umwrk || ""),
-                StorageLocation: item.ReceivingStorageLocation || item.StorageLocation || mptStepConfig?.umlgo || "", 
-                PurchaseOrderQuantityUnit: unitOfMeasure,
+                StorageLocation: item.ReceivingStorageLocation || item.StorageLocation || mptStepConfig?.umlgo || "",
+                PurchaseOrderQuantityUnit: unitOfMeasure || "",
                 TaxCode: mptStepConfig?.mwskz || "",
                 OrderQuantity: item.RequestedQuantity ? parseFloat(item.RequestedQuantity) : 0,
                 //NetPriceAmount: netPriceAmount,
                 //DocumentCurrency: item.TransactionCurrency || "",
                 _PurchaseOrderScheduleLineTP: [{
-                    PurchaseOrderItem: poItemNumber,
+                    PurchaseOrderItem: poItemNumber || "",
                     ScheduleLine: "1",
                     ScheduleLineDeliveryDate: zrfcid === 'SD04' || zrfcid === 'SD11' ? (item.DeliveryDate || "") : (item.ConfirmedDeliveryDate || "")
                 }],
                 _PurOrdPricingElement: (() => {
                     const pricingElements = [];
-                    
+
                     // PMP0 定价条件
                     if (netPriceAmount) {
                         pricingElements.push({
-                            PurchaseOrderItem: poItemNumber,
+                            PurchaseOrderItem: poItemNumber || "",
                             ConditionType: "PMP0",
                             ConditionBaseAmount: netPriceAmount,
                             ConditionCurrency: item.TransactionCurrency || ""
                         });
                     }
-                    
+
                     // ZQU1/ZQU2 定价条件
                     if (mptStepConfig?.taxFreightAmt) {
                         pricingElements.push({
-                            PurchaseOrderItem: poItemNumber,
+                            PurchaseOrderItem: poItemNumber || "",
                             ConditionType: "ZQU1",
                             ConditionBaseAmount: mptStepConfig.taxFreightAmt,
                             ConditionCurrency: item.TransactionCurrency || "",
                             FreightSupplier: "600000"
                         }, {
-                            PurchaseOrderItem: poItemNumber,
+                            PurchaseOrderItem: poItemNumber || "",
                             ConditionType: "ZQU2",
                             ConditionBaseAmount: mptStepConfig.taxFreightAmt,
                             ConditionCurrency: item.TransactionCurrency || "",
                             FreightSupplier: "600000"
                         });
                     }
-                    
+
                     return pricingElements;
                 })()
             });
@@ -376,8 +377,8 @@ class PurchaseOrderCreateService {
             PurchasingGroup: mptStepConfig?.ekgrp || "",
             Supplier: isReturn ? (mptStepConfig?.umwrk || "") : (mptStepConfig?.lifnr || ""),
             //DocumentCurrency: mainData.TransactionCurrency || "",
-            YY1_FD_ZDFJY2_PDH: zdfjy,
-            YY1_FD_ZRFCID_PDH: zrfcid,
+            YY1_FD_ZDFJY2_PDH: zdfjy || "",
+            YY1_FD_ZRFCID_PDH: zrfcid || "",
             SupplyingPlant: isReturn ? (mptStepConfig?.umwrk || "") : (mptStepConfig?.lifnr || ""),
             _PurchaseOrderItem: purchaseOrderItems
         };
@@ -393,7 +394,7 @@ class PurchaseOrderCreateService {
                 const mainDataMapping = JSON.parse(mptStepConfig.mainDataMapping);
                 Object.keys(mainDataMapping).forEach(targetField => {
                     const sourceField = mainDataMapping[targetField];
-                    if (mainData[sourceField] !== undefined) {
+                    if (mainData[sourceField] !== undefined && mainData[sourceField] !== null) {
                         purchaseOrderData[targetField] = mainData[sourceField];
                     }
                 });
