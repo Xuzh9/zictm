@@ -80,19 +80,19 @@ module.exports = cds.service.impl(async function () {
     }
 
     // --------------------------
-    // 数据库已存在校验
+    // 数据库已存在校验（允许重推，但已成功的不允许重复推送）
     // --------------------------
-    const existingKeys = await service.run(SELECT.from(Transfer)
+    const existingRecords = await service.run(SELECT.from(Transfer)
       .columns(['TransferOrder', 'TransferOrderItem', 'zrfc_logid'])
       .where({
         TransferOrder: { in: data.map(p => p.TransferOrder) }
       }));
 
     // 获取需要查询的 zrfc_logid 列表
-    const zrfcLogids = existingKeys
+    const zrfcLogids = existingRecords
       .filter(r => r.zrfc_logid)
       .map(r => r.zrfc_logid);
-    
+
     // 查询 MultistepHeadLog 获取执行状态
     const headLogs = {};
     if (zrfcLogids.length > 0) {
@@ -105,12 +105,22 @@ module.exports = cds.service.impl(async function () {
       });
     }
 
-    existingKeys.forEach(existing => {
+    // 将已存在记录转换为 Map，方便快速查找
+    const existingKeyMap = new Map();
+    existingRecords.forEach(existing => {
       const key = `${existing.TransferOrder}-${existing.TransferOrderItem}`;
-      if (keyMap.has(key)) {
-        const headLogCode = headLogs[existing.zrfc_logid];
+      existingKeyMap.set(key, existing.zrfc_logid);
+    });
+
+    // 检查当前请求的数据是否在数据库中已存在且状态为成功
+    data.forEach((item, index) => {
+      const rowNum = index + 1;
+      const key = `${item.TransferOrder}-${item.TransferOrderItem}`;
+      if (existingKeyMap.has(key)) {
+        const zrfcLogid = existingKeyMap.get(key);
+        const headLogCode = headLogs[zrfcLogid];
         if (headLogCode === 'S') {
-          errors.push(`主键 [${key}] 已成功推送，无法重复推送`);
+          errors.push(`第 ${rowNum} 条数据的主键 [${key}] 已成功推送，无法重复推送`);
         }
       }
     });
@@ -242,18 +252,48 @@ module.exports = cds.service.impl(async function () {
     }
 
     // --------------------------
-    // 数据库已存在校验
+    // 数据库已存在校验（允许重推，但已成功的不允许重复推送）
     // --------------------------
-    const existingKeys = await service.run(SELECT.from(PaymentReceipt)
-      .columns(['paymentReceiptNo', 'paymentReceiptNoItem'])
+    const existingRecords = await service.run(SELECT.from(PaymentReceipt)
+      .columns(['paymentReceiptNo', 'paymentReceiptNoItem', 'zrfc_logid'])
       .where({
         paymentReceiptNo: { in: data.map(p => p.paymentReceiptNo) }
       }));
 
-    existingKeys.forEach(existing => {
+    // 获取需要查询的 zrfc_logid 列表
+    const zrfcLogids = existingRecords
+      .filter(r => r.zrfc_logid)
+      .map(r => r.zrfc_logid);
+
+    // 查询 MultistepHeadLog 获取执行状态
+    const headLogs = {};
+    if (zrfcLogids.length > 0) {
+      const MultistepHeadLog = cds.entities['com.sap.zictm.MultistepHeadLog'];
+      const logs = await cds.run(SELECT.from(MultistepHeadLog)
+        .columns(['zrfc_logid', 'code'])
+        .where({ zrfc_logid: { in: zrfcLogids } }));
+      logs.forEach(log => {
+        headLogs[log.zrfc_logid] = log.code;
+      });
+    }
+
+    // 将已存在记录转换为 Map，方便快速查找
+    const existingKeyMap = new Map();
+    existingRecords.forEach(existing => {
       const key = `${existing.paymentReceiptNo}-${existing.paymentReceiptNoItem}`;
-      if (keyMap.has(key)) {
-        errors.push(`主键 [${key}] 已在数据库中存在，无法重复创建`);
+      existingKeyMap.set(key, existing.zrfc_logid);
+    });
+
+    // 检查当前请求的数据是否在数据库中已存在且状态为成功
+    data.forEach((item, index) => {
+      const rowNum = index + 1;
+      const key = `${item.paymentReceiptNo}-${item.paymentReceiptNoItem}`;
+      if (existingKeyMap.has(key)) {
+        const zrfcLogid = existingKeyMap.get(key);
+        const headLogCode = headLogs[zrfcLogid];
+        if (headLogCode === 'S') {
+          errors.push(`第 ${rowNum} 条数据的主键 [${key}] 已成功推送，无法重复推送`);
+        }
       }
     });
 

@@ -181,6 +181,7 @@ entity PaymentReceipt {
     ourBankAccount              : String(50) @title: '我方银行账号';     // 我方银行账号
     generalLedgerAccountCash    : String(20) @title: '总账科目（资金科目）';     // 总账科目（资金科目）
     generalLedgerAccountNonCash : String(20) @title: '总账科目（非资金科目）' ;    // 总账科目（非资金科目）
+    MajorExpenseCategory        : String(100) @title: '费用大类';    // 费用大类
     expenseItem                 : String(40) @title: '费用项目';     // 费用项目     
     itemRemark                  : String(50) @title: '明细备注';     // 明细备注   
     documentName                : String(10) @title: '单据名称';     // 单据名称

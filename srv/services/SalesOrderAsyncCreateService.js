@@ -19,7 +19,7 @@ class SalesOrderAsyncCreateService {
             case 'CR':
             case 'DR':
                 return {
-                    createUrl: '/sap/opu/odata4/sap/api_debitmemorequest/srvd_a2x/sap/debitmemorequest/0001/CustomerDebitMemoRequest',
+                    createUrl: '/sap/opu/odata4/sap/api_debitmemorequest/srvd_a2x/sap/debitmemorequest/0001/DebitMemoRequest',
                     responseField: 'DebitMemoRequest',
                     dateField: 'DebitMemoRequestDate',
                     itemCategoryField: 'DebitMemoRequestItemCategory',
@@ -115,6 +115,7 @@ class SalesOrderAsyncCreateService {
                     data: salesOrderData,
                     headers: {
                         'Accept': 'application/json',
+                        'Content-Type': 'application/json',
                         'Prefer': 'respond-async',
                         'sap-language': 'ZH'
                     },
@@ -368,9 +369,9 @@ class SalesOrderAsyncCreateService {
                     const valueField = `${conditionType}_Value`;
                     if (item[valueField]) {
                         pricingElements.push({
-                            ConditionType: conditionType,
-                            ConditionRateAmount: parseFloat(item[valueField]),
-                            ConditionCurrency: item[`${conditionType}_CurrencyCode`] || item.ItemTransactionCurrency
+                            ConditionType: conditionType || "",
+                            ConditionRateAmount: parseFloat(item[valueField]) || 0,
+                            ConditionCurrency: item[`${conditionType}_CurrencyCode`] || item.ItemTransactionCurrency || ""
                         });
                     }
                 }
@@ -400,17 +401,20 @@ class SalesOrderAsyncCreateService {
             const itemData = {
                 Product: (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') ? (item.Material || "") : (item.Product || ""),
                 RequestedQuantity: parseFloat(item.RequestedQuantity) || 0,
-                RequestedQuantityISOUnit: unit,
+                RequestedQuantityISOUnit: unit || "",
                 Plant: plantValue || "",
-                [apiConfig.itemCategoryField]: item.SalesOrderItemCategory || itemCategory,
+                [apiConfig.itemCategoryField]: item.SalesOrderItemCategory || itemCategory || "",
                 YY1_FD_FNSKU_SDI: item.YY1_FD_FNSKU || "",
                 YY1_FD_SKU_SDI: item.YY1_FD_SKU || "",
                 YY1_FD_DZKB_SDI: item.YY1_FD_DZKB || "",
                 _ItemPricingElement: pricingElements
             };
             
-            if (item.StorageLocation || item.ReceivingStorageLocation) {
-                itemData.StorageLocation = item.StorageLocation || item.ReceivingStorageLocation;
+            // 库存地点字段
+            if (salesOrderType !== 'CR' && salesOrderType !== 'DR') {
+                if (item.StorageLocation || item.ReceivingStorageLocation) {
+                    itemData.StorageLocation = item.StorageLocation || item.ReceivingStorageLocation || "" ;
+                }
             }
             
             if (apiConfig.isReturn) {
@@ -438,15 +442,15 @@ class SalesOrderAsyncCreateService {
 
         let salesOrderData = {
             [apiConfig.orderTypeField]: apiConfig.orderTypeValue || salesOrderType || '',
-            SalesOrganization: mainData.SalesOrganization || mptStepConfig?.vkorg,
+            SalesOrganization: mainData.SalesOrganization || mptStepConfig?.vkorg || "",
             SalesOffice: mainData.SalesOffice || "",
-            DistributionChannel: (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') ? (mainData.DistributionChannel) : (mptStepConfig?.vtweg),
-            OrganizationDivision: (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') ? (mainData.OrganizationDivision || "00") : (mptStepConfig?.spart || "00"),
-            SoldToParty: (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') ? (mainData.SalesDistrict || mptStepConfig?.kunnr) : (mainData.Customer || mptStepConfig?.kunnr),
+            DistributionChannel: (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') ? (mainData.DistributionChannel || mptStepConfig?.vtweg || "") : (mptStepConfig?.vtweg || ""),
+            OrganizationDivision: (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') ? (mainData.OrganizationDivision || mptStepConfig?.spart || "00") : (mptStepConfig?.spart || "00"),
+            SoldToParty: (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') ? (mainData.SalesDistrict || mptStepConfig?.kunnr || "") : (mainData.Customer || mptStepConfig?.kunnr || ""),
             PurchaseOrderByCustomer: (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') ? (mainData.PIOrder || "") : (mainData.SalesOrder || ""),
-            TransactionCurrency: mainData.TransactionCurrency,
-            YY1_FD_ZDFJY_SDH: (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') ? mainData.YY1_FD_ZDFJY : mptStepConfig?.zdfjy,
-            YY1_FD_ZRFCID2_SDH: zrfcid,
+            TransactionCurrency: mainData.TransactionCurrency || "",
+            YY1_FD_ZDFJY_SDH: (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') ? (mainData.YY1_FD_ZDFJY || mptStepConfig?.zdfjy || "") : (mptStepConfig?.zdfjy || ""),
+            YY1_FD_ZRFCID2_SDH: zrfcid || "",  
             YY1_FD_XMYQ_SDH: mainData.YY1_FD_XMYQ || "",              
             YY1_FD_DBFS_SDH: mainData.YY1_FD_DBFS || "",                
             YY1_FD_FHYQ_SDH: mainData.YY1_FD_FHYQ || "",
@@ -480,12 +484,15 @@ class SalesOrderAsyncCreateService {
             }
         }
 
-        if (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') {
-            if (mainData.ConfirmedDeliveryDate) {
-                salesOrderData.RequestedDeliveryDate = typeof mainData.ConfirmedDeliveryDate === 'string' ? mainData.ConfirmedDeliveryDate : new Date(mainData.ConfirmedDeliveryDate).toISOString().split('T')[0];
+        // RequestedDeliveryDate
+        if (salesOrderType !== 'CR' && salesOrderType !== 'DR') {
+            if (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') {
+                if (mainData.ConfirmedDeliveryDate) {
+                    salesOrderData.RequestedDeliveryDate = typeof mainData.ConfirmedDeliveryDate === 'string' ? mainData.ConfirmedDeliveryDate : new Date(mainData.ConfirmedDeliveryDate).toISOString().split('T')[0];
+                }
+            } else if (mainData.DeliveryDate) {
+                salesOrderData.RequestedDeliveryDate = typeof mainData.DeliveryDate === 'string' ? mainData.DeliveryDate : new Date(mainData.DeliveryDate).toISOString().split('T')[0];
             }
-        } else if (mainData.DeliveryDate) {
-            salesOrderData.RequestedDeliveryDate = typeof mainData.DeliveryDate === 'string' ? mainData.DeliveryDate : new Date(mainData.DeliveryDate).toISOString().split('T')[0];
         }
 
         return salesOrderData;
