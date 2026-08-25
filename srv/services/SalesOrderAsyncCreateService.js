@@ -17,14 +17,25 @@ class SalesOrderAsyncCreateService {
     getApiConfig(salesOrderType) {
         switch (salesOrderType) {
             case 'CR':
+                return {
+                    createUrl: '/sap/opu/odata4/sap/api_creditmemorequest/srvd_a2x/sap/creditmemorequest/0001/CreditMemoRequest',
+                    responseField: 'CreditMemoRequest',
+                    dateField: 'CreditMemoRequestDate',
+                    itemCategoryField: 'CreditMemoRequestItemCategory',
+                    itemCategory: 'G2N',
+                    orderTypeField: 'CreditMemoRequestType',
+                    orderTypeValue: 'G2',
+                    itemField: 'CreditMemoRequestItem'
+                };
             case 'DR':
                 return {
                     createUrl: '/sap/opu/odata4/sap/api_debitmemorequest/srvd_a2x/sap/debitmemorequest/0001/DebitMemoRequest',
                     responseField: 'DebitMemoRequest',
                     dateField: 'DebitMemoRequestDate',
                     itemCategoryField: 'DebitMemoRequestItemCategory',
-                    itemCategory: salesOrderType === 'CR' ? 'G2N' : 'L2N',
+                    itemCategory: 'L2N',
                     orderTypeField: 'DebitMemoRequestType',
+                    orderTypeValue: 'L2',
                     itemField: 'DebitMemoRequestItem'
                 };
             case 'CBRE':

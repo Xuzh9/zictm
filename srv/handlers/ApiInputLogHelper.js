@@ -1,4 +1,5 @@
 const cds = require('@sap/cds');
+const { UPDATE } = cds.ql;
 
 class ApiInputLogHelper {
     /**
@@ -20,7 +21,7 @@ class ApiInputLogHelper {
                 INSERT.into(ApiInputLog).entries({
                     id: id,
                     inputData: inputDataStr,
-                    code: errorMessage ? 'E' : 'S',
+                    code: errorMessage ? 'E' : '',
                     message: errorMessage || '入参处理成功',
                     executionAt: new Date()
                 })
@@ -32,6 +33,33 @@ class ApiInputLogHelper {
         }
         
         return id;
+    }
+
+    /**
+     * 更新接口入参日志状态
+     * @param {string} id - 日志ID
+     * @param {string} code - 状态码 (S成功/E失败/P处理中)
+     * @param {string} message - 消息文本
+     */
+    static async updateApiInputLog(id, code, message) {
+        if (!id) {
+            console.warn('[ApiInputLogHelper] updateApiInputLog: id 为空，跳过更新');
+            return;
+        }
+        try {
+            await cds.run(
+                UPDATE(cds.entities['com.sap.zictm.ApiInputLog'])
+                    .set({ 
+                        code: code, 
+                        message: message ? message.substring(0, 500) : '',
+                        executionAt: new Date() 
+                    })
+                    .where({ id: id })
+            );
+            console.log(`ApiInputLog 状态更新成功: id=${id}, code=${code}`);
+        } catch (error) {
+            console.error(`ApiInputLog 状态更新失败: ${error.message}`);
+        }
     }
 }
 

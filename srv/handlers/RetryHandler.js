@@ -102,7 +102,7 @@ class RetryHandler {
             } else {
                 // 同步执行重推（传递 zdfjy、id 和 processConfig）
                 console.log('[RetryHandler.retry] 开始同步重推');
-                result = await this.processor.processWithLogId(zrfcLogid, zrfcid, failedStepNum, true, zdfjy, id, processConfig);
+                result = await this.processor.processWithLogId(zrfcLogid, zrfcid, failedStepNum, true, zdfjy, id, processConfig, null, null, null, true);
                 console.log('[RetryHandler.retry] 同步重推完成, result:', result);
             }
 
@@ -133,7 +133,7 @@ class RetryHandler {
     executeAsync(zrfcLogid, zrfcid, failedStepNum, zdfjy, id = null, processConfig = null) {
         setTimeout(async () => {
             try {
-                await this.processor.processWithLogId(zrfcLogid, zrfcid, failedStepNum, true, zdfjy, id, processConfig);
+                await this.processor.processWithLogId(zrfcLogid, zrfcid, failedStepNum, true, zdfjy, id, processConfig, null, null, null, true);
             } catch (error) {
                 console.error('异步重推处理异常:', error);
                 // 确保异步重推失败时也能保存日志

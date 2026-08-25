@@ -57,7 +57,16 @@ class MaterialDocumentService {
 
             // 构建物料凭证数据（MM02 需要异步查询批次库存）
             const materialDocData = await this.buildMaterialDocumentData(businessDataList, zrfcid);
- 
+
+            // 校验：没有行项目则不调用 API
+            if (!materialDocData.to_MaterialDocumentItem || !materialDocData.to_MaterialDocumentItem.results || materialDocData.to_MaterialDocumentItem.results.length === 0) {
+                return {
+                    code: 'E',
+                    message: '物料凭证行项目为空，未调用过账 API',
+                    objkey: ''
+                };
+            }
+
             // 使用 SAP Cloud SDK 的 executeHttpRequest 方法获取 CSRF token
             const csrfResult = await this.commonUtils.executeHttpRequestWithRetry(
                 {
@@ -422,8 +431,13 @@ class MaterialDocumentService {
                 }
             }
 
+            // 负库存场景：库存不足时，将剩余不足部分累加到第一个批次
+            if (remainingQty > 0 && allocatedBatches.length > 0) {
+                allocatedBatches[0].Quantity += remainingQty;
+            }
+
             // 生成行项目（可能多条）
-            const itemText = businessData.PIOrder && businessData.PIOrderItem 
+            const itemText = businessData.PIOrder && businessData.PIOrderItem
                 ? `${businessData.PIOrder}-${businessData.PIOrderItem}` : '';
 
             for (const batchItem of allocatedBatches) {
@@ -439,14 +453,6 @@ class MaterialDocumentService {
                     MaterialDocumentItemText: itemText
                 };
                 items.push(item);
-            }
-
-            // 如果批次库存不足，报错并停止执行
-            if (remainingQty > 0) {
-                const shortage = remainingQty;
-                const errorMsg = `物料 ${businessData.Material} 在工厂 ${businessData.Plant} 批次库存不足，需求 ${requiredQty}，可用库存不足，缺少 ${shortage}`;
-                console.error(`[MaterialDocumentService] ${errorMsg}`);
-                throw new Error(errorMsg);
             }
         }
 

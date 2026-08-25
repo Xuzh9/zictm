@@ -60,17 +60,6 @@ class DeliveryOrderPostingService {
                 deliveryDocument = previousObjkey;
             }
 
-            // 检查交货单号是否存在
-            if (!deliveryDocument) {
-                const returnResult = {
-                    code: 'E',
-                    message: '交货单号为空，无法执行过账',
-                    objkey: ''
-                };
-                console.log('[DeliveryOrderPostingService] 返回结果:', JSON.stringify(returnResult));
-                return returnResult;
-            }
-
             // 获取销售订单类型（SD07/SD10 从 PIDeliveryRel 获取，其他从业务表获取）
             let salesOrderType;
             if ((zrfcid === 'SD07' && canum === 100) || (zrfcid === 'SD10' && (canum === 100 ))) {
@@ -95,8 +84,31 @@ class DeliveryOrderPostingService {
             } else {
                 salesOrderType = mainData.SalesOrderType;
             }
-            console.log(`[DeliveryOrderPostingService] 销售订单类型: ${salesOrderType}`);
 
+            // 借贷项订单（CR/DR）不需要交货单操作，直接跳过
+            if (salesOrderType === 'CR' || salesOrderType === 'DR') {
+                console.log(`[DeliveryOrderPostingService] 销售订单类型 ${salesOrderType} 为借贷项订单，步骤跳过`);
+                const returnResult = {
+                    code: 'S',
+                    message: `销售订单类型 ${salesOrderType} 为借贷项订单，跳过交货单过账`,
+                    objkey: ''
+                };
+                console.log('[DeliveryOrderPostingService] 返回结果:', JSON.stringify(returnResult));
+                return returnResult;
+            }
+
+            // 检查交货单号是否存在
+            if (!deliveryDocument) {
+                const returnResult = {
+                    code: 'E',
+                    message: '交货单号为空，无法执行过账',
+                    objkey: ''
+                };
+                console.log('[DeliveryOrderPostingService] 返回结果:', JSON.stringify(returnResult));
+                return returnResult;
+            }
+            
+            console.log(`[DeliveryOrderPostingService] 销售订单类型: ${salesOrderType}`);
             console.log(`[DeliveryOrderPostingService] 开始执行交货单过账, 交货单号: ${deliveryDocument}`);
             console.log(`[DeliveryOrderPostingService] 判断条件 - zrfcid: ${zrfcid}, canum: ${canum}, 类型 - zrfcid: ${typeof zrfcid}, canum: ${typeof canum}`);
 

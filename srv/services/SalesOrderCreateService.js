@@ -22,18 +22,30 @@ class SalesOrderCreateService {
     getApiConfig(salesOrderType) {
         switch (salesOrderType) {
             case 'CR':
-            case 'DR':
-                // 借贷项订单（CR/DR）
+                // 贷项凭证申请（CR）
                 return {
-                    csrfUrl: '/sap/opu/odata/sap/API_DEBIT_MEMO_REQUEST_SRV/$metadata',
-                    createUrl: '/sap/opu/odata/sap/API_DEBIT_MEMO_REQUEST_SRV/A_DebitMemoRequest',
+                    csrfUrl: '/sap/opu/odata/sap/API_CREDIT_MEMO_REQUEST_SRV/$metadata',
+                    createUrl: '/sap/opu/odata/sap/API_CREDIT_MEMO_REQUEST_SRV/A_CreditMemoRequest',
                     responseField: 'CreditMemoRequest',
                     dateField: 'CreditMemoRequestDate',
                     itemCategoryField: 'CreditMemoRequestItemCategory',
-                    itemCategory: salesOrderType === 'CR' ? 'G2N' : 'L2N',
+                    itemCategory: 'G2N',
                     plantField: 'Plant',
                     orderTypeField: 'CreditMemoRequestType',
                     itemField: 'CreditMemoRequestItem'
+                };
+            case 'DR':
+                // 借项凭证申请（DR）
+                return {
+                    csrfUrl: '/sap/opu/odata/sap/API_DEBIT_MEMO_REQUEST_SRV/$metadata',
+                    createUrl: '/sap/opu/odata/sap/API_DEBIT_MEMO_REQUEST_SRV/A_DebitMemoRequest',
+                    responseField: 'DebitMemoRequest',
+                    dateField: 'DebitMemoRequestDate',
+                    itemCategoryField: 'DebitMemoRequestItemCategory',
+                    itemCategory: 'L2N',
+                    plantField: 'Plant',
+                    orderTypeField: 'DebitMemoRequestType',
+                    itemField: 'DebitMemoRequestItem'
                 };
             case 'CBRE':
                 // CBRE 退货订单
@@ -450,8 +462,8 @@ class SalesOrderCreateService {
             };
         }
         
-        // 根据订单类型设置对应的订单类型字段（从 apiConfig 获取字段名）
-        salesOrderData[apiConfig.orderTypeField] = salesOrderType || '';
+        // 根据订单类型设置对应的订单类型字段（从 apiConfig 获取字段名和值）
+        salesOrderData[apiConfig.orderTypeField] = apiConfig.orderTypeValue || salesOrderType || '';
         
         // 根据业务流程设置销售订单日期
         if (apiConfig.dateField) {

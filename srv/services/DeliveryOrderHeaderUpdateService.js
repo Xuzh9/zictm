@@ -57,17 +57,6 @@ class DeliveryOrderHeaderUpdateService {
                 deliveryDocument = previousObjkey;
             }
 
-            // 检查交货单号是否存在
-            if (!deliveryDocument) {
-                const returnResult = {
-                    code: 'E',
-                    message: '交货单号为空，无法执行修改',
-                    objkey: ''
-                };
-                console.log('[DeliveryOrderUpdateService] 返回结果:', JSON.stringify(returnResult));
-                return returnResult;
-            }
-
             // 获取销售订单类型（SD07/SD10 从 PIDeliveryRel 获取，其他从业务表获取）
             let salesOrderType;
             if ((zrfcid === 'SD07' && canum === 70) || (zrfcid === 'SD10' && canum === 120)) {
@@ -94,6 +83,29 @@ class DeliveryOrderHeaderUpdateService {
             }
             console.log(`[DeliveryOrderUpdateService] 销售订单类型: ${salesOrderType}`);
 
+            // 借贷项订单（CR/DR）不需要交货单操作，直接跳过
+            if (salesOrderType === 'CR' || salesOrderType === 'DR') {
+                console.log(`[DeliveryOrderHeaderUpdateService] 销售订单类型 ${salesOrderType} 为借贷项订单，步骤跳过`);
+                const returnResult = {
+                    code: 'S',
+                    message: `销售订单类型 ${salesOrderType} 为借贷项订单，跳过交货单抬头修改`,
+                    objkey: ''
+                };
+                console.log('[DeliveryOrderHeaderUpdateService] 返回结果:', JSON.stringify(returnResult));
+                return returnResult;
+            }
+
+            // 检查交货单号是否存在
+            if (!deliveryDocument) {
+                const returnResult = {
+                    code: 'E',
+                    message: '交货单号为空，无法执行修改',
+                    objkey: ''
+                };
+                console.log('[DeliveryOrderUpdateService] 返回结果:', JSON.stringify(returnResult));
+                return returnResult;
+            }
+            
             // 获取 DeliveryDate
             const deliveryDate = mainData.DeliveryDate || mainData.ActualGoodsMovementDate;
             if (!deliveryDate) {

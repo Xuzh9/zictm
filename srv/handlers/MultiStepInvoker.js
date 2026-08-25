@@ -3,6 +3,7 @@ const { SELECT, INSERT, UPDATE, DELETE } = cds.ql;
 const MultiStepProcessor = require('./MultiStepProcessor');
 const CommonUtils = require('./CommonUtils');
 const RetryHandler = require('./RetryHandler');
+const ApiInputLogHelper = require('./ApiInputLogHelper');
 
 class MultiStepInvoker {
     constructor() {
@@ -61,7 +62,12 @@ class MultiStepInvoker {
                 // 更新业务表数据（覆盖更新）
                 await this.updateBusinessDataByConfig(processConfig, businessTable1, businessTable2, businessTable3, zrfcid, zrfcLogid, zdfjy);
                 
-                // 调用 RetryHandler 的 retry 方法（传递 id 和 zdfjy）
+                // 回写 ApiInputLog 为 S（重推前置数据已更新成功）
+                if (id) {
+                    await ApiInputLogHelper.updateApiInputLog(id, 'S', '重推前置数据保存成功');
+                }
+                
+                // 调用 RetryHandler 的 retry 方法
                 const retryResult = await this.retryHandler.retry(zrfcLogid, id, zdfjy);
                 result.code = retryResult.code;
                 result.message = retryResult.message;
@@ -72,13 +78,27 @@ class MultiStepInvoker {
                 zrfcLogid = this.generateZrfcLogid();
                 console.log('[MultiStepInvoker.process] 生成的 zrfcLogid:', zrfcLogid);
                 
+                // 前置数据保存（校验 + HeadLog + 业务表 + 初始 MultistepLog）
+                const prepareResult = await this.processor.prepareProcessing(zrfcLogid, zrfcid, processConfig, businessTable1, businessTable2, businessTable3, zdfjy, id, false);
+                
+                if (prepareResult.code !== 'S') {
+                    result.code = 'E';
+                    result.message = prepareResult.message;
+                    return result;
+                }
+                
+                // 前置数据保存成功 → 回写 ApiInputLog 为 S → 返回给外围系统
+                if (id) {
+                    await ApiInputLogHelper.updateApiInputLog(id, 'S', prepareResult.message);
+                }
+                
                 // 根据 isAsync 字段判断同步还是异步调用
                 if (processConfig.isAsync) {
                     this.executeAsync(zrfcid, zrfcLogid, zdfjy, null, false, id, processConfig, businessTable1, businessTable2, businessTable3);
-                    result.message = '异步调用成功，正在处理中';
+                    result.message = '前置数据保存成功，异步处理中';
                 } else {
-                    // 将业务表数据传递给 MultiStepProcessor，由其统一保存业务表和 MultistepLog
-                    const processorResult = await this.processor.processWithLogId(zrfcLogid, zrfcid, null, false, zdfjy, id, processConfig, businessTable1, businessTable2, businessTable3);
+                    // 同步调用：跳过前置步骤（已由 prepareProcessing 完成）
+                    const processorResult = await this.processor.processWithLogId(zrfcLogid, zrfcid, null, false, zdfjy, id, processConfig, businessTable1, businessTable2, businessTable3, true);
                     result.code = processorResult.code;
                     result.message = processorResult.message ? processorResult.message.substring(0, 500) : '执行成功';
                     result.objkey = processorResult.objkey || '';
@@ -94,7 +114,7 @@ class MultiStepInvoker {
         
         result.zrfcLogid = zrfcLogid;
         result.message = result.message ? result.message.substring(0, 500) : '处理成功';
-            
+
         return result;
     }
     
@@ -181,12 +201,12 @@ class MultiStepInvoker {
     executeAsync(zrfcid, zrfcLogid, zdfjy = null, startStepNum = null, isRetry = false, id = null, processConfig = null, businessTable1 = null, businessTable2 = null, businessTable3 = null) {
         setTimeout(async () => {
             try {
-                await this.processor.processWithLogId(zrfcLogid, zrfcid, startStepNum, isRetry, zdfjy, id, processConfig, businessTable1, businessTable2, businessTable3);
+                await this.processor.processWithLogId(zrfcLogid, zrfcid, startStepNum, isRetry, zdfjy, id, processConfig, businessTable1, businessTable2, businessTable3, true);
             } catch (error) {
                 console.error('异步处理异常:', error);
+                const errorMessage = error.message ? error.message.substring(0, 500) : '异步处理异常';
                 // 确保异步调用失败时也能保存日志
                 try {
-                    const cds = require('@sap/cds');
                     const { INSERT } = cds.ql;
                     const MultistepLog = cds.entities['com.sap.zictm.MultistepLog'];
                     await cds.tx(async (tx) => {
@@ -196,7 +216,7 @@ class MultiStepInvoker {
                                 canum: '0',
                                 zrfcid: zrfcid,
                                 code: 'E',
-                                message: error.message ? error.message.substring(0, 500) : '异步处理异常',
+                                message: errorMessage,
                                 executionAt: new Date(),
                                 lastExecutionAt: new Date()
                             })
@@ -206,11 +226,20 @@ class MultiStepInvoker {
                 } catch (logError) {
                     console.error(`[MultiStepInvoker.executeAsync] 保存失败日志失败: ${logError.message}`);
                 }
-                // 更新 MultistepHeadLog 标记为失败
+                // 更新 MultistepHeadLog 标记为失败（带兜底）
                 try {
-                    await this.processor.saveHeadLog(null, zrfcLogid, zrfcid, zdfjy, id, 'E', error.message ? error.message.substring(0, 500) : '异步处理异常', new Date());
+                    await this.processor.saveHeadLog(null, zrfcLogid, zrfcid, zdfjy, id, 'E', errorMessage, new Date());
                 } catch (headLogError) {
-                    console.error(`[MultiStepInvoker.executeAsync] 更新HeadLog失败: ${headLogError.message}`);
+                    console.error(`[MultiStepInvoker.executeAsync] 更新HeadLog失败: ${headLogError.message}, 尝试兜底...`);
+                    try {
+                        await cds.run(
+                            UPDATE(cds.entities['com.sap.zictm.MultistepHeadLog'])
+                                .set({ code: 'E', message: errorMessage, lastExecutionAt: new Date() })
+                                .where({ zrfc_logid: zrfcLogid })
+                        );
+                    } catch (fallbackError) {
+                        console.error('[MultiStepInvoker.executeAsync] HeadLog 兜底更新也失败:', fallbackError.message);
+                    }
                 }
             }
         }, 100);

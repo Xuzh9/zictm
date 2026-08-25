@@ -51,17 +51,6 @@ class DeliveryOrderItemUpdateService {
             // 使用通用工具类读取之前步骤的 objkey（交货单号）
             const previousObjkey = await this.commonUtils.getPreviousStepObjkey(zrfcLogid, zrfcid, readsteps, canum);
 
-            // 获取交货单号（从 objkey 或业务数据中获取）
-            const deliveryDocument = previousObjkey || businessDataList[0]?.DeliveryDocument || '';
-            if (!deliveryDocument) {
-                return {
-                    code: 'E',
-                    message: '未找到交货单号',
-                    objkey: ''
-                };
-            }
-            console.log('[DeliveryOrderItemUpdateService] 交货单号:', deliveryDocument);
-
             // 获取销售订单类型（SD07/SD10 从 PIDeliveryRel 获取，其他从业务表获取）
             let salesOrderType;
             if ((zrfcid === 'SD07' && canum === 80) || (zrfcid === 'SD10' && canum === 130)) {
@@ -87,7 +76,30 @@ class DeliveryOrderItemUpdateService {
                 salesOrderType = businessDataList[0]?.SalesOrderType;
             }
             console.log(`[DeliveryOrderItemUpdateService] 销售订单类型: ${salesOrderType}`);
-            
+
+            // 借贷项订单（CR/DR）不需要交货单操作，直接跳过
+            if (salesOrderType === 'CR' || salesOrderType === 'DR') {
+                console.log(`[DeliveryOrderItemUpdateService] 销售订单类型 ${salesOrderType} 为借贷项订单，步骤跳过`);
+                const returnResult = {
+                    code: 'S',
+                    message: `销售订单类型 ${salesOrderType} 为借贷项订单，跳过交货单行项目修改`,
+                    objkey: ''
+                };
+                console.log('[DeliveryOrderItemUpdateService] 返回结果:', JSON.stringify(returnResult));
+                return returnResult;
+            }
+
+            // 获取交货单号（从 objkey 或业务数据中获取）
+            const deliveryDocument = previousObjkey || businessDataList[0]?.DeliveryDocument || '';
+            if (!deliveryDocument) {
+                return {
+                    code: 'E',
+                    message: '未找到交货单号',
+                    objkey: ''
+                };
+            }
+            console.log('[DeliveryOrderItemUpdateService] 交货单号:', deliveryDocument);
+
             // 根据 zrfcid、canum 和销售订单类型判断使用的 API 路径
             let apiPath;
             let itemEntity;
