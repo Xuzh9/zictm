@@ -47,6 +47,14 @@ class MultiStepInvoker {
             if (!processConfig) {
                 result.code = 'E';
                 result.message = `业务流程配置不存在: ${zrfcid}`;
+                // 回写 ApiInputLog 状态为 E
+                if (id) {
+                    try {
+                        await ApiInputLogHelper.updateApiInputLog(id, 'E', result.message);
+                    } catch (updateErr) {
+                        console.error('[MultiStepInvoker.process] 更新 ApiInputLog 失败:', updateErr.message);
+                    }
+                }
                 return result;
             }
             
@@ -110,6 +118,15 @@ class MultiStepInvoker {
             const errorMessage = error.message ? error.message.substring(0, 500) : '未知错误';
             result.message = `系统错误: ${errorMessage}`;
             console.error(`业务数据处理异常: ${result.message}`, error);
+
+            // 回写 ApiInputLog 状态为 E
+            if (id) {
+                try {
+                    await ApiInputLogHelper.updateApiInputLog(id, 'E', errorMessage);
+                } catch (updateErr) {
+                    console.error('[MultiStepInvoker.process] 更新 ApiInputLog 失败:', updateErr.message);
+                }
+            }
         }
         
         result.zrfcLogid = zrfcLogid;
@@ -206,31 +223,31 @@ class MultiStepInvoker {
                 console.error('异步处理异常:', error);
                 const errorMessage = error.message ? error.message.substring(0, 500) : '异步处理异常';
                 // 确保异步调用失败时也能保存日志
+                // 先尝试获取第一个步骤号，用于保存错误日志
+                let firstStepCanum = '0';
                 try {
-                    const { INSERT } = cds.ql;
-                    const MultistepLog = cds.entities['com.sap.zictm.MultistepLog'];
-                    await cds.tx(async (tx) => {
-                        await tx.run(
-                            INSERT.into(MultistepLog).entries({
-                                zrfc_logid: zrfcLogid,
-                                canum: '0',
-                                zrfcid: zrfcid,
-                                code: 'E',
-                                message: errorMessage,
-                                executionAt: new Date(),
-                                lastExecutionAt: new Date()
-                            })
-                        );
-                    });
-                    console.log(`[MultiStepInvoker.executeAsync] 异步处理失败日志保存成功, zrfcLogid: ${zrfcLogid}`);
-                } catch (logError) {
-                    console.error(`[MultiStepInvoker.executeAsync] 保存失败日志失败: ${logError.message}`);
+                    const StepConfig = cds.entities['com.sap.zictm.StepConfig'];
+                    const steps = await cds.run(
+                        SELECT.from(StepConfig)
+                            .where({ process_zrfcid: zrfcid })
+                            .orderBy('canum')
+                            .limit(1)
+                    );
+                    if (steps && steps.length > 0) {
+                        firstStepCanum = String(steps[0].canum);
+                    }
+                } catch (e) {
+                    console.warn('[MultiStepInvoker.executeAsync] 获取步骤配置失败，使用默认canum: 0');
                 }
-                // 更新 MultistepHeadLog 标记为失败（带兜底）
+                // 原子更新 HeadLog + 错误步骤日志（同一事务，确保一致性）
                 try {
-                    await this.processor.saveHeadLog(null, zrfcLogid, zrfcid, zdfjy, id, 'E', errorMessage, new Date());
-                } catch (headLogError) {
-                    console.error(`[MultiStepInvoker.executeAsync] 更新HeadLog失败: ${headLogError.message}, 尝试兜底...`);
+                    await this.processor.finalizeHeadAndStepLog(
+                        zrfcLogid, zrfcid, firstStepCanum, 'E',
+                        errorMessage, '', new Date()
+                    );
+                    console.log(`[MultiStepInvoker.executeAsync] 异步错误原子更新成功, zrfcLogid: ${zrfcLogid}`);
+                } catch (finalizeError) {
+                    console.error(`[MultiStepInvoker.executeAsync] 原子更新失败: ${finalizeError.message}, 尝试兜底...`);
                     try {
                         await cds.run(
                             UPDATE(cds.entities['com.sap.zictm.MultistepHeadLog'])

@@ -86,7 +86,7 @@ class SalesOrderAsyncResultService {
                         };
                     }
 
-                    const salesOrder = responseData?.SalesOrder || responseData?.CustomerReturn || responseData?.DebitMemoRequest || '';
+                    const salesOrder = responseData?.SalesOrder || responseData?.CustomerReturn || responseData?.DebitMemoRequest || responseData?.CreditMemoRequest || '';
 
                     console.log('[SalesOrderAsyncResultService] 异步调用成功, 销售订单:', salesOrder);
 
@@ -235,7 +235,7 @@ class SalesOrderAsyncResultService {
                 }
 
                 const sapItem = matchedSapItems.shift();
-                const salesOrderItem = sapItem.SalesOrderItem || '';
+                const salesOrderItem = sapItem.SalesOrderItem || sapItem.CreditMemoRequestItem || sapItem.DebitMemoRequestItem || sapItem.CustomerReturnItem || '';
 
                 const piOrder = item.PIOrder || '';
                 const piOrderItem = item.PIOrderItem || '';

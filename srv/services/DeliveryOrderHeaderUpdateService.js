@@ -59,7 +59,7 @@ class DeliveryOrderHeaderUpdateService {
 
             // 获取销售订单类型（SD07/SD10 从 PIDeliveryRel 获取，其他从业务表获取）
             let salesOrderType;
-            if ((zrfcid === 'SD07' && canum === 70) || (zrfcid === 'SD10' && canum === 120)) {
+            if ((zrfcid === 'SD07' && canum === 70) || (zrfcid === 'SD11' && canum === 70) ) {
                 try {
                     const PIDeliveryRel = cds.entities['com.sap.zictm.PIDeliveryRel'];
                     const { SELECT } = cds.ql;
@@ -287,7 +287,7 @@ class DeliveryOrderHeaderUpdateService {
                 csrfUrl: '/sap/opu/odata/sap/API_INBOUND_DELIVERY_SRV;v=0002/A_InbDeliveryHeader(\'{DeliveryDocument}\')',
                 updateUrl: "/sap/opu/odata/sap/API_INBOUND_DELIVERY_SRV;v=0002/A_InbDeliveryHeader('{DeliveryDocument}')"
             };
-        } else if (((zrfcid === 'SD11' && canum === 70) || (zrfcid === 'SD07' && canum === 60) ) && salesOrderType === 'CBRE') {
+        } else if (((zrfcid === 'SD11' && canum === 70) || (zrfcid === 'SD07' && canum === 70) ) && salesOrderType === 'CBRE') {
             //退货交货单 API
             return {
                 csrfUrl: '/sap/opu/odata/sap/API_CUSTOMER_RETURNS_DELIVERY_SRV;v=2/A_ReturnsDeliveryHeader(\'{DeliveryDocument}\')',

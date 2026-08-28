@@ -19,6 +19,17 @@ class DeliveryOrderQueryService {
             
             this.zrfcLogid = zrfcLogid;
 
+            // 获取销售订单类型，判断是否为借贷项订单（CR/DR）
+            const salesOrderType = await this.getSalesOrderType(zrfcLogid, zrfcid, canum);
+            if (salesOrderType === 'CR' || salesOrderType === 'DR') {
+                console.log(`[DeliveryOrderQueryService] 销售订单类型 ${salesOrderType} 为借贷项订单，步骤跳过`);
+                return {
+                    code: 'S',
+                    message: `销售订单类型 ${salesOrderType} 为借贷项订单，跳过内向交货单查询`,
+                    objkey: ''
+                };
+            }
+
             // 如果是 SD09/SD07/SD10，从业务表获取 RefDocNo
             let referenceSDDocument;
             if (zrfcid === 'SD07' || zrfcid === 'SD09' || (zrfcid === 'SD10' && canum === 10)) {
@@ -50,6 +61,53 @@ class DeliveryOrderQueryService {
                 message: error.message || '查询内向交货单失败',
                 objkey: ''
             };
+        }
+    }
+
+    /**
+     * 获取销售订单类型（SD07/SD11 canum=70 从 PIDeliveryRel 获取，其他从业务表获取）
+     * @param {string} zrfcLogid - 多步ID
+     * @param {string} zrfcid - 业务流程ID
+     * @param {number} canum - 步骤号
+     * @returns {Promise<string|null>} 销售订单类型
+     */
+    async getSalesOrderType(zrfcLogid, zrfcid, canum) {
+        try {
+            // 从 ProcessConfig 获取业务表名
+            const ProcessConfig = cds.entities['com.sap.zictm.ProcessConfig'];
+            const config = await cds.run(
+                SELECT.one.from(ProcessConfig).where({ zrfcid: zrfcid })
+            );
+            if (!config?.businessTable1) return null;
+            
+            const entity = cds.entities[`com.sap.zictm.${config.businessTable1}`];
+            if (!entity) return null;
+            
+            // 查询业务表数据
+            const businessData = await cds.run(
+                SELECT.one.from(entity)
+                    .where({ zrfc_logid: zrfcLogid })
+            );
+            if (!businessData) return null;
+
+            if (zrfcid === 'SD07' || zrfcid === 'SD10' || zrfcid === 'SD11' ) {
+                const PIDeliveryRel = cds.entities['com.sap.zictm.PIDeliveryRel'];
+                const piDeliveryRel = await cds.run(
+                    SELECT.one.from(PIDeliveryRel)
+                        .columns(['SalesOrderType'])
+                        .where({
+                            DeliveryDocument: businessData.DeliveryDocument,
+                            DeliveryDocumentItem: businessData.DeliveryDocumentItem
+                        })
+                );
+                return piDeliveryRel?.SalesOrderType || null;
+            } else {
+                // 其他从业务表获取
+                return businessData.SalesOrderType || null;
+            }
+        } catch (error) {
+            console.error('[DeliveryOrderQueryService.getSalesOrderType] 查询失败:', error);
+            return null;
         }
     }
 

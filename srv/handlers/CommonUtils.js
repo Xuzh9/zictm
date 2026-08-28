@@ -187,7 +187,8 @@ class CommonUtils {
             );
             return config || null;
         } catch (error) {
-            return null;
+            console.error(`[CommonUtils.getProcessConfig] 查询业务流程配置失败, zrfcid: ${zrfcid}, 错误: ${error.message}`);
+            throw new Error(`查询业务流程配置失败: ${error.message}`);
         }
     }
 

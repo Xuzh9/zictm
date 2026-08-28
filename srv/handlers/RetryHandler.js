@@ -137,24 +137,51 @@ class RetryHandler {
             } catch (error) {
                 console.error('异步重推处理异常:', error);
                 // 确保异步重推失败时也能保存日志
+                // 先尝试获取第一个步骤号，用于保存错误日志
+                let firstStepCanum = '0';
                 try {
                     const cds = require('@sap/cds');
-                    const { INSERT } = cds.ql;
+                    const { SELECT } = cds.ql;
+                    const StepConfig = cds.entities['com.sap.zictm.StepConfig'];
+                    const steps = await cds.run(
+                        SELECT.from(StepConfig)
+                            .where({ process_zrfcid: zrfcid })
+                            .orderBy('canum')
+                            .limit(1)
+                    );
+                    if (steps && steps.length > 0) {
+                        firstStepCanum = String(steps[0].canum);
+                    }
+                } catch (e) {
+                    console.warn('[RetryHandler.executeAsync] 获取步骤配置失败，使用默认canum: 0');
+                }
+                try {
+                    const cds = require('@sap/cds');
+                    const { INSERT, SELECT } = cds.ql;
                     const MultistepLog = cds.entities['com.sap.zictm.MultistepLog'];
-                    await cds.tx(async (tx) => {
-                        await tx.run(
-                            INSERT.into(MultistepLog).entries({
-                                zrfc_logid: zrfcLogid,
-                                canum: '0',
-                                zrfcid: zrfcid,
-                                code: 'E',
-                                message: error.message ? error.message.substring(0, 500) : '异步重推处理异常',
-                                executionAt: new Date(),
-                                lastExecutionAt: new Date()
-                            })
-                        );
-                    });
-                    console.log(`[RetryHandler.executeAsync] 异步重推失败日志保存成功, zrfcLogid: ${zrfcLogid}`);
+                    // 先检查是否已有错误日志（由 processWithLogId 保存）
+                    const existingLog = await cds.run(
+                        SELECT.one.from(MultistepLog)
+                            .where({ zrfc_logid: zrfcLogid, canum: firstStepCanum })
+                    );
+                    if (!existingLog) {
+                        await cds.tx(async (tx) => {
+                            await tx.run(
+                                INSERT.into(MultistepLog).entries({
+                                    zrfc_logid: zrfcLogid,
+                                    canum: firstStepCanum,
+                                    zrfcid: zrfcid,
+                                    code: 'E',
+                                    message: error.message ? error.message.substring(0, 500) : '异步重推处理异常',
+                                    executionAt: new Date(),
+                                    lastExecutionAt: new Date()
+                                })
+                            );
+                        });
+                        console.log(`[RetryHandler.executeAsync] 异步重推失败日志保存成功, zrfcLogid: ${zrfcLogid}, canum: ${firstStepCanum}`);
+                    } else {
+                        console.log(`[RetryHandler.executeAsync] 步骤 ${firstStepCanum} 已有错误日志，跳过重复保存`);
+                    }
                 } catch (logError) {
                     console.error(`[RetryHandler.executeAsync] 保存失败日志失败: ${logError.message}`);
                 }
@@ -169,7 +196,7 @@ class RetryHandler {
     }
 
     /**
-     * 获取失败的步骤（包括状态为 E、空或空字符串的步骤）
+     * 获取失败的步骤（包括状态为 E、P、空或空字符串的步骤）
      * @param {string} zrfcLogid - 多步ID
      * @returns {Promise<Array>} 失败步骤列表
      */
@@ -182,11 +209,11 @@ class RetryHandler {
         );
         console.log('[RetryHandler.getFailedSteps] 所有步骤:', JSON.stringify(allSteps));
         
-        // 获取状态为 E 或空的步骤
+        // 获取状态为 E、P 或空的步骤（均可重推）
         const result = await cds.run(
             SELECT.from(MultistepLog).where({ 
                 zrfc_logid: zrfcLogid, 
-                code: { in: ['E', null, ''] } 
+                code: { in: ['E', 'P', null, ''] } 
             })
         );
 

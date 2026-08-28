@@ -25,15 +25,16 @@ class MultiStepProcessor {
         const executionAt = new Date();
 
         try {
-            // 1. 获取步骤配置
+            // 1. 获取步骤配置（只读，在事务外）
             const steps = await this.getSteps(zrfcid);
             if (!steps || steps.length === 0) {
                 const errorMsg = `未找到步骤配置: zrfcid=${zrfcid}`;
                 console.error('[MultiStepProcessor.prepareProcessing]', errorMsg);
                 return { code: 'E', message: errorMsg, steps: [] };
             }
+            const firstStepCanum = String(steps[0].canum);
 
-            // 2. 校验业务数据（非重推时）
+            // 2. 校验业务数据（只读，在事务外）
             if (processConfig && !isRetry) {
                 const validateResult = await this.validateBusinessDataBeforeInsert(processConfig, businessTable1, businessTable2, businessTable3);
                 if (!validateResult.valid) {
@@ -43,36 +44,52 @@ class MultiStepProcessor {
                 }
             }
 
-            // 3. 保存业务表数据
+            // 3. 三张表操作放在同一个事务：业务表 + HeadLog(P) + 第一步日志(P)
             if (!isRetry && processConfig) {
-                try {
-                    await this.insertBusinessDataByConfig(processConfig, businessTable1, businessTable2, businessTable3, zrfcid, zrfcLogid, zdfjy);
+                await cds.tx(async (tx) => {
+                    // 3a. 插入业务表数据
+                    await this.insertBusinessDataByConfigWithTx(tx, processConfig, businessTable1, businessTable2, businessTable3, zrfcid, zrfcLogid, zdfjy);
                     console.log('[MultiStepProcessor.prepareProcessing] 业务表插入成功');
-                } catch (dbError) {
-                    console.error('[MultiStepProcessor.prepareProcessing] 业务表插入失败:', dbError.message);
-                    return { code: 'E', message: `业务表插入失败: ${dbError.message}`, steps: [] };
-                }
-            }
 
-            // 4. 保存 MultistepHeadLog（进行中）
-            await this.saveHeadLog(null, zrfcLogid, zrfcid, zdfjy, id, 'P', '处理中', executionAt);
+                    // 3b. 保存 HeadLog（进行中）
+                    await tx.run(
+                        INSERT.into(cds.entities['com.sap.zictm.MultistepHeadLog']).entries({
+                            zrfc_logid: zrfcLogid,
+                            zrfcid: zrfcid,
+                            zdfjy: zdfjy || null,
+                            objkey: '',
+                            code: 'P',
+                            message: '处理中',
+                            executionAt: executionAt,
+                            lastExecutionAt: executionAt,
+                            id: id || null
+                        })
+                    );
+                    console.log('[MultiStepProcessor.prepareProcessing] HeadLog 保存成功');
 
-            // 5. 保存初始 MultistepLog（canum=0）
-            const MultistepLog = cds.entities['com.sap.zictm.MultistepLog'];
-            try {
-                await cds.run(
-                    INSERT.into(MultistepLog).entries({
-                        zrfc_logid: zrfcLogid,
-                        canum: '0',
-                        zrfcid: zrfcid,
-                        code: 'P',
-                        message: '准备处理',
-                        executionAt: executionAt,
-                        lastExecutionAt: executionAt
-                    })
-                );
-            } catch (logError) {
-                console.error('[MultiStepProcessor.prepareProcessing] 保存初始日志失败:', logError.message);
+                    // 3c. 保存第一步日志（占位，状态P）
+                    await tx.run(
+                        INSERT.into(cds.entities['com.sap.zictm.MultistepLog']).entries({
+                            zrfc_logid: zrfcLogid,
+                            canum: firstStepCanum,
+                            zrfcid: zrfcid,
+                            code: 'P',
+                            message: '待执行',
+                            objkey: '',
+                            objtype: '',
+                            description: steps[0]?.description || '',
+                            executionTime: 0,
+                            executionAt: executionAt,
+                            lastExecutionAt: executionAt,
+                            lastExecutionTime: 0,
+                            head_zrfc_logid: zrfcLogid
+                        })
+                    );
+                    console.log(`[MultiStepProcessor.prepareProcessing] 第一步日志保存成功, canum: ${firstStepCanum}`);
+                });
+            } else {
+                // 重推模式：只更新业务表，不创建新 HeadLog/StepLog
+                console.log('[MultiStepProcessor.prepareProcessing] 重推模式，跳过前置数据保存');
             }
 
             return { code: 'S', message: '前置数据保存成功', steps };
@@ -101,117 +118,101 @@ class MultiStepProcessor {
         let lastObjKey = '';
         let lastMessage = '';
         let lastCode = '';
+        let lastStepCanum = null;
         
         try {
             // 定义执行时间
             const executionAt = new Date();
             let steps;
+            let firstStepCanum = '0';
             
             if (!skipPreparation) {
-                // 1. 先获取步骤配置（校验在插入数据之前，避免无效数据插入）
+                // 1. 获取步骤配置（只读，在事务外）
                 steps = await this.getSteps(zrfcid);
+                if (steps && steps.length > 0) {
+                    firstStepCanum = String(steps[0].canum);
+                }
                 if (!steps || steps.length === 0) {
                     const errorMsg = `未找到步骤配置: zrfcid=${zrfcid}`;
                     console.error('[MultiStepProcessor.processWithLogId]', errorMsg);
-                    
-                    // 确保记录失败日志
-                    try {
-                        await this.saveLog(null, zrfcLogid, zrfcid, '0', {
-                            code: 'E',
-                            message: errorMsg
-                        }, 0, new Date(), isRetry);
-                    } catch (logError) {
-                        console.error('[MultiStepProcessor.processWithLogId] 保存失败日志失败:', logError.message);
-                    }
-                    
-                    // 更新 HeadLog 标记为失败
-                    try {
-                        await this.saveHeadLog(null, zrfcLogid, zrfcid, zdfjy, id, 'E', errorMsg, new Date());
-                    } catch (headLogError) {
-                        console.error('[MultiStepProcessor.processWithLogId] 更新HeadLog失败:', headLogError.message);
-                    }
-                    
-                    return {
-                        code: 'E',
-                        message: errorMsg,
-                        zrfcLogid
-                    };
+                    return { code: 'E', message: errorMsg, zrfcLogid };
                 }
                 
-                // 1.1 统一校验业务数据（在插入日志之前校验）
-                // 只有在非重推时才校验业务数据
+                // 2. 校验业务数据（只读，在事务外）
                 if (processConfig && !isRetry) {
                     const validateResult = await this.validateBusinessDataBeforeInsert(processConfig, businessTable1, businessTable2, businessTable3);
                     if (!validateResult.valid) {
                         const errorMsg = validateResult.error;
                         console.error('[MultiStepProcessor.processWithLogId]', errorMsg);
-                        
-                        // 确保记录失败日志
-                        try {
-                            await this.saveLog(null, zrfcLogid, zrfcid, '0', {
-                                code: 'E',
-                                message: errorMsg
-                            }, 0, new Date(), isRetry);
-                        } catch (logError) {
-                            console.error('[MultiStepProcessor.processWithLogId] 保存失败日志失败:', logError.message);
-                        }
-                        
-                        // 更新 HeadLog 标记为失败
-                        try {
-                            await this.saveHeadLog(null, zrfcLogid, zrfcid, zdfjy, id, 'E', errorMsg, new Date());
-                        } catch (headLogError) {
-                            console.error('[MultiStepProcessor.processWithLogId] 更新HeadLog失败:', headLogError.message);
-                        }
-                        
-                        return {
-                            code: 'E',
-                            message: errorMsg,
-                            zrfcLogid
-                        };
+                        return { code: 'E', message: errorMsg, zrfcLogid };
                     }
                 }
                 
-                // 2. 业务表数据先单独保存（在事务外执行，确保不管后续步骤是否成功，数据都能保存）
-                console.log('[MultiStepProcessor.processWithLogId] 先保存业务表数据（事务外）');
+                // 3. 三张表操作放在同一个事务：业务表 + HeadLog(P) + 第一步日志(P)
                 if (!isRetry && processConfig) {
-                    try {
-                        await this.insertBusinessDataByConfig(processConfig, businessTable1, businessTable2, businessTable3, zrfcid, zrfcLogid, zdfjy);
+                    await cds.tx(async (tx) => {
+                        // 3a. 插入业务表数据
+                        await this.insertBusinessDataByConfigWithTx(tx, processConfig, businessTable1, businessTable2, businessTable3, zrfcid, zrfcLogid, zdfjy);
                         console.log('[MultiStepProcessor.processWithLogId] 业务表插入成功');
-                    } catch (dbError) {
-                        // 业务表插入失败也要记录日志
-                        console.error('[MultiStepProcessor.processWithLogId] 业务表插入失败:', dbError.message);
-                        try {
-                            await this.saveLog(null, zrfcLogid, zrfcid, '0', {
-                                code: 'E',
-                                message: `业务表插入失败: ${dbError.message}`
-                            }, 0, new Date(), isRetry);
-                        } catch (logError) {
-                            console.error('[MultiStepProcessor.processWithLogId] 保存失败日志失败:', logError.message);
-                        }
-                        throw dbError; // 重新抛出异常，让上层处理
-                    }
-                }
-                
-                // 2.1 如果是重推且传入了业务表数据（数组），需要更新业务表
-                if (isRetry && processConfig && businessTable1 && Array.isArray(businessTable1) && businessTable1.length > 0) {
+
+                        // 3b. 保存 HeadLog（进行中）
+                        await tx.run(
+                            INSERT.into(cds.entities['com.sap.zictm.MultistepHeadLog']).entries({
+                                zrfc_logid: zrfcLogid,
+                                zrfcid: zrfcid,
+                                zdfjy: zdfjy || null,
+                                objkey: '',
+                                code: 'P',
+                                message: '处理中',
+                                executionAt: executionAt,
+                                lastExecutionAt: executionAt,
+                                id: id || null
+                            })
+                        );
+                        console.log('[MultiStepProcessor.processWithLogId] HeadLog 保存成功');
+
+                        // 3c. 保存第一步日志（占位，状态P）
+                        await tx.run(
+                            INSERT.into(cds.entities['com.sap.zictm.MultistepLog']).entries({
+                                zrfc_logid: zrfcLogid,
+                                canum: firstStepCanum,
+                                zrfcid: zrfcid,
+                                code: 'P',
+                                message: '待执行',
+                                objkey: '',
+                                objtype: '',
+                                description: steps[0]?.description || '',
+                                executionTime: 0,
+                                executionAt: executionAt,
+                                lastExecutionAt: executionAt,
+                                lastExecutionTime: 0,
+                                head_zrfc_logid: zrfcLogid
+                            })
+                        );
+                        console.log(`[MultiStepProcessor.processWithLogId] 第一步日志保存成功, canum: ${firstStepCanum}`);
+                    });
+                } else if (isRetry && processConfig && businessTable1 && Array.isArray(businessTable1) && businessTable1.length > 0) {
+                    // 重推模式：更新业务表（事务外，因为 HeadLog/StepLog 已存在）
                     console.log('[MultiStepProcessor.processWithLogId] 重推时更新业务表数据');
                     await this.updateBusinessDataByConfig(null, processConfig, businessTable1, businessTable2, businessTable3, zrfcid, zrfcLogid, zdfjy);
-                } else if (isRetry) {
-                    console.log('[MultiStepProcessor.processWithLogId] 重推时未传入业务数据，跳过业务表更新');
-                }
-                
-                // 3. 先保存 MultistepHeadLog（事务外，标记为进行中）
-                console.log('[MultiStepProcessor.processWithLogId] 保存 MultistepHeadLog（事务外）');
-                try {
-                    await this.saveHeadLog(null, zrfcLogid, zrfcid, zdfjy, id, 'P', '处理中', executionAt);
-                } catch (headLogError) {
-                    console.error('[MultiStepProcessor.processWithLogId] 保存 MultistepHeadLog 失败:', headLogError.message);
+                } else {
+                    console.log('[MultiStepProcessor.processWithLogId] 重推模式，跳过业务表更新');
                 }
             } // end of skipPreparation block
 
             // skipPreparation 时需要获取 steps（已由 prepareProcessing 保存了前置数据）
             if (skipPreparation && (!steps || steps.length === 0)) {
                 steps = await this.getSteps(zrfcid);
+            }
+            
+            // 重推时重置 HeadLog 为 P，确保状态正确
+            if (isRetry) {
+                try {
+                    await this.saveHeadLog(null, zrfcLogid, zrfcid, zdfjy, id, 'P', '重推处理中', executionAt);
+                    console.log('[MultiStepProcessor.processWithLogId] 重推时重置 HeadLog 为 P');
+                } catch (headLogErr) {
+                    console.warn('[MultiStepProcessor.processWithLogId] 重推时重置 HeadLog 失败:', headLogErr.message);
+                }
             }
             
             // 4. 先查询该 zrfcLogid 的所有日志记录，提高效率
@@ -249,9 +250,10 @@ class MultiStepProcessor {
                 // 如果日志存在且执行成功（code 为 'S'），跳过该步骤
                 if (existingLog && (existingLog.code === 'S' || existingLog.code === 's')) {
                     // 更新上一步对象号、消息和代码，以便后续步骤使用
-                    lastObjKey = existingLog.objkey || lastObjKey;
+                    lastObjKey = existingLog.objkey !== undefined ? existingLog.objkey : lastObjKey;
                     lastMessage = existingLog.message || lastMessage;
                     lastCode = existingLog.code || lastCode;
+                    lastStepCanum = step.canum;
                     console.log('[MultiStepProcessor] 跳过步骤（已成功）:', step.canum);
                     continue;
                 }
@@ -291,9 +293,11 @@ class MultiStepProcessor {
                 }
                 
                 // 更新上一步对象号、消息和代码
-                lastObjKey = executionResult.objkey || lastObjKey;
+                // 注意：objkey 为空字符串时不继承上一步，直接留空
+                lastObjKey = executionResult.objkey !== undefined ? executionResult.objkey : lastObjKey;
                 lastMessage = executionResult.message || lastMessage;
                 lastCode = executionResult.code || lastCode;
+                lastStepCanum = step.canum;
                 
                 // 如果当前步骤失败，停止执行后续步骤
                 if (executionResult.code === 'E') {
@@ -315,11 +319,14 @@ class MultiStepProcessor {
                         }
                     }
                     
-                    // 更新 MultistepHeadLog 标记为失败（带兜底）
+                    // 原子更新 HeadLog + 失败步骤日志（同一事务，确保一致性）
                     try {
-                        await this.saveHeadLog(null, zrfcLogid, zrfcid, zdfjy, id, 'E', lastMessage || '处理失败', executionAt);
-                    } catch (headLogError) {
-                        console.error('[MultiStepProcessor] 更新HeadLog失败:', headLogError.message, ', 尝试兜底...');
+                        await this.finalizeHeadAndStepLog(
+                            zrfcLogid, zrfcid, step.canum, 'E',
+                            lastMessage || '处理失败', lastObjKey, executionAt
+                        );
+                    } catch (finalizeError) {
+                        console.error('[MultiStepProcessor] 原子更新失败:', finalizeError.message, ', 尝试兜底...');
                         try {
                             await cds.run(
                                 UPDATE(cds.entities['com.sap.zictm.MultistepHeadLog'])
@@ -334,12 +341,15 @@ class MultiStepProcessor {
                 }
             }
             
-            // 6. 如果所有步骤都成功，更新 MultistepHeadLog 为成功（带兜底）
+            // 6. 如果所有步骤都成功，原子更新 HeadLog + 最后步骤日志（同一事务，确保一致性）
             if (lastCode !== 'E') {
                 try {
-                    await this.saveHeadLog(null, zrfcLogid, zrfcid, zdfjy, id, 'S', lastMessage || '处理成功', executionAt);
-                } catch (headLogError) {
-                    console.error('[MultiStepProcessor.processWithLogId] 更新HeadLog为成功失败:', headLogError.message, ', 尝试兜底...');
+                    await this.finalizeHeadAndStepLog(
+                        zrfcLogid, zrfcid, lastStepCanum, 'S',
+                        lastMessage || '处理成功', lastObjKey, executionAt
+                    );
+                } catch (finalizeError) {
+                    console.error('[MultiStepProcessor.processWithLogId] 原子更新失败:', finalizeError.message, ', 尝试兜底...');
                     try {
                         await cds.run(
                             UPDATE(cds.entities['com.sap.zictm.MultistepHeadLog'])
@@ -360,25 +370,17 @@ class MultiStepProcessor {
                 objkey: lastObjKey
             };
         } catch (error) {
-            // 保存错误日志（确保日志一定能保存）
+            // 原子更新 HeadLog + 错误步骤日志（同一事务，确保一致性）
             const errorMessage = error.message ? error.message.substring(0, 500) : '未知错误';
             try {
-                await this.saveLog(null, zrfcLogid, zrfcid, '0', {
-                    code: 'E',
-                    message: errorMessage
-                }, 0, new Date(), isRetry);
-                console.log(`[MultiStepProcessor.processWithLogId] 错误日志保存成功, zrfcLogid: ${zrfcLogid}`);
-            } catch (logError) {
-                // 如果日志保存也失败，至少记录到控制台
-                console.error(`[MultiStepProcessor.processWithLogId] 错误日志保存失败: ${logError.message}, 原始错误: ${errorMessage}`);
-            }
-
-            // 更新 MultistepHeadLog 标记为失败（带重试兜底）
-            try {
-                await this.saveHeadLog(null, zrfcLogid, zrfcid, zdfjy, id, 'E', errorMessage, new Date());
-            } catch (headLogError) {
-                console.error(`[MultiStepProcessor.processWithLogId] 更新HeadLog失败: ${headLogError.message}, 尝试直接更新...`);
-                // 兜底：直接用 cds.run 更新，不通过 saveHeadLog（避免 tx 嵌套问题）
+                await this.finalizeHeadAndStepLog(
+                    zrfcLogid, zrfcid, firstStepCanum, 'E',
+                    errorMessage, lastObjKey, new Date()
+                );
+                console.log(`[MultiStepProcessor.processWithLogId] 错误原子更新成功, zrfcLogid: ${zrfcLogid}`);
+            } catch (finalizeError) {
+                console.error(`[MultiStepProcessor.processWithLogId] 原子更新失败: ${finalizeError.message}, 尝试兜底...`);
+                // 兜底：直接用 cds.run 更新
                 try {
                     const MultistepHeadLog = cds.entities['com.sap.zictm.MultistepHeadLog'];
                     await cds.run(
@@ -557,6 +559,49 @@ class MultiStepProcessor {
                 })
             );
         }
+    }
+
+    /**
+     * 原子更新抬头日志和步骤日志（放在同一个事务中，确保一致性）
+     * @param {string} zrfcLogid - 多步ID
+     * @param {string} zrfcid - 业务流程ID
+     * @param {string} canum - 步骤编号
+     * @param {string} code - 状态码 (S:成功, E:失败)
+     * @param {string} message - 消息
+     * @param {string} objkey - 对象号
+     * @param {Date} executionAt - 执行时间
+     */
+    async finalizeHeadAndStepLog(zrfcLogid, zrfcid, canum, code, message, objkey, executionAt) {
+        const MultistepHeadLog = cds.entities['com.sap.zictm.MultistepHeadLog'];
+        const MultistepLog = cds.entities['com.sap.zictm.MultistepLog'];
+        
+        await cds.tx(async (tx) => {
+            // 1. 更新抬头日志
+            await tx.run(
+                UPDATE(MultistepHeadLog)
+                    .set({ 
+                        code: code, 
+                        message: message ? message.substring(0, 500) : '', 
+                        lastExecutionAt: executionAt 
+                    })
+                    .where({ zrfc_logid: zrfcLogid })
+            );
+            
+            // 2. 更新最后一个步骤日志（跟抬头保持一致）
+            if (canum) {
+                await tx.run(
+                    UPDATE(MultistepLog)
+                        .set({ 
+                            code: code, 
+                            message: message ? message.substring(0, 500) : '',
+                            objkey: objkey || ''
+                        })
+                        .where({ zrfc_logid: zrfcLogid, canum: canum })
+                );
+            }
+        });
+        
+        console.log(`[MultiStepProcessor.finalizeHeadAndStepLog] 原子更新成功, zrfcLogid: ${zrfcLogid}, code: ${code}, canum: ${canum}`);
     }
 
     /**

@@ -265,7 +265,11 @@ class AccountingDocumentService {
             switch (itemDocType) {
                 case 'YSD02_SYS':
                 case 'SKDLX01_SYS': {
-                    debitCreditCode = item.incomeExpenseType === '01' ? 'H' : 'S';
+                    if (itemDocType === 'YSD02_SYS') {
+                        debitCreditCode = item.incomeExpenseType === '01' ? 'S' : 'H';
+                    } else {
+                        debitCreditCode = item.incomeExpenseType === '01' ? 'H' : 'S';
+                    }
                     amount = debitCreditCode === 'H' ? (item.receivableAmount || 0) * -1 : (item.receivableAmount || 0);
                     
                     debtorLines += `

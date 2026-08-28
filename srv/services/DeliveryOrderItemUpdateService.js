@@ -53,7 +53,7 @@ class DeliveryOrderItemUpdateService {
 
             // 获取销售订单类型（SD07/SD10 从 PIDeliveryRel 获取，其他从业务表获取）
             let salesOrderType;
-            if ((zrfcid === 'SD07' && canum === 80) || (zrfcid === 'SD10' && canum === 130)) {
+            if ((zrfcid === 'SD07' && canum === 80) || (zrfcid === 'SD11' && canum === 80)) {
                 try {
                     const PIDeliveryRel = cds.entities['com.sap.zictm.PIDeliveryRel'];
                     const { SELECT } = cds.ql;
@@ -108,12 +108,12 @@ class DeliveryOrderItemUpdateService {
             if ((zrfcid === 'SD04' && canum === 120) || 
                 (zrfcid === 'SD07' && canum === 30) || 
                 zrfcid === 'SD09' || 
-                (zrfcid === 'SD10' && (canum === 30 || canum === 130)) ||
+                (zrfcid === 'SD10' && (canum === 30 || canum === 120)) ||
                 (zrfcid === 'SD11' && canum === 160)) {
                 apiPath = '/sap/opu/odata/sap/API_INBOUND_DELIVERY_SRV;v=0002';
                 itemEntity = 'A_InbDeliveryItem';
                 isInboundDelivery = true; // 设置为内向交货单
-            } else if (((zrfcid === 'SD11' && canum === 80) || (zrfcid === 'SD07' && canum === 70)) && salesOrderType === 'CBRE') {
+            } else if (((zrfcid === 'SD11' && canum === 80) || (zrfcid === 'SD07' && canum === 80)) && salesOrderType === 'CBRE') {
                 apiPath = '/sap/opu/odata/sap/API_CUSTOMER_RETURNS_DELIVERY_SRV;v=2';
                 itemEntity = 'A_ReturnsDeliveryItem';
             } else {
