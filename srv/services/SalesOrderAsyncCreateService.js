@@ -421,11 +421,9 @@ class SalesOrderAsyncCreateService {
                 _ItemPricingElement: pricingElements
             };
             
-            // 库存地点字段
+            // 库存地点字段（优先取配置表 lgort）
             if (salesOrderType !== 'CR' && salesOrderType !== 'DR') {
-                if (item.StorageLocation || item.ReceivingStorageLocation) {
-                    itemData.StorageLocation = item.StorageLocation || item.ReceivingStorageLocation || "" ;
-                }
+                itemData.StorageLocation = mptStepConfig?.lgort || item.StorageLocation || item.ReceivingStorageLocation || "";
             }
             
             if (apiConfig.isReturn) {

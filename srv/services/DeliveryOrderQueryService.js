@@ -34,7 +34,7 @@ class DeliveryOrderQueryService {
             let referenceSDDocument;
             if (zrfcid === 'SD07' || zrfcid === 'SD09' || (zrfcid === 'SD10' && canum === 10)) {
                 referenceSDDocument = await this.getRefDocNoFromBusinessTable(zrfcLogid);
-            } else if (zrfcid === 'SD10' && canum === 110) {
+            } else if (zrfcid === 'SD10' && canum === 100) {
                 referenceSDDocument = await this.getRefDocNoFromPIDeliveryRel(zrfcLogid);
             } else {
                 // 使用通用工具类读取之前步骤的 objkey
@@ -208,8 +208,8 @@ class DeliveryOrderQueryService {
     }
 
     async queryInboundDeliveryByReference(referenceSDDocument) {
-        const maxRetries = 10;
-        const retryDelay = 1000;
+        const maxRetries = 20;
+        const retryDelay = 5000;
 
         if (!referenceSDDocument) {
             return {

@@ -37,7 +37,7 @@ class SalesOrderAsyncResultService {
             }
 
             const MAX_RETRIES = 20;
-            const RETRY_INTERVAL_MS = 30000;
+            const RETRY_INTERVAL_MS = 10000;
 
             for (let retryCount = 1; retryCount <= MAX_RETRIES; retryCount++) {
                 console.log(`[SalesOrderAsyncResultService] 等待 ${RETRY_INTERVAL_MS / 1000} 秒后开始第 ${retryCount} 次获取...`);
@@ -89,6 +89,17 @@ class SalesOrderAsyncResultService {
                     const salesOrder = responseData?.SalesOrder || responseData?.CustomerReturn || responseData?.DebitMemoRequest || responseData?.CreditMemoRequest || '';
 
                     console.log('[SalesOrderAsyncResultService] 异步调用成功, 销售订单:', salesOrder);
+
+                    // 保护：如果 salesOrder 为空，说明 SAP 没有返回有效数据（监控器失效/返回200但body是空/非结构化错误），视为失败
+                    if (!salesOrder) {
+                        const errorMessage = this.parseError(responseData) || `无有效销售订单数据`;
+                        console.error('[SalesOrderAsyncResultService] 无有效销售订单:', errorMessage);
+                        return {
+                            code: 'E',
+                            message: errorMessage,
+                            objkey: ''
+                        };
+                    }
 
                     if (zrfcid === 'SD05' || zrfcid === 'SD06') {
                         await this.updatePISalesOrderRel(salesOrder, zrfcLogid, zrfcid, responseData);

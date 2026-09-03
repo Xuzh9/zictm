@@ -345,9 +345,7 @@ class AccountingDocumentService {
                     }
                     
                     // 设置借贷方变量
-                    debitCreditCode = (documentType === 'FKDLX02_SYS' || documentType === 'FKTKDLX02_SYS') 
-                        ? (item.incomeExpenseType === '02' ? 'S' : 'H') 
-                        : (item.incomeExpenseType === '01' ? 'S' : 'H');
+                    debitCreditCode = item.incomeExpenseType === '02' ? 'S' : 'H';
                     // 贷方(H)时金额乘-1
                     amount = debitCreditCode === 'H' ? (item.receivableAmount || 0) * -1 : (item.receivableAmount || 0);
 

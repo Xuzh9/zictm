@@ -205,15 +205,8 @@ class MultiStepProcessor {
                 steps = await this.getSteps(zrfcid);
             }
             
-            // 重推时重置 HeadLog 为 P，确保状态正确
-            if (isRetry) {
-                try {
-                    await this.saveHeadLog(null, zrfcLogid, zrfcid, zdfjy, id, 'P', '重推处理中', executionAt);
-                    console.log('[MultiStepProcessor.processWithLogId] 重推时重置 HeadLog 为 P');
-                } catch (headLogErr) {
-                    console.warn('[MultiStepProcessor.processWithLogId] 重推时重置 HeadLog 失败:', headLogErr.message);
-                }
-            }
+            // 不再单独重置 HeadLog 为 P：如果步骤循环执行前崩溃，会导致 HeadLog=P 但 StepLog 没更新的不一致
+            // HeadLog 状态统一由 finalizeHeadAndStepLog 原子事务更新（成功→S，失败→E）
             
             // 4. 先查询该 zrfcLogid 的所有日志记录，提高效率
             const MultistepLog = cds.entities['com.sap.zictm.MultistepLog'];

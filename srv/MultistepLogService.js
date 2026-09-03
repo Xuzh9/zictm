@@ -54,9 +54,21 @@ module.exports = srv => {
             const failedSteps = await cds.run(
                 SELECT.from(MultistepLog).where({
                     zrfc_logid: zrfcLogid,
-                    code: { in: ['E', null, ''] }
+                    code: { in: ['E', 'P', null, ''] }
                 })
             );
+
+            // 步骤日志为空时，再检查 HeadLog 是否为 P（异步中断导致步骤未执行）
+            if (failedSteps.length === 0) {
+                const headLog = await cds.run(
+                    SELECT.one.from(MultistepHeadLog).columns(['code']).where({ zrfc_logid: zrfcLogid })
+                );
+                if (headLog && (headLog.code === 'P' || headLog.code === '' || headLog.code == null)) {
+                    console.log('[MultistepLogService] HeadLog 仍为 P/空，允许重推');
+                    // 构造一条假的 failedStep，避免后续 length 判断
+                    failedSteps.push({ zrfc_logid: zrfcLogid, canum: '0', code: 'P', message: 'HeadLog 仍为处理中' });
+                }
+            }
 
             if (failedSteps.length === 0) {
                 const errMsg = `日志ID ${zrfcLogid} 没有失败的步骤，无法重推`;
