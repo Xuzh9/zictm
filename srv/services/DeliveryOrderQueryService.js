@@ -34,7 +34,7 @@ class DeliveryOrderQueryService {
             let referenceSDDocument;
             if (zrfcid === 'SD07' || zrfcid === 'SD09' || (zrfcid === 'SD10' && canum === 10)) {
                 referenceSDDocument = await this.getRefDocNoFromBusinessTable(zrfcLogid);
-            } else if (zrfcid === 'SD10' && canum === 100) {
+            } else if (zrfcid === 'SD10' && canum === 110) {
                 referenceSDDocument = await this.getRefDocNoFromPIDeliveryRel(zrfcLogid);
             } else {
                 // 使用通用工具类读取之前步骤的 objkey

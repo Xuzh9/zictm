@@ -187,73 +187,92 @@ class DeliveryOrderBatchSplitService {
                 for (const splitItem of batchSplitData) {
                     console.log('[DeliveryOrderBatchSplitService] 处理批次拆分项:', JSON.stringify(splitItem));
 
-                    // 获取当前交货单行项目的 ETag
-                    const itemUrl = `${apiPath}/A_OutbDeliveryItem(DeliveryDocument='${deliveryDocument}',DeliveryDocumentItem='${deliveryItem.DeliveryDocumentItem}')`;
-                    let itemEtag = null;
-                    try {
-                        const itemResult = await this.commonUtils.executeHttpRequestWithRetry(
+                    // 带重试的批次拆分（上一次拆分的 SAP 锁可能未立即释放，防止"更新交货时出错"）
+                    const maxAttempts = 3;
+                    let success = false;
+                    let lastErrorMessage = '';
+
+                    for (let attempt = 1; attempt <= maxAttempts && !success; attempt++) {
+                        if (attempt > 1) {
+                            const delay = 1000 * attempt; // 2s, 3s
+                            console.warn(`[DeliveryOrderBatchSplitService] 等待 ${delay}ms 后重试批次拆分 (尝试 ${attempt}/${maxAttempts})`);
+                            await this.sleep(delay);
+                        }
+
+                        // 每次尝试前重新获取 ETag（拆分成功会使交货单版本号递增）
+                        const itemUrl = `${apiPath}/A_OutbDeliveryItem(DeliveryDocument='${deliveryDocument}',DeliveryDocumentItem='${deliveryItem.DeliveryDocumentItem}')`;
+                        let itemEtag = null;
+                        try {
+                            const itemResult = await this.commonUtils.executeHttpRequestWithRetry(
+                                { destinationName: this.commonUtils.getDestinationName() },
+                                {
+                                    method: 'GET',
+                                    url: itemUrl,
+                                    headers: {
+                                        'X-CSRF-Token': csrfToken,
+                                        'Cookie': cookieString,
+                                        'sap-language': 'ZH'
+                                    },
+                                    validateStatus: function (status) {
+                                        return true;
+                                    }
+                                }
+                            );
+                            if (itemResult.status === 200) {
+                                itemEtag = itemResult.headers['etag'] || itemResult.headers['Etag'];
+                                console.log('[DeliveryOrderBatchSplitService] 获取行项目 ETag:', itemEtag);
+                            }
+                        } catch (error) {
+                            console.warn('[DeliveryOrderBatchSplitService] 获取行项目 ETag 失败:', error.message);
+                        }
+
+                        // 构建查询参数（使用 deliveryItem 的数据）
+                        const params = new URLSearchParams();
+                        params.append("DeliveryDocument", `'${deliveryDocument}'`);
+                        params.append("DeliveryDocumentItem", `'${deliveryItem.DeliveryDocumentItem}'`);
+                        params.append("DeliveryQuantityUnit", `'${deliveryItem.DeliveryQuantityUnit || ''}'`);
+                        params.append("ActualDeliveryQuantity", `${splitItem.ActualDeliveryQuantity || 0}M`);
+                        params.append("Batch", `'${splitItem.Batch || ''}'`);
+
+                        // 构建完整的 URL
+                        const postUrl = `${batchSplitAction}?${params.toString()}`;
+                        console.log('[DeliveryOrderBatchSplitService] POST URL:', postUrl);
+
+                        // POST 调用 /CreateBatchSplitItem（需要 token 和 etag）
+                        const createResult = await this.commonUtils.executeHttpRequestWithRetry(
                             { destinationName: this.commonUtils.getDestinationName() },
                             {
-                                method: 'GET',
-                                url: itemUrl,
+                                method: 'POST',
+                                url: postUrl,
                                 headers: {
                                     'X-CSRF-Token': csrfToken,
                                     'Cookie': cookieString,
-                                    'sap-language': 'ZH'
+                                    'Accept': 'application/json',
+                                    'Content-Type': 'application/json',
+                                    'sap-language': 'ZH',
+                                    'If-Match': itemEtag || '*'
                                 },
                                 validateStatus: function (status) {
                                     return true;
                                 }
                             }
                         );
-                        if (itemResult.status === 200) {
-                            itemEtag = itemResult.headers['etag'] || itemResult.headers['Etag'];
-                            console.log('[DeliveryOrderBatchSplitService] 获取行项目 ETag:', itemEtag);
+
+                        if (createResult.status >= 200 && createResult.status < 300) {
+                            success = true;
+                            console.log('[DeliveryOrderBatchSplitService] 批次拆分项创建成功');
+                            // 拆分成功后短暂等待，让 SAP 释放交货单锁，避免影响下一个拆分
+                            await this.sleep(500);
+                        } else {
+                            lastErrorMessage = this.parseError(createResult.data);
+                            console.error(`[DeliveryOrderBatchSplitService] 批次拆分项创建失败 (尝试 ${attempt}/${maxAttempts}):`, lastErrorMessage);
                         }
-                    } catch (error) {
-                        console.warn('[DeliveryOrderBatchSplitService] 获取行项目 ETag 失败:', error.message);
                     }
 
-                    // 构建查询参数（使用 deliveryItem 的数据）
-                    const params = new URLSearchParams();
-                    params.append("DeliveryDocument", `'${deliveryDocument}'`);
-                    params.append("DeliveryDocumentItem", `'${deliveryItem.DeliveryDocumentItem}'`);
-                    params.append("DeliveryQuantityUnit", `'${deliveryItem.DeliveryQuantityUnit || ''}'`);
-                    params.append("ActualDeliveryQuantity", `${splitItem.ActualDeliveryQuantity || 0}M`);
-                    params.append("Batch", `'${splitItem.Batch || ''}'`);
-
-                    // 构建完整的 URL
-                    const postUrl = `${batchSplitAction}?${params.toString()}`;
-                    console.log('[DeliveryOrderBatchSplitService] POST URL:', postUrl);
-
-                    // POST 调用 /CreateBatchSplitItem（需要 token 和 etag）
-                    const createResult = await this.commonUtils.executeHttpRequestWithRetry(
-                        { destinationName: this.commonUtils.getDestinationName() },
-                        {
-                            method: 'POST',
-                            url: postUrl,
-                            headers: {
-                                'X-CSRF-Token': csrfToken,
-                                'Cookie': cookieString,
-                                'Accept': 'application/json',
-                                'Content-Type': 'application/json',
-                                'sap-language': 'ZH',
-                                'If-Match': itemEtag || '*'
-                            },
-                            validateStatus: function (status) {
-                                return true;
-                            }
-                        }
-                    );
-
-                    if (createResult.status >= 200 && createResult.status < 300) {
-                        console.log('[DeliveryOrderBatchSplitService] 批次拆分项创建成功');
-                    } else {
-                        const errorMessage = this.parseError(createResult.data);
-                        console.error('[DeliveryOrderBatchSplitService] 批次拆分项创建失败:', errorMessage);
+                    if (!success) {
                         return {
                             code: 'E',
-                            message: `批次拆分失败: ${errorMessage}`,
+                            message: `批次拆分失败: ${lastErrorMessage}`,
                             objkey: deliveryDocument
                         };
                     }
@@ -278,6 +297,10 @@ class DeliveryOrderBatchSplitService {
                 objkey: ''
             };
         }
+    }
+
+    sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
     }
 
     parseError(errorData) {

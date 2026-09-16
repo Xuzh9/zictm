@@ -15,7 +15,7 @@ modules:
       buildpack: nodejs_buildpack
       command: node node_modules/@sap/cds-dk/bin/cds.js run
       disk-quota: 2048M
-      memory: 256M 
+      memory: 1024M 
     provides:
       - name: srv-api
         properties:
@@ -30,7 +30,7 @@ modules:
     path: gen/db
     parameters:
       buildpack: nodejs_buildpack
-      memory: 32M
+      memory: 256M
     requires:
       - name: zictm-db
     properties:
@@ -42,7 +42,7 @@ modules:
     parameters:
       buildpack: nodejs_buildpack
       disk-quota: 2048M
-      memory: 64M
+      memory: 512M
     requires:
       - name: srv-api
         group: destinations

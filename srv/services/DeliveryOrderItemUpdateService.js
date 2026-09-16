@@ -36,11 +36,24 @@ class DeliveryOrderItemUpdateService {
             console.log('[DeliveryOrderItemUpdateService] 业务表名:', businessTable);
 
             // 读取业务表数据（使用 zrfc_logid 查询）
-            const businessDataList = await this.commonUtils.getBusinessData(businessTable, zrfcLogid, 'zrfc_logid');
-            if (!businessDataList || businessDataList.length === 0) {
+            const businessDataAll = await this.commonUtils.getBusinessData(businessTable, zrfcLogid, 'zrfc_logid');
+            if (!businessDataAll || businessDataAll.length === 0) {
                 return {
                     code: 'E',
                     message: `未找到业务数据，zrfc_logid: ${zrfcLogid}`,
+                    objkey: ''
+                };
+            }
+
+            // 过滤掉批次拆分行（ParentItem 非空且不为 '000000'），此时交货单只有主行，批次拆分在后续步骤处理
+            const businessDataList = businessDataAll.filter(item =>
+                !item.ParentItem || item.ParentItem.trim() === '' || item.ParentItem === '000000'
+            );
+            console.log(`[DeliveryOrderItemUpdateService] 业务数据共 ${businessDataAll.length} 条，过滤批次拆分行后主行 ${businessDataList.length} 条`);
+            if (!businessDataList || businessDataList.length === 0) {
+                return {
+                    code: 'E',
+                    message: `过滤批次拆分行后无主行数据，zrfc_logid: ${zrfcLogid}`,
                     objkey: ''
                 };
             }
@@ -166,6 +179,24 @@ class DeliveryOrderItemUpdateService {
                 // 构建更新数据
                 const updateData = {};
 
+                // 仅 SD07 80 和 SD10 80 步骤需要批次拆分数量更新
+                if ((zrfcid === 'SD07' && canum === 80) || (zrfcid === 'SD10' && canum === 80)) {
+                    // 如果该主行存在批次拆分行，先将交货数量更新为批次拆分行数量之和（后续批次拆分步骤再拆分）
+                    const mainItemKey = businessData.DeliveryDocumentItem || businessData.SalesOrderItem;
+                    const splitRows = businessDataAll.filter(item =>
+                        item.ParentItem && item.ParentItem.trim() !== '' && item.ParentItem !== '000000' &&
+                        item.ParentItem === mainItemKey
+                    );
+                    if (splitRows.length > 0) {
+                        const splitTotal = splitRows.reduce((sum, r) => sum + (Number(r.ActualDeliveryQuantity) || 0), 0);
+                        if (splitTotal > 0) {
+                            // 以字符串传输
+                            updateData.ActualDeliveryQuantity = String(splitTotal);
+                            console.log(`[DeliveryOrderItemUpdateService] 主行 ${deliveryDocumentItem} 存在 ${splitRows.length} 条批次拆分行，交货数量更新为: ${splitTotal}`);
+                        }
+                    }
+                }
+
                 // 更新 Batch（内向交货单、SD07/SD10 80 不需要更新）
                 if (!isInboundDelivery && !((zrfcid === 'SD07' && canum === 80) || (zrfcid === 'SD10' && canum === 80))) {
                     updateData.Batch = '2025';
@@ -193,36 +224,55 @@ class DeliveryOrderItemUpdateService {
 
                 console.log('[DeliveryOrderItemUpdateService] 更新数据:', JSON.stringify(updateData));
 
-                // PATCH 更新行项目
-                const patchResult = await this.commonUtils.executeHttpRequestWithRetry(
-                    {
-                        destinationName: this.commonUtils.getDestinationName()
-                    },
-                    {
-                        method: 'PATCH',
-                        url: itemUrl,
-                        headers: {
-                            'X-CSRF-Token': csrfToken,
-                            'Cookie': cookieString,
-                            'Accept': 'application/json',
-                            'sap-language': 'ZH',
-                            'If-Match': '*'
-                        },
-                        data: updateData,
-                        validateStatus: function (status) {
-                            return true;
-                        }
-                    }
-                );
+                // 带重试的 PATCH（SAP 交货单锁可能未立即释放，防止"正由处理另一个用户处理"）
+                const maxAttempts = 3;
+                let patchSuccess = false;
+                let patchErrorMessage = '';
 
-                if (patchResult.status === 204 || (patchResult.data && !patchResult.data.error)) {
-                    console.log('[DeliveryOrderItemUpdateService] 行项目修改成功:', deliveryDocumentItem);
-                } else {
-                    const errorMessage = this.parseError(patchResult.data);
-                    console.error('[DeliveryOrderItemUpdateService] 行项目修改失败:', deliveryDocumentItem, errorMessage);
+                for (let attempt = 1; attempt <= maxAttempts && !patchSuccess; attempt++) {
+                    if (attempt > 1) {
+                        const delay = 1000 * attempt;
+                        console.warn(`[DeliveryOrderItemUpdateService] 等待 ${delay}ms 后重试 PATCH (尝试 ${attempt}/${maxAttempts}) 行项目: ${deliveryDocumentItem}`);
+                        await this.sleep(delay);
+                    }
+
+                    // PATCH 更新行项目
+                    const patchResult = await this.commonUtils.executeHttpRequestWithRetry(
+                        {
+                            destinationName: this.commonUtils.getDestinationName()
+                        },
+                        {
+                            method: 'PATCH',
+                            url: itemUrl,
+                            headers: {
+                                'X-CSRF-Token': csrfToken,
+                                'Cookie': cookieString,
+                                'Accept': 'application/json',
+                                'sap-language': 'ZH',
+                                'If-Match': '*'
+                            },
+                            data: updateData,
+                            validateStatus: function (status) {
+                                return true;
+                            }
+                        }
+                    );
+
+                    if (patchResult.status === 204 || (patchResult.data && !patchResult.data.error)) {
+                        patchSuccess = true;
+                        console.log('[DeliveryOrderItemUpdateService] 行项目修改成功:', deliveryDocumentItem);
+                        // 成功后短暂等待，让 SAP 释放交货单锁，避免影响下一个行项目
+                        await this.sleep(500);
+                    } else {
+                        patchErrorMessage = this.parseError(patchResult.data);
+                        console.error(`[DeliveryOrderItemUpdateService] 行项目修改失败 (尝试 ${attempt}/${maxAttempts}): ${deliveryDocumentItem} ${patchErrorMessage}`);
+                    }
+                }
+
+                if (!patchSuccess) {
                     return {
                         code: 'E',
-                        message: `行项目 ${deliveryDocumentItem} 修改失败: ${errorMessage}`,
+                        message: `行项目 ${deliveryDocumentItem} 修改失败: ${patchErrorMessage}`,
                         objkey: deliveryDocument
                     };
                 }
@@ -278,6 +328,10 @@ class DeliveryOrderItemUpdateService {
             console.error('[DeliveryOrderItemUpdateService] 获取采购订单库存地点失败:', error);
             return null;
         }
+    }
+
+    sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
     }
 
     parseError(errorData) {

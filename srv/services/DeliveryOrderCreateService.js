@@ -63,35 +63,54 @@ class DeliveryOrderCreateService {
                 const PIDeliveryRel = cds.entities['com.sap.zictm.PIDeliveryRel'];
                 const PISalesOrderRel = cds.entities['com.sap.zictm.PISalesOrderRel'];
 
-                // 收集所有 DeliveryDocument（PIDeliveryRel 主键已取消 DeliveryDocumentItem）
-                const deliveryDocuments = mainRowDataList.map(item => item.DeliveryDocument).filter(v => v);
+                // 收集主行的 DeliveryDocument + DeliveryDocumentItem 组合（去重）
+                const deliveryPairs = [];
+                const seenPairKeys = new Set();
+                mainRowDataList.forEach(item => {
+                    if (item.DeliveryDocument && item.DeliveryDocumentItem) {
+                        const pairKey = `${item.DeliveryDocument}-${item.DeliveryDocumentItem}`;
+                        if (!seenPairKeys.has(pairKey)) {
+                            seenPairKeys.add(pairKey);
+                            deliveryPairs.push({
+                                DeliveryDocument: item.DeliveryDocument,
+                                DeliveryDocumentItem: item.DeliveryDocumentItem
+                            });
+                        }
+                    }
+                });
 
-                if (deliveryDocuments.length > 0) {
-                    // 批量查询 PIDeliveryRel（只使用 DeliveryDocument）
-                    const deliveryRelDataList = await cds.run(
+                if (deliveryPairs.length > 0) {
+                    // 批量查询 PIDeliveryRel（先按单号 IN 查出，再按 单号+行号 组合精确过滤）
+                    const deliveryDocuments = [...new Set(deliveryPairs.map(p => p.DeliveryDocument))];
+                    const pairKeySet = new Set(deliveryPairs.map(p => `${p.DeliveryDocument}-${p.DeliveryDocumentItem}`));
+                    const relDataAll = await cds.run(
                         SELECT.from(PIDeliveryRel).where({
                             zrfc_logid: zrfcLogid,
                             DeliveryDocument: { in: deliveryDocuments }
                         })
                     );
+                    // 按 DeliveryDocument + DeliveryDocumentItem 组合精确匹配
+                    const deliveryRelDataList = relDataAll.filter(r =>
+                        pairKeySet.has(`${r.DeliveryDocument}-${r.DeliveryDocumentItem}`)
+                    );
 
                     console.log('[DeliveryOrderCreateService] SD07/SD10 获取 PIDeliveryRel 数据:', JSON.stringify(deliveryRelDataList));
 
                     if (deliveryRelDataList && deliveryRelDataList.length > 0) {
-                        // 构建 DeliveryDocument -> {PIOrder, PIOrderItem} 的映射
+                        // 构建 DeliveryDocument+DeliveryDocumentItem -> {PIOrder, PIOrderItem} 的映射
                         const deliveryToPiMap = new Map();
                         deliveryRelDataList.forEach(item => {
                             if (item.DeliveryDocument) {
-                                deliveryToPiMap.set(item.DeliveryDocument, {
+                                deliveryToPiMap.set(`${item.DeliveryDocument}-${item.DeliveryDocumentItem}`, {
                                     PIOrder: item.PIOrder,
                                     PIOrderItem: item.PIOrderItem
                                 });
                             }
                         });
 
-                        // 使用 deliveryRelDataList 中的 PIOrder/PIOrderItem 更新 mainRowDataList
+                        // 使用 PIDeliveryRel 中的 PIOrder/PIOrderItem 更新 mainRowDataList
                         mainRowDataList.forEach(item => {
-                            const piInfo = deliveryToPiMap.get(item.DeliveryDocument);
+                            const piInfo = deliveryToPiMap.get(`${item.DeliveryDocument}-${item.DeliveryDocumentItem}`);
                             if (piInfo) {
                                 item.PIOrder = piInfo.PIOrder;
                                 item.PIOrderItem = piInfo.PIOrderItem;

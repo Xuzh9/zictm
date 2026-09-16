@@ -321,7 +321,7 @@ class PurchaseOrderCreateService {
                 PurchaseOrderItem: poItemNumber || "",
                 Material: material,
                 Plant: isReturn ? (mptStepConfig?.lifnr || "") : (mptStepConfig?.umwrk || ""),
-                StorageLocation: item.ReceivingStorageLocation || item.StorageLocation || mptStepConfig?.umlgo || "",
+                StorageLocation: mptStepConfig?.umlgo || item.ReceivingStorageLocation || item.StorageLocation || "",
                 PurchaseOrderQuantityUnit: unitOfMeasure || "",
                 TaxCode: mptStepConfig?.mwskz || "",
                 OrderQuantity: item.RequestedQuantity ? parseFloat(item.RequestedQuantity) : 0,
