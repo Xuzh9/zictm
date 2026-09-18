@@ -458,7 +458,7 @@ class AccountingDocumentService {
                             <JournalEntry>
                                 <OriginalReferenceDocumentType>BKPFF</OriginalReferenceDocumentType>
                                 <BusinessTransactionType>RFBU</BusinessTransactionType>
-                                <AccountingDocumentType>SA</AccountingDocumentType>
+                                <AccountingDocumentType>Z1</AccountingDocumentType>
                                 <!-- <DocumentHeaderText>${firstBusinessData.paymentPurpose}</DocumentHeaderText> -->
                                 <CreatedByUser>CC0000000002</CreatedByUser>
                                 <CompanyCode>${firstBusinessData.salesOrganization || firstBusinessData.procurementOrganization || firstBusinessData.receivingOrganization || ''}</CompanyCode>

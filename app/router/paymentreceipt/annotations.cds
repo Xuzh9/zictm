@@ -7,7 +7,7 @@ annotate service.PaymentReceipt with @(
             TypeName: '收付款单',
             TypeNamePlural: '收付款单列表'
         },
-        SelectionFields: [paymentReceiptNo,businessDate,documentType,receivingUnit,incomeExpenseType,code,zrfcid,zrfc_logid],
+        SelectionFields: [paymentReceiptNo,businessDate,documentType,receivingUnit,incomeExpenseType,MajorExpenseCategory,code,zrfcid,zrfc_logid],
         LineItem: [
             { $Type: 'UI.DataField', Label: '单据编号', Value: paymentReceiptNo },
             { $Type: 'UI.DataField', Label: '单据行号', Value: paymentReceiptNoItem },

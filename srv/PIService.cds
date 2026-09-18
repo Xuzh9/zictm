@@ -12,7 +12,7 @@ service PIService {
     entity SalesOrderChange as projection on db.SalesOrderChange;
 
     /**
-     * 销售订单修改表
+     * PI调拨
      */
     entity PITransfer as projection on db.PITransfer;
 

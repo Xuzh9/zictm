@@ -192,6 +192,24 @@ entity PaymentReceipt {
     zrfc_logid                  : UUID @title: '多步ID';           // 多步ID
 }
 
+//数帝单据关系表
+entity SDDocRel {
+    key SalesOrder                   : String(16) @title: '销售出库单号';         // 销售出库单号
+    key SalesOrderItem               : String(6) @title: '销售出库单行号';        // 销售出库单行号
+    ExternalSalesOrder               : String(10) @title: '对外销售订单号';       // 对外销售订单号
+    ExternalSalesOrderItem           : String(6) @title: '对外销售订单行号';      // 对外销售订单行号
+    InterCompanyPurchaseOrder        : String(10) @title: '公司间采购订单号';     // 公司间采购订单号
+    InterCompanyPurchaseOrderItem    : String(5) @title: '公司间采购订单行号';    // 公司间采购订单行号
+    InterCompanyOutboundDelivery     : String(10) @title: '公司间外向交货单号';   // 公司间外向交货单号
+    InterCompanyOutboundDeliveryItem : String(6) @title: '公司间外向交货单行号';  // 公司间外向交货单行号
+    InterCompanyInboundDelivery      : String(10) @title: '公司间内向交货单号';   // 公司间内向交货单号
+    InterCompanyInboundDeliveryItem  : String(6) @title: '公司间内向交货单行号';  // 公司间内向交货单行号
+    ExternalOutboundDelivery         : String(10) @title: '对外外向交货单号';    // 对外外向交货单号
+    ExternalOutboundDeliveryItem     : String(6) @title: '对外外向交货单行号';   // 对外外向交货单行号
+    zrfcid                           : String(10) @title: '业务流程ID';         // 业务流程ID
+    zrfc_logid                       : UUID @title: '多步ID';                   // 多步ID
+}
+
 //销售订单创建表
 entity SalesOrderCreate {
     key PIOrder                   : String(16) @title: 'PI单号';    // PI单号

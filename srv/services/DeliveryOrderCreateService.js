@@ -273,14 +273,20 @@ class DeliveryOrderCreateService {
 
                 console.log('交货单创建成功:', deliveryDocument);
 
-                // SD07/SD10 需要更新 PIDeliveryRel 表
-                if (zrfcid === 'SD07' || zrfcid === 'SD10') {
-                    // 从返回结果中获取行项目号
-                    const deliveryItems = responseData?.d?.to_DeliveryDocumentItem?.results || [];
-                    console.log('[DeliveryOrderCreateService] 交货单行项目:', JSON.stringify(deliveryItems));
+                // 从返回结果中获取行项目号
+                const deliveryItems = responseData?.d?.to_DeliveryDocumentItem?.results || [];
 
-                    // 批量更新 PIDeliveryRel（使用原始业务数据，包括批次拆分行）
-                    await this.updatePIDeliveryRel(deliveryDocument, deliveryItems, businessDataList, salesOrderType);
+                switch (zrfcid) {
+                    case 'SD07':
+                    case 'SD10':
+                        // 批量更新 PIDeliveryRel（使用原始业务数据，包括批次拆分行）
+                        await this.updatePIDeliveryRel(deliveryDocument, deliveryItems, businessDataList, salesOrderType);
+                        break;
+                    case 'SD02':
+                    case 'SD04':
+                        // 更新 SDDocRel 表的交货单号/行号（SD02 固定对外，SD04 按 canum 区分公司间/对外）
+                        await this.updateSDDocRel(deliveryDocument, businessDataList, canum, zrfcid);
+                        break;
                 }
 
                 const returnResult = {
@@ -431,6 +437,83 @@ class DeliveryOrderCreateService {
             console.log(`[updatePIDeliveryRel] 批量更新完成，共更新 ${updatedCount} 条`);
         } catch (error) {
             console.error(`[updatePIDeliveryRel] PIDeliveryRel 批量更新失败:`, error);
+        }
+    }
+
+    /**
+     * SD04：更新数帝单据关系表 SDDocRel 的交货单号/行号（无记录则新增）
+     * - canum 60:  InterCompanyOutboundDelivery / InterCompanyOutboundDeliveryItem（公司间外向交货单）
+     * - canum 150: ExternalOutboundDelivery / ExternalOutboundDeliveryItem（对外外向交货单）
+     * 以业务表（销售出库单）主键 SalesOrder + SalesOrderItem 为键，
+     * 行号直接取业务表 SalesOrderItem（与 updatePIDeliveryRel 一致，不做 SAP 行项目匹配）
+     */
+    async updateSDDocRel(deliveryDocument, businessDataList, canum, zrfcid) {
+        try {
+            const SDDocRel = cds.entities['com.sap.zictm.SDDocRel'];
+            const { UPDATE, INSERT } = cds.ql;
+
+            let updatedCount = 0;
+            let insertedCount = 0;
+
+            for (const item of businessDataList) {
+                const docSalesOrder = item.SalesOrder || '';
+                const docSalesOrderItem = item.SalesOrderItem || '';
+
+                if (!docSalesOrder || !docSalesOrderItem) {
+                    console.warn('[DeliveryOrderCreateService.updateSDDocRel] 业务数据主键为空，跳过');
+                    continue;
+                }
+
+                // 按 zrfcid/canum 决定写入的字段，行号直接用业务表 SalesOrderItem
+                let setData;
+                if (zrfcid === 'SD02') {
+                    // SD02 固定更新对外外向交货单
+                    setData = {
+                        ExternalOutboundDelivery: deliveryDocument,
+                        ExternalOutboundDeliveryItem: docSalesOrderItem
+                    };
+                } else if (zrfcid === 'SD04' && String(canum) === '60') {
+                    // SD04 canum 60：公司间外向交货单
+                    setData = {
+                        InterCompanyOutboundDelivery: deliveryDocument,
+                        InterCompanyOutboundDeliveryItem: docSalesOrderItem
+                    };
+                } else if (zrfcid === 'SD04' && String(canum) === '150') {
+                    // SD04 canum 150：对外外向交货单
+                    setData = {
+                        ExternalOutboundDelivery: deliveryDocument,
+                        ExternalOutboundDeliveryItem: docSalesOrderItem
+                    };
+                } else {
+                    console.warn(`[DeliveryOrderCreateService.updateSDDocRel] 未处理的 zrfcid/canum: ${zrfcid}/${canum}，跳过`);
+                    continue;
+                }
+
+                // 先尝试更新
+                const updateResult = await cds.run(
+                    UPDATE(SDDocRel).set(setData).where({ SalesOrder: docSalesOrder, SalesOrderItem: docSalesOrderItem })
+                );
+
+                if (updateResult?.affectedRows === 0 || !updateResult) {
+                    // 无记录则插入
+                    await cds.run(
+                        INSERT.into(SDDocRel).entries({
+                            SalesOrder: docSalesOrder,
+                            SalesOrderItem: docSalesOrderItem,
+                            ...setData,
+                            zrfcid: zrfcid,
+                            zrfc_logid: this.zrfcLogid
+                        })
+                    );
+                    insertedCount++;
+                } else {
+                    updatedCount++;
+                }
+            }
+
+            console.log(`[DeliveryOrderCreateService.updateSDDocRel] 更新完成, 更新: ${updatedCount} 条, 插入: ${insertedCount} 条`);
+        } catch (error) {
+            console.error('[DeliveryOrderCreateService.updateSDDocRel] 更新 SDDocRel 失败:', error);
         }
     }
 

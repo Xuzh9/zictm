@@ -64,9 +64,9 @@ class DeliveryOrderItemUpdateService {
             // 使用通用工具类读取之前步骤的 objkey（交货单号）
             const previousObjkey = await this.commonUtils.getPreviousStepObjkey(zrfcLogid, zrfcid, readsteps, canum);
 
-            // 获取销售订单类型（SD07/SD10 从 PIDeliveryRel 获取，其他从业务表获取）
+            // 获取销售订单类型（SD07/SD11 80 及 SD10 从 PIDeliveryRel 获取，其他从业务表获取）
             let salesOrderType;
-            if ((zrfcid === 'SD07' && canum === 80) || (zrfcid === 'SD11' && canum === 80)) {
+            if ((zrfcid === 'SD07' && canum === 80) || zrfcid === 'SD10' || (zrfcid === 'SD11' && canum === 80)) {
                 try {
                     const PIDeliveryRel = cds.entities['com.sap.zictm.PIDeliveryRel'];
                     const { SELECT } = cds.ql;
@@ -121,7 +121,7 @@ class DeliveryOrderItemUpdateService {
             if ((zrfcid === 'SD04' && canum === 120) || 
                 (zrfcid === 'SD07' && canum === 30) || 
                 zrfcid === 'SD09' || 
-                (zrfcid === 'SD10' && (canum === 30 || canum === 120)) ||
+                (zrfcid === 'SD10' && (canum === 30 || canum === 130)) ||
                 (zrfcid === 'SD11' && canum === 160)) {
                 apiPath = '/sap/opu/odata/sap/API_INBOUND_DELIVERY_SRV;v=0002';
                 itemEntity = 'A_InbDeliveryItem';

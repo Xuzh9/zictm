@@ -108,10 +108,21 @@ class PurchaseOrderCreateService {
                 const purchaseOrder = result.data.PurchaseOrder || '';
                 
                 // 根据 zrfcid 执行不同的更新操作
-                if (zrfcid === 'SD01' || zrfcid === 'SD06' || zrfcid === 'SD08') {
-                    // 更新 PISalesOrderRel 表
-                    await this.updatePISalesOrderRel(purchaseOrder, businessDataList, itemPrices, zrfcid, canum);
-                } else if (zrfcid === 'SD04' || zrfcid === 'SD11') {
+                switch (zrfcid) {
+                    case 'SD01':
+                    case 'SD06':
+                    case 'SD08':
+                        // 更新 PISalesOrderRel 表
+                        await this.updatePISalesOrderRel(purchaseOrder, businessDataList, itemPrices, zrfcid, canum);
+                        break;
+                    case 'SD02':
+                    case 'SD04':
+                        // 更新 SDDocRel 表的公司间采购订单号/行号
+                        await this.updateSDDocRel(purchaseOrder, businessDataList, zrfcid);
+                        break;
+                }
+
+                if (zrfcid === 'SD04' || zrfcid === 'SD11') {
                     // 更新 OutboundDelivery 的 PurchasePrice（使用之前计算好的价格）
                     await this.updateOutboundDeliveryPurchasePrice(itemPrices);
                 }
@@ -330,7 +341,10 @@ class PurchaseOrderCreateService {
                 _PurchaseOrderScheduleLineTP: [{
                     PurchaseOrderItem: poItemNumber || "",
                     ScheduleLine: "1",
-                    ScheduleLineDeliveryDate: zrfcid === 'SD04' || zrfcid === 'SD11' ? (item.DeliveryDate || "") : (item.ConfirmedDeliveryDate || "")
+                    // 计划行交付日期：SD04/SD11 取当前日期，其他取确认交付日期
+                    ScheduleLineDeliveryDate: zrfcid === 'SD04' || zrfcid === 'SD11'
+                        ? new Date().toISOString().slice(0, 10)
+                        : (item.ConfirmedDeliveryDate || "")
                 }],
                 _PurOrdPricingElement: (() => {
                     const pricingElements = [];
@@ -485,6 +499,58 @@ class PurchaseOrderCreateService {
             console.log(`已更新/插入 PISalesOrderRel 表: ${businessDataList.length} 条记录`);
         } catch (error) {
             console.error('更新 PISalesOrderRel 表失败:', error);
+        }
+    }
+
+    /**
+     * SD02/SD04：更新数帝单据关系表 SDDocRel 的公司间采购订单号/行号（无记录则新增）
+     * 以业务表（销售出库单）主键 SalesOrder + SalesOrderItem 为键
+     */
+    async updateSDDocRel(purchaseOrder, businessDataList, zrfcid) {
+        try {
+            const SDDocRel = cds.entities['com.sap.zictm.SDDocRel'];
+            const { INSERT, UPDATE } = cds.ql;
+
+            for (const item of businessDataList) {
+                const docSalesOrder = item.SalesOrder || '';
+                const docSalesOrderItem = item.SalesOrderItem || '';
+
+                if (!docSalesOrder || !docSalesOrderItem) {
+                    console.warn('[PurchaseOrderService.updateSDDocRel] 业务数据主键为空，跳过');
+                    continue;
+                }
+
+                // 采购订单行项目号取业务表行号后5位（与 SAP PO 行号 NUMC(5) 一致）
+                const poItemNumber = String(docSalesOrderItem).slice(-5);
+
+                // 先尝试更新
+                const updateResult = await cds.run(
+                    UPDATE(SDDocRel)
+                        .set({
+                            InterCompanyPurchaseOrder: purchaseOrder,
+                            InterCompanyPurchaseOrderItem: poItemNumber
+                        })
+                        .where({ SalesOrder: docSalesOrder, SalesOrderItem: docSalesOrderItem })
+                );
+
+                // 如果没有更新到数据（表中没有该记录），则插入新记录
+                if (updateResult?.affectedRows === 0 || !updateResult) {
+                    await cds.run(
+                        INSERT.into(SDDocRel).entries({
+                            SalesOrder: docSalesOrder,
+                            SalesOrderItem: docSalesOrderItem,
+                            InterCompanyPurchaseOrder: purchaseOrder,
+                            InterCompanyPurchaseOrderItem: poItemNumber,
+                            zrfcid: zrfcid,
+                            zrfc_logid: this.zrfcLogid
+                        })
+                    );
+                }
+            }
+
+            console.log(`[PurchaseOrderService.updateSDDocRel] 已更新/插入 SDDocRel 表: ${businessDataList.length} 条记录`);
+        } catch (error) {
+            console.error('[PurchaseOrderService.updateSDDocRel] 更新 SDDocRel 表失败:', error);
         }
     }
 

@@ -101,8 +101,16 @@ class SalesOrderAsyncResultService {
                         };
                     }
 
-                    if (zrfcid === 'SD05' || zrfcid === 'SD06') {
-                        await this.updatePISalesOrderRel(salesOrder, zrfcLogid, zrfcid, responseData);
+                    switch (zrfcid) {
+                        case 'SD05':
+                        case 'SD06':
+                            await this.updatePISalesOrderRel(salesOrder, zrfcLogid, zrfcid, responseData);
+                            break;
+                        case 'SD02':
+                        case 'SD04':
+                            // 更新数帝单据关系表的对外销售订单号和行号
+                            await this.updateSDDocRel(salesOrder, zrfcLogid, zrfcid, responseData);
+                            break;
                     }
 
                     return {
@@ -284,6 +292,114 @@ class SalesOrderAsyncResultService {
 
         } catch (error) {
             console.error('[SalesOrderAsyncResultService.updatePISalesOrderRel] 更新失败:', error);
+        }
+    }
+
+    /**
+     * SD02/SD04：更新数帝单据关系表 SDDocRel 的对外销售订单号/行号（无记录则新增）
+     * 以业务表主键 SalesOrder + SalesOrderItem 为键，通过物料号匹配 SAP 返回行项目获取对外销售订单行号
+     */
+    async updateSDDocRel(salesOrder, zrfcLogid, zrfcid, responseData) {
+        try {
+            const ProcessConfig = cds.entities['com.sap.zictm.ProcessConfig'];
+            const config = await cds.run(
+                SELECT.one.from(ProcessConfig)
+                    .where({ zrfcid: zrfcid })
+            );
+
+            if (!config || !config.businessTable1) {
+                console.warn('[SalesOrderAsyncResultService.updateSDDocRel] 未找到业务表配置');
+                return;
+            }
+
+            const entity = cds.entities[`com.sap.zictm.${config.businessTable1}`];
+            if (!entity) {
+                console.warn('[SalesOrderAsyncResultService.updateSDDocRel] 业务表不存在:', config.businessTable1);
+                return;
+            }
+
+            const businessData = await cds.run(
+                SELECT.from(entity)
+                    .where({ zrfc_logid: zrfcLogid })
+            );
+
+            if (!businessData || businessData.length === 0) {
+                console.warn('[SalesOrderAsyncResultService.updateSDDocRel] 未找到业务数据');
+                return;
+            }
+
+            // SAP 返回行项目按物料号分组，用于匹配行号
+            const sapItems = responseData?._Item || responseData?.to_Item?.results || [];
+            const sapItemMap = new Map();
+            sapItems.forEach(item => {
+                const product = item.Product || item.Material || '';
+                if (product) {
+                    if (!sapItemMap.has(product)) {
+                        sapItemMap.set(product, []);
+                    }
+                    sapItemMap.get(product).push(item);
+                }
+            });
+
+            const SDDocRel = cds.entities['com.sap.zictm.SDDocRel'];
+            const { UPDATE, INSERT } = cds.ql;
+
+            let updatedCount = 0;
+            let insertedCount = 0;
+
+            for (const item of businessData) {
+                const material = item.Product || item.Material || '';
+                if (!material) {
+                    console.warn('[SalesOrderAsyncResultService.updateSDDocRel] 业务数据物料号为空');
+                    continue;
+                }
+
+                const matchedSapItems = sapItemMap.get(material);
+                if (!matchedSapItems || matchedSapItems.length === 0) {
+                    console.warn('[SalesOrderAsyncResultService.updateSDDocRel] 未找到匹配的 SAP 行项目, 物料号:', material);
+                    continue;
+                }
+
+                const sapItem = matchedSapItems.shift();
+                const externalSalesOrderItem = sapItem.SalesOrderItem || sapItem.CreditMemoRequestItem || sapItem.DebitMemoRequestItem || sapItem.CustomerReturnItem || '';
+
+                const docSalesOrder = item.SalesOrder || '';
+                const docSalesOrderItem = item.SalesOrderItem || '';
+
+                if (!docSalesOrder || !docSalesOrderItem) {
+                    console.warn('[SalesOrderAsyncResultService.updateSDDocRel] 业务数据主键为空，跳过');
+                    continue;
+                }
+
+                const updateResult = await cds.run(
+                    UPDATE(SDDocRel)
+                        .set({ ExternalSalesOrder: salesOrder, ExternalSalesOrderItem: String(externalSalesOrderItem).padStart(6, '0') })
+                        .where({ SalesOrder: docSalesOrder, SalesOrderItem: docSalesOrderItem })
+                );
+
+                if (updateResult && (typeof updateResult !== 'number' || updateResult > 0)) {
+                    updatedCount++;
+                } else {
+                    console.log('[SalesOrderAsyncResultService.updateSDDocRel] 未找到记录，执行插入');
+                    await cds.run(
+                        INSERT.into(SDDocRel)
+                            .entries({
+                                SalesOrder: docSalesOrder,
+                                SalesOrderItem: docSalesOrderItem,
+                                ExternalSalesOrder: salesOrder,
+                                ExternalSalesOrderItem: String(externalSalesOrderItem).padStart(6, '0'),
+                                zrfcid: zrfcid,
+                                zrfc_logid: zrfcLogid
+                            })
+                    );
+                    insertedCount++;
+                }
+            }
+
+            console.log(`[SalesOrderAsyncResultService.updateSDDocRel] 更新完成, 更新: ${updatedCount} 条, 插入: ${insertedCount} 条`);
+
+        } catch (error) {
+            console.error('[SalesOrderAsyncResultService.updateSDDocRel] 更新失败:', error);
         }
     }
 }
