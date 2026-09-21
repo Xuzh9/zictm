@@ -121,7 +121,7 @@ class DeliveryOrderItemUpdateService {
             if ((zrfcid === 'SD04' && canum === 120) || 
                 (zrfcid === 'SD07' && canum === 30) || 
                 zrfcid === 'SD09' || 
-                (zrfcid === 'SD10' && (canum === 30 || canum === 130)) ||
+                (zrfcid === 'SD10' && (canum === 30 || canum === 120)) ||
                 (zrfcid === 'SD11' && canum === 160)) {
                 apiPath = '/sap/opu/odata/sap/API_INBOUND_DELIVERY_SRV;v=0002';
                 itemEntity = 'A_InbDeliveryItem';
@@ -202,17 +202,21 @@ class DeliveryOrderItemUpdateService {
                     updateData.Batch = '2025';
                 }
                 
-                // 更新 StorageLocation
-                if (!isInboundDelivery && !((zrfcid === 'SD07' && canum === 80) || (zrfcid === 'SD10' && canum === 80))) {
-                    if (businessData.ReceivingStorageLocation || businessData.StorageLocation) {
-                        updateData.StorageLocation = businessData.ReceivingStorageLocation || businessData.StorageLocation || "";
-                    }
-                } else if ((zrfcid === 'SD07' && canum === 80) || (zrfcid === 'SD10' && canum === 80)) {
-                    if (businessData.RefDocNo && businessData.RefDocItem) {
-                        const refDocItemLast5 = businessData.RefDocItem.slice(-5);
-                        const poStorageLocation = await this.getPurchaseOrderStorageLocation(businessData.RefDocNo, refDocItemLast5);
-                        if (poStorageLocation) {
-                            updateData.StorageLocation = poStorageLocation;
+                // 更新 StorageLocation（仅外向交货单）
+                if (!isInboundDelivery) {
+                    if ((zrfcid === 'SD07' && canum === 80) || (zrfcid === 'SD10' && canum === 80)) {
+                        // SD07/SD10 80：根据采购订单行项目查询库存地点
+                        if (businessData.RefDocNo && businessData.RefDocItem) {
+                            const refDocItemLast5 = businessData.RefDocItem.slice(-5);
+                            const poStorageLocation = await this.getPurchaseOrderStorageLocation(businessData.RefDocNo, refDocItemLast5);
+                            if (poStorageLocation) {
+                                updateData.StorageLocation = poStorageLocation;
+                            }
+                        }
+                    } else if (zrfcid === 'SD04' && canum === 80) {
+                        // SD04 80：取业务表的收货库存地点
+                        if (businessData.ReceivingStorageLocation || businessData.StorageLocation) {
+                            updateData.StorageLocation = businessData.ReceivingStorageLocation || businessData.StorageLocation;
                         }
                     }
                 }
