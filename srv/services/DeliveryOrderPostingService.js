@@ -139,6 +139,19 @@ class DeliveryOrderPostingService {
             const csrfToken = csrfResult.headers['x-csrf-token'];
             const etag = csrfResult.headers['etag'] || csrfResult.headers['Etag'] || csrfResult.headers['ETag'];
 
+            // 检查货物移动状态，如果为 C（已过帐）则跳过本步骤
+            const responseData = csrfResult.data?.d || csrfResult.data || {};
+            const goodsMovementStatus = responseData.OverallGoodsMovementStatus || responseData.GoodsMovementStatus || '';
+            console.log(`[DeliveryOrderPostingService] 货物移动状态: ${goodsMovementStatus}`);
+            if (goodsMovementStatus === 'C') {
+                console.log('[DeliveryOrderPostingService] 货物移动状态为 C（已过帐），跳过交货单过账');
+                return {
+                    code: 'S',
+                    message: '货物移动状态为 C（已过帐），跳过交货单过账',
+                    objkey: deliveryDocument
+                };
+            }
+
             // 构建过账 API URL（将交货单号附加到 URL 后面）
             const postingUrl = `${apiConfig.postingUrl}'${deliveryDocument}'`;
             console.log(`[DeliveryOrderPostingService] 过账 API 地址: ${postingUrl}`);

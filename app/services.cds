@@ -27,3 +27,5 @@ using from './router/sochange/annotations';
 using from './router/dninfo/annotations';
 
 using from './router/pitransfer/annotations';
+
+using from './router/sd-rel/annotations';

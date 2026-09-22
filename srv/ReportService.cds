@@ -154,7 +154,6 @@ service ReportService {
         PaymentReceipt.ourBankAccount,
         PaymentReceipt.generalLedgerAccountCash,
         PaymentReceipt.generalLedgerAccountNonCash,
-        PaymentReceipt.MajorExpenseCategory,
         PaymentReceipt.expenseItem,
         PaymentReceipt.itemRemark,
         PaymentReceipt.documentName,
@@ -167,6 +166,32 @@ service ReportService {
         MultistepHeadLog.message,
     };
 
+    /**
+     * 数帝单据关系表
+     */
+    @readonly
+    entity SDDocRel as select from db.SDDocRel
+        left outer join db.MultistepHeadLog
+            on SDDocRel.zrfc_logid = MultistepHeadLog.zrfc_logid
+    {
+        key SDDocRel.SalesOrder,
+        key SDDocRel.SalesOrderItem,
+        SDDocRel.ExternalSalesOrder,
+        SDDocRel.ExternalSalesOrderItem,
+        SDDocRel.InterCompanyPurchaseOrder,
+        SDDocRel.InterCompanyPurchaseOrderItem,
+        SDDocRel.InterCompanyOutboundDelivery,
+        SDDocRel.InterCompanyOutboundDeliveryItem,
+        SDDocRel.InterCompanyInboundDelivery,
+        SDDocRel.InterCompanyInboundDeliveryItem,
+        SDDocRel.ExternalOutboundDelivery,
+        SDDocRel.ExternalOutboundDeliveryItem,
+        SDDocRel.zrfcid,
+        SDDocRel.zrfc_logid,
+        MultistepHeadLog.code,
+        MultistepHeadLog.message
+    };
+    
     /**
      * 销售订单创建表
      */

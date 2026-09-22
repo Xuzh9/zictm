@@ -147,6 +147,19 @@ class DeliveryOrderHeaderUpdateService {
             const csrfToken = csrfResult.headers['x-csrf-token'];
             const etag = csrfResult.headers['etag'] || csrfResult.headers['Etag'] || csrfResult.headers['ETag'];
 
+            // 检查货物移动状态，如果为 C（已过帐）则跳过本步骤
+            const responseData = csrfResult.data?.d || csrfResult.data || {};
+            const goodsMovementStatus = responseData.OverallGoodsMovementStatus || responseData.GoodsMovementStatus || '';
+            console.log(`[DeliveryOrderHeaderUpdateService] 货物移动状态: ${goodsMovementStatus}`);
+            if (goodsMovementStatus === 'C') {
+                console.log('[DeliveryOrderHeaderUpdateService] 货物移动状态为 C（已过帐），跳过交货单抬头修改');
+                return {
+                    code: 'S',
+                    message: '货物移动状态为 C（已过帐），跳过交货单抬头修改',
+                    objkey: deliveryDocument
+                };
+            }
+
             // 构建请求体
             const updateData = this.buildUpdateData(deliveryDate);
 

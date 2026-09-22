@@ -119,6 +119,19 @@
                 const csrfToken = csrfResult.headers['x-csrf-token'];
                 console.log('[InboundDeliveryPutawayService] CSRF token:', csrfToken ? '获取成功' : '获取失败');
 
+                // 检查货物移动状态，如果为 C（已过帐）则跳过本步骤
+                const responseData = csrfResult.data?.d || csrfResult.data || {};
+                const goodsMovementStatus = responseData.OverallGoodsMovementStatus || responseData.GoodsMovementStatus || '';
+                console.log(`[InboundDeliveryPutawayService] 货物移动状态: ${goodsMovementStatus}`);
+                if (goodsMovementStatus === 'C') {
+                    console.log('[InboundDeliveryPutawayService] 货物移动状态为 C（已过帐），跳过上架');
+                    return {
+                        code: 'S',
+                        message: '货物移动状态为 C（已过帐），跳过上架',
+                        objkey: deliveryDocument
+                    };
+                }
+
                 // 循环处理每个行项目
                 for (const businessData of businessDataList) {
                     const deliveryDocumentItem = businessData.SalesOrderItem || businessData.DeliveryDocumentItem || '';

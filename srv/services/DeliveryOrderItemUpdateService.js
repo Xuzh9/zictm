@@ -121,7 +121,7 @@ class DeliveryOrderItemUpdateService {
             if ((zrfcid === 'SD04' && canum === 120) || 
                 (zrfcid === 'SD07' && canum === 30) || 
                 zrfcid === 'SD09' || 
-                (zrfcid === 'SD10' && (canum === 30 || canum === 120)) ||
+                (zrfcid === 'SD10' && (canum === 30 || canum === 130)) ||
                 (zrfcid === 'SD11' && canum === 160)) {
                 apiPath = '/sap/opu/odata/sap/API_INBOUND_DELIVERY_SRV;v=0002';
                 itemEntity = 'A_InbDeliveryItem';
@@ -162,6 +162,22 @@ class DeliveryOrderItemUpdateService {
                 csrfToken = csrfResult.headers['x-csrf-token'];
                 cookieString = csrfResult.headers['set-cookie'] ? csrfResult.headers['set-cookie'].join('; ') : '';
                 console.log('[DeliveryOrderItemUpdateService] CSRF token 获取成功:', csrfToken);
+
+                // 检查货物移动状态，如果为 C（已过帐）则跳过本步骤
+                const responseData = csrfResult.data?.d || csrfResult.data || {};
+                const itemResults = responseData.results || [responseData];
+                const goodsMovementStatus = itemResults[0]?.GoodsMovementStatus || '';
+                console.log(`[DeliveryOrderItemUpdateService] 货物移动状态: ${goodsMovementStatus}`);
+                if (goodsMovementStatus === 'C') {
+                    console.log('[DeliveryOrderItemUpdateService] 货物移动状态为 C（已过帐），跳过行项目修改');
+                    const returnResult = {
+                        code: 'S',
+                        message: '货物移动状态为 C（已过帐），跳过交货单行项目修改',
+                        objkey: deliveryDocument
+                    };
+                    console.log('[DeliveryOrderItemUpdateService] 返回结果:', JSON.stringify(returnResult));
+                    return returnResult;
+                }
             }
 
             // 循环更新每个行项目
