@@ -51,7 +51,7 @@ class SalesOrderPricingUpdateService {
 
             // 根据 zrfcid 获取销售订单行项目数据
             let piSalesOrderRelRecords = [];
-            if (zrfcid === 'SD01' || zrfcid === 'SD03' || zrfcid === 'SD06' || zrfcid === 'SD08') {
+            if (zrfcid === 'SD01' || zrfcid === 'SD03' || zrfcid === 'SD06' || zrfcid === 'SD08' || zrfcid === 'SD12') {
                 // 查询 PISalesOrderRel 表获取销售订单号和行号
                 piSalesOrderRelRecords = await this.getPISalesOrderRelRecords(businessDataList);
 
@@ -293,7 +293,7 @@ class SalesOrderPricingUpdateService {
         const step = parseInt(canum);
         
         // 更新 PMP0（当 PurchasePrice 有值时）
-        if (zrfcid === 'SD01' || zrfcid === 'SD04' || zrfcid === 'SD06' || zrfcid === 'SD08' || zrfcid === 'SD11' || (zrfcid === 'SD03' && step === 50)) {
+        if (zrfcid === 'SD01' || zrfcid === 'SD04' || zrfcid === 'SD06' || zrfcid === 'SD08' || zrfcid === 'SD11' || zrfcid === 'SD12' || (zrfcid === 'SD03' && step === 50)) {
             return [{
                 conditionType: 'PMP0',
                 valueField: 'PurchasePrice',
@@ -358,6 +358,7 @@ class SalesOrderPricingUpdateService {
 
             case 'SD01':
             case 'SD06':
+            case 'SD12':
                 for (const record of piSalesOrderRelRecords) {
                     if (!record || !record.SalesOrder1) {
                         console.log(`PISalesOrderRel 中 SalesOrder1 为空，步骤跳过: PIOrder=${record?.PIOrder}, PIOrderItem=${record?.PIOrderItem}`);
@@ -506,6 +507,7 @@ class SalesOrderPricingUpdateService {
 
                     case 'SD01':
                     case 'SD06':
+                    case 'SD12':
                         salesOrder = record.SalesOrder1;
                         salesOrderItem = record.SalesOrderItem1;
                         break;

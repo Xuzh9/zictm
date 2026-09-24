@@ -111,6 +111,7 @@ class PurchaseOrderCreateService {
                 switch (zrfcid) {
                     case 'SD01':
                     case 'SD06':
+                    case 'SD12':
                     case 'SD08':
                         // 更新 PISalesOrderRel 表
                         await this.updatePISalesOrderRel(purchaseOrder, businessDataList, itemPrices, zrfcid, canum);
@@ -297,6 +298,7 @@ class PurchaseOrderCreateService {
                     unitOfMeasure = baseUnit || "EA";
                     break;
                 case 'SD06':
+                case 'SD12':
                     poItemNumber = item.PIOrderItem;
                     material = item.Material || "";
                     const zp00Value = item.ZP00_Value ? parseFloat(item.ZP00_Value) : 0;
@@ -342,9 +344,11 @@ class PurchaseOrderCreateService {
                     PurchaseOrderItem: poItemNumber || "",
                     ScheduleLine: "1",
                     // 计划行交付日期：SD04/SD11 取当前日期，其他取确认交付日期
-                    ScheduleLineDeliveryDate: zrfcid === 'SD04' || zrfcid === 'SD11'
-                        ? new Date().toISOString().slice(0, 10)
-                        : (item.ConfirmedDeliveryDate || "")
+                    // ScheduleLineDeliveryDate: zrfcid === 'SD04' || zrfcid === 'SD11'
+                    //     ? new Date().toISOString().slice(0, 10)
+                    //     : (item.ConfirmedDeliveryDate || "")
+                    // 固定值 9999-12-31
+                    //ScheduleLineDeliveryDate: '9999-12-31'
                 }],
                 _PurOrdPricingElement: (() => {
                     const pricingElements = [];
@@ -445,7 +449,7 @@ class PurchaseOrderCreateService {
                 }
                 
                 // 更新 SalesOrderCreate 表的 PurchasePrice
-                if (zrfcid === 'SD06' && itemPrices) {
+                if ((zrfcid === 'SD06' || zrfcid === 'SD12') && itemPrices) {
                     const SalesOrderCreate = cds.entities['com.sap.zictm.SalesOrderCreate'];
                     const priceItem = itemPrices.find(p => 
                         p.PIOrder === item.PIOrder && p.PIOrderItem === item.PIOrderItem
@@ -555,7 +559,7 @@ class PurchaseOrderCreateService {
     }
 
     async updateOutboundDeliveryPurchasePrice(itemPrices) {
-        try {
+        try {S
             const OutboundDelivery = cds.entities['com.sap.zictm.OutboundDelivery'];
             
             for (const item of itemPrices) {

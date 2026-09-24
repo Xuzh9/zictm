@@ -357,6 +357,7 @@ class SalesOrderAsyncCreateService {
             case 'SD01':
             case 'SD05':
             case 'SD06':
+            case 'SD12':
                 plantValue = mainData.ProductionPlant;
                 break;
         }
@@ -373,7 +374,7 @@ class SalesOrderAsyncCreateService {
             
             const pricingElements = [];
             
-            if (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') {
+            if (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06' || zrfcid === 'SD12') {
                 const conditionTypes = ['ZB01', 'ZB02', 'ZB03', 'ZB04', 'ZC01', 'ZC02', 'ZP00'];
                 
                 for (const conditionType of conditionTypes) {
@@ -404,13 +405,13 @@ class SalesOrderAsyncCreateService {
             
             let unit = item.RequestedQuantityISOUnit;
             if (!unit) {
-                const productId = (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') ? (item.Material || "") : (item.Product || "");
+                const productId = (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06' || zrfcid === 'SD12') ? (item.Material || "") : (item.Product || "");
                 unit = await this.getProductBaseUnit(productId);
                 console.log(`[SalesOrderAsyncCreateService.buildSalesOrderData] 物料 ${productId} 的单位: ${unit}`);
             }
             
             const itemData = {
-                Product: (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') ? (item.Material || "") : (item.Product || ""),
+                Product: (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06' || zrfcid === 'SD12') ? (item.Material || "") : (item.Product || ""),
                 RequestedQuantity: parseFloat(item.RequestedQuantity) || 0,
                 RequestedQuantityISOUnit: unit || "",
                 Plant: plantValue || "",
@@ -456,12 +457,12 @@ class SalesOrderAsyncCreateService {
             [apiConfig.orderTypeField]: apiConfig.orderTypeValue || salesOrderType || '',
             SalesOrganization: mainData.SalesOrganization || mptStepConfig?.vkorg || "",
             SalesOffice: mainData.SalesOffice || "",
-            DistributionChannel: (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') ? (mainData.DistributionChannel || mptStepConfig?.vtweg || "") : (mptStepConfig?.vtweg || ""),
-            OrganizationDivision: (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') ? (mainData.OrganizationDivision || mptStepConfig?.spart || "00") : (mptStepConfig?.spart || "00"),
-            SoldToParty: (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') ? (mainData.SalesDistrict || mptStepConfig?.kunnr || "") : (mainData.Customer || mptStepConfig?.kunnr || ""),
-            PurchaseOrderByCustomer: (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') ? (mainData.PIOrder || "") : (mainData.SalesOrder || ""),
+            DistributionChannel: (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06' || zrfcid === 'SD12') ? (mainData.DistributionChannel || mptStepConfig?.vtweg || "") : (mptStepConfig?.vtweg || ""),
+            OrganizationDivision: (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06' || zrfcid === 'SD12') ? (mainData.OrganizationDivision || mptStepConfig?.spart || "00") : (mptStepConfig?.spart || "00"),
+            SoldToParty: (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06' || zrfcid === 'SD12') ? (mainData.SalesDistrict || mptStepConfig?.kunnr || "") : (mainData.Customer || mptStepConfig?.kunnr || ""),
+            PurchaseOrderByCustomer: (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06' || zrfcid === 'SD12') ? (mainData.PIOrder || "") : (mainData.SalesOrder || ""),
             TransactionCurrency: mainData.TransactionCurrency || "",
-            YY1_FD_ZDFJY_SDH: (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') ? (mainData.YY1_FD_ZDFJY || mptStepConfig?.zdfjy || "") : (mptStepConfig?.zdfjy || ""),
+            YY1_FD_ZDFJY_SDH: (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06' || zrfcid === 'SD12') ? (mainData.YY1_FD_ZDFJY || mptStepConfig?.zdfjy || "") : (mptStepConfig?.zdfjy || ""),
             YY1_FD_ZRFCID2_SDH: zrfcid || "",  
             YY1_FD_XMYQ_SDH: mainData.YY1_FD_XMYQ || "",              
             YY1_FD_DBFS_SDH: mainData.YY1_FD_DBFS || "",                
@@ -489,7 +490,7 @@ class SalesOrderAsyncCreateService {
         }
         
         if (apiConfig.dateField) {
-            if (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') {
+            if (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06' || zrfcid === 'SD12') {
                 salesOrderData[apiConfig.dateField] = new Date().toISOString().split('T')[0];
             } else if (mainData.SalesOrderDate) {
                 salesOrderData[apiConfig.dateField] = typeof mainData.SalesOrderDate === 'string' ? mainData.SalesOrderDate : new Date(mainData.SalesOrderDate).toISOString().split('T')[0];
@@ -498,7 +499,7 @@ class SalesOrderAsyncCreateService {
 
         // RequestedDeliveryDate
         if (salesOrderType !== 'CR' && salesOrderType !== 'DR') {
-            if (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') {
+            if (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06' || zrfcid === 'SD12') {
                 if (mainData.ConfirmedDeliveryDate) {
                     salesOrderData.RequestedDeliveryDate = typeof mainData.ConfirmedDeliveryDate === 'string' ? mainData.ConfirmedDeliveryDate : new Date(mainData.ConfirmedDeliveryDate).toISOString().split('T')[0];
                 }
