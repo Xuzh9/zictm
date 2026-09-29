@@ -251,6 +251,7 @@ service ReportService {
         SalesOrderCreate.YY1_FD_SKU,
         SalesOrderCreate.YY1_FD_DZKB,
         SalesOrderCreate.PurchasePrice,
+        SalesOrderCreate.NetPriceQuantity, //add by zengcf 20260929
         SalesOrderCreate.ZB01_Value,
         SalesOrderCreate.ZB01_CurrencyCode,
         SalesOrderCreate.ZB01_UnitOfMeasure,

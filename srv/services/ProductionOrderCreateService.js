@@ -109,7 +109,20 @@ class ProductionOrderCreateService {
                     console.log(`跳过已存在生产工单的数据: PIOrder=${businessData.PIOrder}, PIOrderItem=${businessData.PIOrderItem}, ProductionOrder=${existingOrder}`);
                     continue;
                 }
-                
+
+                // POST 前根据物料+工厂查询 ProcurementType，F（外部采购）的物料不生成工单
+                const procurementType = await this.getProcurementType(businessData.Material, mptStepConfig?.werks);
+                console.log(`[ProductionOrderCreateService] 物料 ${businessData.Material} 工厂 ${mptStepConfig?.werks} ProcurementType: ${procurementType}`);
+                if (procurementType === 'F') {
+                    console.log(`跳过外部采购物料，不生成生产工单: Material=${businessData.Material}, PIOrder=${businessData.PIOrder}, PIOrderItem=${businessData.PIOrderItem}`);
+                    createResults.push({
+                        success: true,
+                        skipped: true,
+                        index: index
+                    });
+                    continue;
+                }
+
                 // 构建生产工单创建数据（单行）
                 const productionOrderData = await this.buildProductionOrderData(businessData, mptStepConfig, zrfcid, piSalesOrderRelMap, salesGroupMap);
                 
@@ -217,9 +230,11 @@ class ProductionOrderCreateService {
             // 数量
             TotalQuantity: businessData.RequestedQuantity,
             // 计划开始日期（格式：/Date(timestamp)/）
-            MfgOrderPlannedStartDate: this.formatDateForSAP(businessData.ConfirmedDeliveryDate),
+           // MfgOrderPlannedStartDate: this.formatDateForSAP(businessData.ConfirmedDeliveryDate),
+            MfgOrderPlannedStartDate: this.formatDateForSAP('2026-10-04'),
             // 计划结束日期（格式：/Date(timestamp)/）
-            MfgOrderPlannedEndDate: this.formatDateForSAP(businessData.ConfirmedDeliveryDate),
+            //MfgOrderPlannedEndDate: this.formatDateForSAP(businessData.ConfirmedDeliveryDate),
+            MfgOrderPlannedEndDate: this.formatDateForSAP('2026-10-04'),
             //销售部门（根据 SalesGroup 从映射中获取 Description）
             YY1_FD_ZSalesGroupName_ORD: salesGroupMap?.get(businessData.SalesGroup) || '',
             //客户编号
@@ -456,6 +471,45 @@ class ProductionOrderCreateService {
         } catch (error) {
             console.error('[ProductionOrderCreateService.callSalesGroupAPI] 调用外部接口失败:', error.message);
             return null;
+        }
+    }
+
+    /**
+     * 查询物料工厂的采购类型 ProcurementType
+     * @param {string} material - 物料号
+     * @param {string} plant - 工厂
+     * @returns {string} ProcurementType（F=外部采购，E=自制，X=两种），查询失败返回空字符串
+     */
+    async getProcurementType(material, plant) {
+        try {
+            if (!material || !plant) {
+                return '';
+            }
+            const url = `/sap/opu/odata/sap/API_PRODUCT_SRV/A_ProductPlant(Product='${material}',Plant='${plant}')`;
+            const result = await this.commonUtils.executeHttpRequestWithRetry(
+                { destinationName: this.commonUtils.getDestinationName() },
+                {
+                    method: 'GET',
+                    url: url,
+                    headers: {
+                        'Accept': 'application/json',
+                        'sap-language': 'ZH'
+                    },
+                    validateStatus: function (status) {
+                        return true;
+                    }
+                }
+            );
+
+            if (result.status >= 200 && result.status < 300) {
+                const data = typeof result.data === 'string' ? JSON.parse(result.data) : result.data;
+                return data?.d?.ProcurementType || '';
+            }
+            console.warn(`[ProductionOrderCreateService.getProcurementType] 查询失败，状态码: ${result.status}`);
+            return '';
+        } catch (error) {
+            console.error('[ProductionOrderCreateService.getProcurementType] 查询异常:', error.message);
+            return '';
         }
     }
 

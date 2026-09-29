@@ -259,10 +259,11 @@ entity SalesOrderCreate {
     PurchaseOrderByShipToParty    : String(6) @title: '客户采购订单行项目';     // 客户采购订单行项目
     ProductTaxClassification1     : String(4) @title: '产品税分类';     // 产品税分类
     SalesDocumentRjcnReason       : String(4) @title: '销售订单拒绝原因';     // 销售订单拒绝原因
-    YY1_FD_FNSKU                  : String(20) @title: 'FNSKU/快递袋编码';    // FNSKU/快递袋编码
+    YY1_FD_FNSKU                  : String(60) @title: 'FNSKU/快递袋编码';    // FNSKU/快递袋编码
     YY1_FD_SKU                    : String(30) @title: '客户SKU';    // 客户SKU 
     YY1_FD_DZKB                   : String(2) @title: '定制卡板';    // 定制卡板
     PurchasePrice                 : Decimal(15,2) @title: '采购单价'; // 采购单价
+    NetPriceQuantity              : Integer  @title: '价格单位'; // 价格单位 add by zengcf 20260929
     ZB01_Value                    : Decimal(15,2) @title: 'ZB01价格'; // ZB01价格
     ZB01_CurrencyCode             : String(3) @title: 'ZB01价格单位';     // ZB01价格单位
     ZB01_UnitOfMeasure            : Integer @title: 'ZB01数量单位';       // ZB01数量单位
@@ -327,7 +328,7 @@ entity SalesOrderChange {
     ZP00_Value                    : Decimal(15,2) @title: 'ZP00价格';  // ZP00价格
     ZP00_CurrencyCode             : String(3) @title: 'ZP00价格单位';      // ZP00价格单位
     ZP00_UnitOfMeasure            : Integer @title: 'ZP00数量单位';        // ZP00数量单位
-    YY1_FD_FNSKU                  : String(20) @title: 'FNSKU/快递袋编码';     // FNSKU/快递袋编码
+    YY1_FD_FNSKU                  : String(60) @title: 'FNSKU/快递袋编码';     // FNSKU/快递袋编码
     YY1_FD_SKU                    : String(30) @title: '客户SKU';     // 客户SKU
     YY1_FD_DZKB                   : String(2) @title: '定制卡板';    // 定制卡板
     ProductionStartDate           : Date @title: '生产开始日期';          // 生产开始日期

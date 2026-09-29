@@ -1,7 +1,8 @@
 const cds = require('@sap/cds');
+const { SELECT } = cds.ql;
 const CommonUtils = require('../handlers/CommonUtils');
 
-class ProductionOrderCreateService {
+class ProductionOrderUpdateService {
     constructor() {
         this.zrfcLogid = null;
         this.commonUtils = new CommonUtils();
@@ -39,6 +40,17 @@ class ProductionOrderCreateService {
             // 根据 zdfjy 和 canum 查找 MPTStepConfig 配置
             const mptStepConfig = await this.commonUtils.getMPTStepConfig(zdfjy, canum);
 
+            // 读取业务表数据
+            const businessDataList = await this.commonUtils.getBusinessData(businessTable, zrfcLogid, 'zrfc_logid');
+            if (!businessDataList || businessDataList.length === 0) {
+                return {
+                    code: 'E',
+                    message: `未找到业务数据，zrfc_logid: ${zrfcLogid}`,
+                    objkey: ''
+                };
+            }
+            console.log('[ProductionOrderUpdateService] 业务数据条数:', businessDataList.length);
+
             // 获取 CSRF token（使用 OData V2 格式）
             const csrfResult = await this.commonUtils.executeHttpRequestWithRetry(
                 {
@@ -64,7 +76,20 @@ class ProductionOrderCreateService {
             
             for (let index = 0; index < businessDataList.length; index++) {
                 const businessData = businessDataList[index];
-                
+
+                // POST 前根据物料+工厂查询 ProcurementType，F（外部采购）的物料不更新工单
+                const procurementType = await this.getProcurementType(businessData.Material, mptStepConfig?.werks);
+                console.log(`[ProductionOrderUpdateService] 物料 ${businessData.Material} 工厂 ${mptStepConfig?.werks} ProcurementType: ${procurementType}`);
+                if (procurementType === 'F') {
+                    console.log(`跳过外部采购物料，不更新生产工单: Material=${businessData.Material}`);
+                    createResults.push({
+                        success: true,
+                        skipped: true,
+                        index: index
+                    });
+                    continue;
+                }
+
                 // 构建生产工单创建数据（单行）
                 const productionOrderData = await this.buildProductionOrderData(businessData, mptStepConfig, zrfcid);
                 
@@ -127,14 +152,14 @@ class ProductionOrderCreateService {
             if (allSuccess) {
                 return {
                     code: 'S',
-                    message: '生产工单创建成功',
+                    message: '生产工单更新成功',
                     objkey: createdOrderNumbers[createdOrderNumbers.length - 1] || ''  // 返回最后一张工单号
                 };
             } else {
                 // 只返回失败的消息文本
                 const failedResults = createResults.filter(r => !r.success);
                 const errorMessage = failedResults.map(r => r.errorMessage).join('; ');
-                console.error('生产工单创建失败:', errorMessage);
+                console.error('生产工单更新失败:', errorMessage);
                 return {
                     code: 'E',
                     message: errorMessage,
@@ -143,10 +168,10 @@ class ProductionOrderCreateService {
             }
 
         } catch (error) {
-            console.error('ProductionOrderCreateService 执行失败:', error);
+            console.error('ProductionOrderUpdateService 执行失败:', error);
             return {
                 code: 'E',
-                message: error.message || '生产工单创建失败',
+                message: error.message || '生产工单更新失败',
                 objkey: ''
             };
         }
@@ -298,6 +323,45 @@ class ProductionOrderCreateService {
     }
 
     /**
+     * 查询物料工厂的采购类型 ProcurementType
+     * @param {string} material - 物料号
+     * @param {string} plant - 工厂
+     * @returns {string} ProcurementType（F=外部采购，E=自制，X=两种），查询失败返回空字符串
+     */
+    async getProcurementType(material, plant) {
+        try {
+            if (!material || !plant) {
+                return '';
+            }
+            const url = `/sap/opu/odata/sap/API_PRODUCT_SRV/A_ProductPlant(Product='${material}',Plant='${plant}')`;
+            const result = await this.commonUtils.executeHttpRequestWithRetry(
+                { destinationName: this.commonUtils.getDestinationName() },
+                {
+                    method: 'GET',
+                    url: url,
+                    headers: {
+                        'Accept': 'application/json',
+                        'sap-language': 'ZH'
+                    },
+                    validateStatus: function (status) {
+                        return true;
+                    }
+                }
+            );
+
+            if (result.status >= 200 && result.status < 300) {
+                const data = typeof result.data === 'string' ? JSON.parse(result.data) : result.data;
+                return data?.d?.ProcurementType || '';
+            }
+            console.warn(`[ProductionOrderUpdateService.getProcurementType] 查询失败，状态码: ${result.status}`);
+            return '';
+        } catch (error) {
+            console.error('[ProductionOrderUpdateService.getProcurementType] 查询异常:', error.message);
+            return '';
+        }
+    }
+
+    /**
      * 格式化日期为 SAP OData 格式（/Date(timestamp)/）
      * @param {string|Date} dateValue - 日期值
      * @returns {string} 格式化后的日期字符串
@@ -371,4 +435,4 @@ class ProductionOrderCreateService {
     }
 }
 
-module.exports = ProductionOrderCreateService;
+module.exports = ProductionOrderUpdateService;

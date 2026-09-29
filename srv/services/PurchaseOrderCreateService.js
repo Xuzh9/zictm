@@ -52,7 +52,8 @@ class PurchaseOrderCreateService {
             
             // 调试：打印请求数据
             console.log('[PurchaseOrderService] 请求数据:', JSON.stringify(purchaseOrderData, null, 2));
- 
+            console.log('[PurchaseOrderService] 行项目价格:', JSON.stringify(itemPrices, null, 2));
+
             // 获取 CSRF token
             const csrfResult = await this.commonUtils.executeHttpRequestWithRetry(
                 {
@@ -114,7 +115,7 @@ class PurchaseOrderCreateService {
                     case 'SD12':
                     case 'SD08':
                         // 更新 PISalesOrderRel 表
-                        await this.updatePISalesOrderRel(purchaseOrder, businessDataList, itemPrices, zrfcid, canum);
+                        await this.updatePISalesOrderRel(purchaseOrder, businessDataList, zrfcid, canum);
                         break;
                     case 'SD02':
                     case 'SD04':
@@ -123,11 +124,10 @@ class PurchaseOrderCreateService {
                         break;
                 }
 
-                if (zrfcid === 'SD04' || zrfcid === 'SD11') {
-                    // 更新 OutboundDelivery 的 PurchasePrice（使用之前计算好的价格）
-                    await this.updateOutboundDeliveryPurchasePrice(itemPrices);
-                }
-                
+                // 将计算后的采购价格回写到当前流程的业务表 PurchasePrice 字段，
+                // 供后续 SalesOrderPricingUpdateService 读取并更新销售订单价格
+                await this.updateBusinessTablePurchasePrice(businessTable, itemPrices, zrfcid);
+
                 return {
                     code: 'S',
                     message: '采购订单创建成功',
@@ -359,7 +359,8 @@ class PurchaseOrderCreateService {
                             PurchaseOrderItem: poItemNumber || "",
                             ConditionType: "PMP0",
                             ConditionBaseAmount: netPriceAmount,
-                            ConditionCurrency: item.TransactionCurrency || ""
+                            ConditionCurrency: item.TransactionCurrency || "",
+                            ConditionQuantity:NetPriceQuantity || 1,  // 价格单位 add by zengcf 20260929
                         });
                     }
 
@@ -425,7 +426,7 @@ class PurchaseOrderCreateService {
         return { purchaseOrderData, itemPrices };
     }
 
-    async updatePISalesOrderRel(purchaseOrder, businessDataList, itemPrices, zrfcid, canum = null) {
+    async updatePISalesOrderRel(purchaseOrder, businessDataList, zrfcid, canum = null) {
         try {
             const PISalesOrderRel = cds.entities['com.sap.zictm.PISalesOrderRel'];
             const { INSERT, UPDATE } = cds.ql;
@@ -446,25 +447,6 @@ class PurchaseOrderCreateService {
                         PurchaseOrder1: purchaseOrder,
                         PurchaseOrderItem1: poItemNumber
                     };
-                }
-                
-                // 更新 SalesOrderCreate 表的 PurchasePrice
-                if ((zrfcid === 'SD06' || zrfcid === 'SD12') && itemPrices) {
-                    const SalesOrderCreate = cds.entities['com.sap.zictm.SalesOrderCreate'];
-                    const priceItem = itemPrices.find(p => 
-                        p.PIOrder === item.PIOrder && p.PIOrderItem === item.PIOrderItem
-                    );
-                    if (priceItem) {
-                        await cds.run(
-                            UPDATE(SalesOrderCreate)
-                                .set({ PurchasePrice: priceItem.PurchasePrice })
-                                .where({
-                                    PIOrder: item.PIOrder,
-                                    PIOrderItem: item.PIOrderItem
-                                })
-                        );
-                        console.log(`更新 SalesOrderCreate: PIOrder=${item.PIOrder}, PIOrderItem=${item.PIOrderItem}, PurchasePrice=${priceItem.PurchasePrice}`);
-                    }
                 }
                 
                 // 先尝试更新
@@ -558,28 +540,45 @@ class PurchaseOrderCreateService {
         }
     }
 
-    async updateOutboundDeliveryPurchasePrice(itemPrices) {
-        try {S
-            const OutboundDelivery = cds.entities['com.sap.zictm.OutboundDelivery'];
-            
+    /**
+     * 将计算后的采购价格回写到当前流程配置的业务表 PurchasePrice 字段
+     * 供后续 SalesOrderPricingUpdateService 读取
+     * @param {string} businessTable - 业务表名（ProcessConfig.businessTable1）
+     * @param {Array} itemPrices - 行项目价格映射
+     * @param {string} zrfcid - 业务流程 ID
+     */
+    async updateBusinessTablePurchasePrice(businessTable, itemPrices, zrfcid) {
+        try {
+            const entity = cds.entities[`com.sap.zictm.${businessTable}`];
+            if (!entity) {
+                console.warn(`[PurchaseOrderService.updateBusinessTablePurchasePrice] 业务表 ${businessTable} 不存在，跳过价格回写`);
+                return;
+            }
+
+            // SD04/SD11 业务表（OutboundDelivery）以 SalesOrder+SalesOrderItem 为主键，
+            // 其他流程业务表（SalesOrderCreate 等）以 PIOrder+PIOrderItem 为主键
+            const isDeliveryFlow = zrfcid === 'SD04' || zrfcid === 'SD11';
+
             for (const item of itemPrices) {
-                // 直接使用之前计算好的价格，避免重复计算导致小数差异
-                const purchasePrice = item.PurchasePrice;
-                
-                // 按表主键（SalesOrder + SalesOrderItem）更新 OutboundDelivery 表的 PurchasePrice 字段
+                // 未计算出价格的行（如 SD02）不回写，避免把 PurchasePrice 置空
+                if (item.PurchasePrice === undefined || item.PurchasePrice === null || isNaN(item.PurchasePrice)) {
+                    continue;
+                }
+
+                const whereCondition = isDeliveryFlow
+                    ? { SalesOrder: item.SalesOrder, SalesOrderItem: item.SalesOrderItem }
+                    : { PIOrder: item.PIOrder, PIOrderItem: item.PIOrderItem };
+
                 const affectedRows = await cds.run(
-                    UPDATE(OutboundDelivery)
-                        .set({ PurchasePrice: purchasePrice })
-                        .where({ 
-                            SalesOrder: item.SalesOrder,
-                            SalesOrderItem: item.SalesOrderItem
-                        })
+                    UPDATE(entity)
+                        .set({ PurchasePrice: item.PurchasePrice })
+                        .where(whereCondition)
                 );
-                
-                console.log(`更新 OutboundDelivery: SalesOrder=${item.SalesOrder}, SalesOrderItem=${item.SalesOrderItem}, PurchasePrice=${purchasePrice}, 更新行数: ${affectedRows}`);
+
+                console.log(`[PurchaseOrderService.updateBusinessTablePurchasePrice] 回写 ${businessTable}: ${JSON.stringify(whereCondition)}, PurchasePrice=${item.PurchasePrice}, 更新行数: ${affectedRows}`);
             }
         } catch (error) {
-            console.error('更新 OutboundDelivery 表失败:', error);
+            console.error('[PurchaseOrderService.updateBusinessTablePurchasePrice] 回写业务表 PurchasePrice 失败:', error);
         }
     }
 
