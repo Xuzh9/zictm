@@ -276,6 +276,13 @@ class PurchaseOrderCreateService {
         // 构建采购订单行项目数据（根据 zrfcid 使用不同的字段映射）
         const purchaseOrderItems = [];
         for (const item of businessDataList) {
+            // 销售订单行项目类型/类别为 TAD 时跳过（文本/服务行不产生采购订单行项目）
+            const itemTypeOrCategory = item.SalesOrderItemType || item.SalesOrderItemCategory || '';
+            if (itemTypeOrCategory === 'TAD') {
+                console.log(`[PurchaseOrderService] 跳过 TAD 行: PIOrder=${item.PIOrder}, PIOrderItem=${item.PIOrderItem}`);
+                continue;
+            }
+
             // 根据 zrfcid 选择不同的字段映射
             let poItemNumber, material, netPriceAmount, unitOfMeasure;
             switch (zrfcid) {
@@ -283,7 +290,9 @@ class PurchaseOrderCreateService {
                     poItemNumber = item.PIOrderItem;
                     material = item.Material || "";
                     netPriceAmount = parseFloat((item.PurchasePrice ? parseFloat(item.PurchasePrice) : 0).toFixed(2));
-                    unitOfMeasure = item.RequestedQuantityUnit;
+                    // unitOfMeasure = item.RequestedQuantityUnit;
+                    // 有值用业务表单位，没有则取物料主数据基本单位 add by zengcf 20260930
+                    unitOfMeasure = item.RequestedQuantityUnit || (await this.getMaterialBaseUnit(material)) || "";
                     break;
                 case 'SD04':
                 case 'SD11':
@@ -304,7 +313,9 @@ class PurchaseOrderCreateService {
                     const zp00Value = item.ZP00_Value ? parseFloat(item.ZP00_Value) : 0;
                     const sd06Zjgbl = mptStepConfig?.zjgbl ? parseFloat(mptStepConfig.zjgbl) : 100;
                     netPriceAmount = parseFloat((zp00Value * (sd06Zjgbl / 100)).toFixed(2));
-                    unitOfMeasure = item.RequestedQuantityUnit;
+                    // unitOfMeasure = item.RequestedQuantityUnit;
+                    // 有值用业务表单位，没有则取物料主数据基本单位 add by zengcf 20260930
+                    unitOfMeasure = item.RequestedQuantityUnit || (await this.getMaterialBaseUnit(material)) || "";
                     break;
                 case 'SD08': {
                     poItemNumber = item.PIOrderItem;
@@ -360,7 +371,8 @@ class PurchaseOrderCreateService {
                             ConditionType: "PMP0",
                             ConditionBaseAmount: netPriceAmount,
                             ConditionCurrency: item.TransactionCurrency || "",
-                            ConditionQuantity:NetPriceQuantity || 1,  // 价格单位 add by zengcf 20260929
+                            ConditionQuantity: item.NetPriceQuantity || 1,  // 价格单位 add by zengcf 20260929
+                            ConditionQuantityUnit: unitOfMeasure || ""
                         });
                     }
 
@@ -432,6 +444,13 @@ class PurchaseOrderCreateService {
             const { INSERT, UPDATE } = cds.ql;
             
             for (const item of businessDataList) {
+                // 销售订单行项目类型/类别为 TAD 时跳过（文本/服务行无采购订单行项目）
+                const itemTypeOrCategory = item.SalesOrderItemType || item.SalesOrderItemCategory || '';
+                if (itemTypeOrCategory === 'TAD') {
+                    console.log(`[updatePISalesOrderRel] 跳过 TAD 行: PIOrder=${item.PIOrder}, PIOrderItem=${item.PIOrderItem}`);
+                    continue;
+                }
+
                 // 使用 PIOrderItem 作为采购订单行项目号，添加前导零使其长度为5位
                 const poItemNumber = String(item.PIOrderItem).padStart(5, '0');
                 
@@ -498,6 +517,13 @@ class PurchaseOrderCreateService {
             const { INSERT, UPDATE } = cds.ql;
 
             for (const item of businessDataList) {
+                // 销售订单行项目类型/类别为 TAD 时跳过（文本/服务行无采购订单行项目）
+                const itemTypeOrCategory = item.SalesOrderItemType || item.SalesOrderItemCategory || '';
+                if (itemTypeOrCategory === 'TAD') {
+                    console.log(`[PurchaseOrderService.updateSDDocRel] 跳过 TAD 行: SalesOrder=${item.SalesOrder}, SalesOrderItem=${item.SalesOrderItem}`);
+                    continue;
+                }
+
                 const docSalesOrder = item.SalesOrder || '';
                 const docSalesOrderItem = item.SalesOrderItem || '';
 

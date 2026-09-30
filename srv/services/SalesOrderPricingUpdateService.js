@@ -162,6 +162,19 @@ class SalesOrderPricingUpdateService {
                         if (quantityField && businessData[quantityField]) {
                             updateData.ConditionQuantity = businessData[quantityField];
                         }
+
+                        // 价格单位：未指定 quantityField 时默认取业务表 NetPriceQuantity，为空则为 1
+                        if (updateData.ConditionQuantity === undefined) {
+                            updateData.ConditionQuantity = businessData.NetPriceQuantity || 1;
+                        }
+                        // 价格单位单位：有值用业务表单位，没有则取物料主数据基本单位
+                        const material = businessData.Material || businessData.Product || '';
+                        const quantityUnit = businessData.RequestedQuantityUnit
+                            || (await this.getMaterialBaseUnit(material))
+                            || '';
+                        if (quantityUnit) {
+                            updateData.ConditionQuantityUnit = quantityUnit;
+                        }
                         
                         console.log('更新数据:', JSON.stringify(updateData));
 
@@ -453,6 +466,13 @@ class SalesOrderPricingUpdateService {
         console.log(`[buildItemMappingFromRecords] piSalesOrderRelRecords: ${JSON.stringify(piSalesOrderRelRecords)}`);
         
         for (const businessData of businessDataList) {
+            // 销售订单行项目类型/类别为 TAD 时跳过（文本/服务行不更新定价）
+            const itemTypeOrCategory = businessData.SalesOrderItemType || businessData.SalesOrderItemCategory || '';
+            if (itemTypeOrCategory === 'TAD') {
+                console.log(`[buildItemMappingFromRecords] 跳过 TAD 行: PIOrder=${businessData.PIOrder}, PIOrderItem=${businessData.PIOrderItem}, SalesOrderItem=${businessData.SalesOrderItem}`);
+                continue;
+            }
+
             let salesOrder, salesOrderItem;
             
             // 使用业务数据中的 SalesOrderItem 从 API 获取的数据中查找对应记录
@@ -599,6 +619,33 @@ class SalesOrderPricingUpdateService {
             return errorData.message;
         } else {
             return JSON.stringify(errorData);
+        }
+    }
+
+    async getMaterialBaseUnit(materialNumber) {
+        if (!materialNumber) {
+            return null;
+        }
+
+        try {
+            const url = `/sap/opu/odata/sap/API_PRODUCT_SRV/A_Product('${materialNumber}')`;
+            const response = await this.commonUtils.executeHttpRequestWithRetry({
+                destinationName: this.commonUtils.getDestinationName()
+            }, {
+                method: 'GET',
+                url: url,
+                headers: {
+                    'sap-language': 'ZH',
+                    'Accept': 'application/json'
+                }
+            });
+
+            const baseUnit = response.data?.d?.BaseUnit;
+            console.log('[SalesOrderPricingUpdateService] 物料主数据查询:', materialNumber, 'BaseUnit:', baseUnit);
+            return baseUnit;
+        } catch (error) {
+            console.warn('[SalesOrderPricingUpdateService] 获取物料主数据失败:', materialNumber, error.message);
+            return null;
         }
     }
 }

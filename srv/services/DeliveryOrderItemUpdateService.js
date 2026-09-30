@@ -182,6 +182,13 @@ class DeliveryOrderItemUpdateService {
 
             // 循环更新每个行项目
             for (const businessData of businessDataList) {
+                // 销售订单行项目类型/类别为 TAD 时跳过（文本/服务行无交货单行项目）
+                const itemTypeOrCategory = businessData.SalesOrderItemType || businessData.SalesOrderItemCategory || '';
+                if (itemTypeOrCategory === 'TAD') {
+                    console.log(`[DeliveryOrderItemUpdateService] 跳过 TAD 行: DeliveryDocument=${businessData.DeliveryDocument}, DeliveryDocumentItem=${businessData.DeliveryDocumentItem}`);
+                    continue;
+                }
+
                 const deliveryDocumentItem = businessData.SalesOrderItem || businessData.DeliveryDocumentItem || '';
                 
                 if (!deliveryDocumentItem) {

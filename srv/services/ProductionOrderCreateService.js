@@ -110,6 +110,18 @@ class ProductionOrderCreateService {
                     continue;
                 }
 
+                // 销售订单行项目类型/类别为 TAD 时跳过（如文本行、服务行等非生产物料）
+                const itemTypeOrCategory = businessData.SalesOrderItemType || businessData.SalesOrderItemCategory || '';
+                if (itemTypeOrCategory === 'TAD') {
+                    console.log(`跳过非生产行项目类型/类别为 TAD: PIOrder=${businessData.PIOrder}, PIOrderItem=${businessData.PIOrderItem}, 值=${itemTypeOrCategory}`);
+                    createResults.push({
+                        success: true,
+                        skipped: true,
+                        index: index
+                    });
+                    continue;
+                }
+
                 // POST 前根据物料+工厂查询 ProcurementType，F（外部采购）的物料不生成工单
                 const procurementType = await this.getProcurementType(businessData.Material, mptStepConfig?.werks);
                 console.log(`[ProductionOrderCreateService] 物料 ${businessData.Material} 工厂 ${mptStepConfig?.werks} ProcurementType: ${procurementType}`);

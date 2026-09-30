@@ -457,6 +457,8 @@ class SalesOrderAsyncCreateService {
             [apiConfig.orderTypeField]: apiConfig.orderTypeValue || salesOrderType || '',
             SalesOrganization: mainData.SalesOrganization || mptStepConfig?.vkorg || "",
             SalesOffice: mainData.SalesOffice || "",
+            // 销售组：仅当业务数据有值时才传，避免空值覆盖
+            ...(mainData.SalesGroup ? { SalesGroup: mainData.SalesGroup } : {}),
             DistributionChannel: (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06' || zrfcid === 'SD12') ? (mainData.DistributionChannel || mptStepConfig?.vtweg || "") : (mptStepConfig?.vtweg || ""),
             OrganizationDivision: (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06' || zrfcid === 'SD12') ? (mainData.OrganizationDivision || mptStepConfig?.spart || "00") : (mptStepConfig?.spart || "00"),
             SoldToParty: (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06' || zrfcid === 'SD12') ? (mainData.SalesDistrict || mptStepConfig?.kunnr || "") : (mainData.Customer || mptStepConfig?.kunnr || ""),

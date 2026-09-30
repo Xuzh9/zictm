@@ -21,6 +21,7 @@ annotate service.PISalesOrderRel with @(
             { $Type: 'UI.DataField', Label: '销售订单号1', Value: SalesOrder1 },
             { $Type: 'UI.DataField', Label: '销售订单行号1', Value: SalesOrderItem1 },
             { $Type: 'UI.DataField', Label: '生产订单', Value: ProductionOrder },
+            { $Type: 'UI.DataField', Label: '物料号', Value: Material    },  // ADD BY ZENGCF 20260930
             { $Type: 'UI.DataField', Label: '消息状态', Value: code },
             { $Type: 'UI.DataField', Label: '消息文本', Value: message },
         ],
@@ -41,6 +42,7 @@ annotate service.PISalesOrderRel with @(
             { $Type: 'UI.DataField', Label: '销售订单号2', Value: SalesOrder2 },
             { $Type: 'UI.DataField', Label: '销售订单行号2', Value: SalesOrderItem2 },
             { $Type: 'UI.DataField', Label: '生产订单', Value: ProductionOrder },
+            { $Type: 'UI.DataField', Label: '物料号', Value: Material },
             { $Type: 'UI.DataField', Label: '消息状态', Value: code },
             { $Type: 'UI.DataField', Label: '消息文本', Value: message },
         ],

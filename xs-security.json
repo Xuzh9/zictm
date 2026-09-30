@@ -52,6 +52,7 @@
         "https://*.btp.sunlu3d.cn/**",
         "https://zictm.btp.sunlu3d.cn/login/callback",
         "https://*.btp-prd.sunlu3d.cn/**",
+        "https://uaa.cf.cn40.platform.sapcloud.cn/**",
         "https://zictm.btp-prd.sunlu3d.cn/login/callback"
       ]
   }

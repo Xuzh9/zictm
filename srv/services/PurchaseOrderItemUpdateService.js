@@ -61,7 +61,14 @@ class PurchaseOrderItemUpdateService {
             const updateResults = [];
             for (const mapping of poMapping) {
                 const { purchaseOrder, purchaseOrderItem, businessData } = mapping;
-                
+
+                // 销售订单行项目类型/类别为 TAD 时跳过（文本/服务行无采购订单行项目）
+                const itemTypeOrCategory = businessData.SalesOrderItemType || businessData.SalesOrderItemCategory || '';
+                if (itemTypeOrCategory === 'TAD') {
+                    console.log(`[PurchaseOrderItemUpdateService] 跳过 TAD 行: PurchaseOrder=${purchaseOrder}, PurchaseOrderItem=${purchaseOrderItem}`);
+                    continue;
+                }
+
                 // 构建行项目修改数据
                 const itemData = this.buildItemData(businessData, mptStepConfig);
                 

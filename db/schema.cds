@@ -291,7 +291,7 @@ entity SalesOrderCreate {
     ConfirmedDeliveryDate         : Date @title: '交货日期';          // 交货日期
     ScheduleLineOrderQuantity     : Decimal(15,3) @title: '订单确认数量'; // 订单确认数量
     zrfcid                        : String(10) @title: '业务流程ID';    // 业务流程ID
-    zrfc_logid                    : UUID @title: '多步ID';          // 多步ID
+    zrfc_logid                    : UUID @title: '多步ID';          // 多步ID9
     zdfjy                         : String(10) @title: '多方交易类型ID';     // 多方交易类型ID
 }
 

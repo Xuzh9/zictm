@@ -26,6 +26,7 @@ service ReportService {
         PISalesOrderRel.SalesOrder2,
         PISalesOrderRel.SalesOrderItem2,
         PISalesOrderRel.ProductionOrder,
+        SalesOrderCreate.Material,
         SalesOrderCreate.zrfcid,
         SalesOrderCreate.zdfjy,
         MultistepHeadLog.code,

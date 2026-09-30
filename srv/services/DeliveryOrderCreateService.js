@@ -331,7 +331,15 @@ class DeliveryOrderCreateService {
      */
     async buildDeliveryOrderData(businessDataList, mptStepConfig, zrfcid, canum, salesOrderType, sourceDocument) {
         // 构建行项目
-        const deliveryItems = businessDataList.map((item) => {
+        const deliveryItems = [];
+        for (const item of businessDataList) {
+            // 销售订单行项目类型/类别为 TAD 时跳过（文本/服务行不产生交货单行项目）
+            const itemTypeOrCategory = item.SalesOrderItemType || item.SalesOrderItemCategory || '';
+            if (itemTypeOrCategory === 'TAD') {
+                console.log(`[DeliveryOrderCreateService] 跳过 TAD 行: DeliveryDocumentItem=${item.DeliveryDocumentItem}, SalesOrderItem=${item.SalesOrderItem}`);
+                continue;
+            }
+
             // SD02、SD04 使用 SalesOrderItem，其他使用 PIOrderItem
             const referenceItem = (zrfcid === 'SD02' || zrfcid === 'SD04' || zrfcid === 'SD11') 
                 ? item.SalesOrderItem 
@@ -340,11 +348,11 @@ class DeliveryOrderCreateService {
             // (STO) 使用 5 位数，其他情况使用 6 位数
             const digitCount = (zrfcid === 'SD04' && canum === 60) || (zrfcid === 'SD11' && canum === 100) ? 5 : 6;
             
-            return {
+            deliveryItems.push({
                 ReferenceSDDocument: sourceDocument,
                 ReferenceSDDocumentItem: this.padLeft(referenceItem, digitCount, '0')
-            };
-        });
+            });
+        }
 
         // 构建基本数据
         const deliveryOrderData = {
@@ -401,6 +409,14 @@ class DeliveryOrderCreateService {
             const updateTasks = [];
             for (let i = 0; i < businessDataList.length; i++) {
                 const businessData = businessDataList[i];
+
+                // 销售订单行项目类型/类别为 TAD 时跳过（文本/服务行无交货单行项目）
+                const itemTypeOrCategory = businessData.SalesOrderItemType || businessData.SalesOrderItemCategory || '';
+                if (itemTypeOrCategory === 'TAD') {
+                    console.log(`[updatePIDeliveryRel] 跳过 TAD 行: DeliveryDocumentItem=${businessData.DeliveryDocumentItem}`);
+                    continue;
+                }
+
                 const businessDeliveryItem = businessData.DeliveryDocumentItem || '000010';
                 const key = `${businessData.DeliveryDocument}-${businessDeliveryItem}`;
                 const existingRecord = existingMap.get(key);
@@ -456,6 +472,13 @@ class DeliveryOrderCreateService {
             let insertedCount = 0;
 
             for (const item of businessDataList) {
+                // 销售订单行项目类型/类别为 TAD 时跳过（文本/服务行无交货单行项目）
+                const itemTypeOrCategory = item.SalesOrderItemType || item.SalesOrderItemCategory || '';
+                if (itemTypeOrCategory === 'TAD') {
+                    console.log(`[DeliveryOrderCreateService.updateSDDocRel] 跳过 TAD 行: SalesOrder=${item.SalesOrder}, SalesOrderItem=${item.SalesOrderItem}`);
+                    continue;
+                }
+
                 const docSalesOrder = item.SalesOrder || '';
                 const docSalesOrderItem = item.SalesOrderItem || '';
 
