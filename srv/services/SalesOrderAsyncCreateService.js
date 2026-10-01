@@ -371,19 +371,29 @@ class SalesOrderAsyncCreateService {
         for (const item of businessDataList) {
             const itemCategoryField = apiConfig.itemCategoryField;
             const itemCategory = apiConfig.itemCategory;
-            
+
+            // 单位：优先业务表单位，没有则查物料主数据基本单位
+            let unit = item.RequestedQuantityUnit;
+            if (!unit) {
+                const productId = (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06' || zrfcid === 'SD12') ? (item.Material || "") : (item.Product || "");
+                unit = await this.getProductBaseUnit(productId);
+                console.log(`[SalesOrderAsyncCreateService.buildSalesOrderData] 物料 ${productId} 的单位: ${unit}`);
+            }
+
             const pricingElements = [];
-            
+
             if (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06' || zrfcid === 'SD12') {
                 const conditionTypes = ['ZB01', 'ZB02', 'ZB03', 'ZB04', 'ZC01', 'ZC02', 'ZP00'];
-                
+
                 for (const conditionType of conditionTypes) {
                     const valueField = `${conditionType}_Value`;
                     if (item[valueField]) {
                         pricingElements.push({
                             ConditionType: conditionType || "",
                             ConditionRateAmount: parseFloat(item[valueField]) || 0,
-                            ConditionCurrency: item[`${conditionType}_CurrencyCode`] || item.ItemTransactionCurrency || ""
+                            ConditionCurrency: item[`${conditionType}_CurrencyCode`] || item.ItemTransactionCurrency || "",
+                            ConditionQuantity: item.NetPriceQuantity || 1,
+                            ConditionQuantityISOUnit: unit || ""
                         });
                     }
                 }
@@ -394,27 +404,23 @@ class SalesOrderAsyncCreateService {
                     ConditionCurrency: item.ItemTransactionCurrency
                 });
             }
-            
+
             if (item.SalesOrderItemCategory === 'CBXN') {
                 pricingElements.push({
                     ConditionType: "ZKNP",
                     ConditionRateAmount: 0,
-                    ConditionCurrency: item.ItemTransactionCurrency
+                    ConditionCurrency: item.ItemTransactionCurrency,
+                    ConditionQuantity: item.NetPriceQuantity || 1,
+                    ConditionQuantityISOUnit: unit || ""
                 });
             }
-            
-            let unit = item.RequestedQuantityISOUnit;
-            if (!unit) {
-                const productId = (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06' || zrfcid === 'SD12') ? (item.Material || "") : (item.Product || "");
-                unit = await this.getProductBaseUnit(productId);
-                console.log(`[SalesOrderAsyncCreateService.buildSalesOrderData] 物料 ${productId} 的单位: ${unit}`);
-            }
-            
+
             const itemData = {
                 Product: (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06' || zrfcid === 'SD12') ? (item.Material || "") : (item.Product || ""),
                 RequestedQuantity: parseFloat(item.RequestedQuantity) || 0,
                 RequestedQuantityISOUnit: unit || "",
                 Plant: plantValue || "",
+                MaterialByCustomer: item.MaterialByCustomer || "",
                 [apiConfig.itemCategoryField]: item.SalesOrderItemCategory || itemCategory || "",
                 YY1_FD_FNSKU_SDI: item.YY1_FD_FNSKU || "",
                 YY1_FD_SKU_SDI: item.YY1_FD_SKU || "",

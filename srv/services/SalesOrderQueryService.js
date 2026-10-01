@@ -27,6 +27,16 @@ class SalesOrderQueryService {
                 purchaseOrderByCustomer = previousObjkey;
             }
 
+            // objkey 为空时跳过步骤
+            if (!purchaseOrderByCustomer) {
+                console.log('[SalesOrderQueryService] objkey 为空，跳过销售订单查询');
+                return {
+                    code: 'S',
+                    message: 'objkey 为空，跳过销售订单查询',
+                    objkey: ''
+                };
+            }
+
             // 根据条件查询销售订单
             return await this.querySalesOrderByCondition(purchaseOrderByCustomer, zrfcid, canum);
 

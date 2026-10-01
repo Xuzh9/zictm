@@ -53,6 +53,8 @@
         "https://zictm.btp.sunlu3d.cn/login/callback",
         "https://*.btp-prd.sunlu3d.cn/**",
         "https://uaa.cf.cn40.platform.sapcloud.cn/**",
+        "https://cf-cn40.cf.hana-tooling.ingress.orchestration.prod-cn40.hanacloud.sapcloud.cn/**",
+        "https://cf-cn40.cf.hana-tooling.ingress.orchestration.prod-cn40.hanacloud.sapcloud.cn/login/callback",
         "https://zictm.btp-prd.sunlu3d.cn/login/callback"
       ]
   }

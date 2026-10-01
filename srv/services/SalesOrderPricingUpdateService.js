@@ -46,6 +46,16 @@ class SalesOrderPricingUpdateService {
                 salesOrderNumber = previousObjkey;
             }
 
+            // objkey 为空时跳过步骤
+            if (!salesOrderNumber) {
+                console.log('[SalesOrderPricingUpdateService] objkey 为空，跳过定价更新');
+                return {
+                    code: 'S',
+                    message: 'objkey 为空，跳过定价更新',
+                    objkey: ''
+                };
+            }
+
             // 根据 zdfjy 和 canum 查找 MPTStepConfig 配置
             const mptStepConfig = await this.commonUtils.getMPTStepConfig(zdfjy, canum);
 
@@ -66,6 +76,16 @@ class SalesOrderPricingUpdateService {
 
             // 从查询结果中获取行项目号映射
             const itemMapping = this.buildItemMappingFromRecords(businessDataList, piSalesOrderRelRecords, zrfcid, canum);
+
+            // 全部行项目为 TAD 时不执行定价更新 PATCH，直接跳过
+            if (!itemMapping || itemMapping.length === 0) {
+                console.log('[SalesOrderPricingUpdateService] 所有行项目均为 TAD，跳过定价更新');
+                return {
+                    code: 'S',
+                    message: '所有行项目均为 TAD，跳过定价更新',
+                    objkey: salesOrderNumber
+                };
+            }
 
             // 根据 zrfcid 和 canum 确定需要更新的定价类型
             const pricingTypes = this.getPricingTypes(zrfcid, canum);
@@ -162,10 +182,12 @@ class SalesOrderPricingUpdateService {
                         if (quantityField && businessData[quantityField]) {
                             updateData.ConditionQuantity = businessData[quantityField];
                         }
-
                         // 价格单位：未指定 quantityField 时默认取业务表 NetPriceQuantity，为空则为 1
                         if (updateData.ConditionQuantity === undefined) {
-                            updateData.ConditionQuantity = businessData.NetPriceQuantity || 1;
+                          //  updateData.ConditionQuantity = businessData.NetPriceQuantity || '1';
+                           //   updateData.ConditionQuantity = String(businessData.NetPriceQuantity) || '1';
+                           // add by zengcf 20261001
+                           updateData.ConditionQuantity = businessData.NetPriceQuantity ? String(businessData.NetPriceQuantity) : '1';
                         }
                         // 价格单位单位：有值用业务表单位，没有则取物料主数据基本单位
                         const material = businessData.Material || businessData.Product || '';

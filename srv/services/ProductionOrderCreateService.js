@@ -52,6 +52,19 @@ class ProductionOrderCreateService {
             const businessDataList = businessDataResult.businessData;
             console.log('[ProductionOrderCreateService] 业务数据条数:', businessDataList.length);
 
+            // 全部行项目均为 TAD 时不调用创建 API，直接跳过整个步骤
+            const allTAD = businessDataList.every(item =>
+                (item.SalesOrderItemType || item.SalesOrderItemCategory || '') === 'TAD'
+            );
+            if (allTAD) {
+                console.log('[ProductionOrderCreateService] 所有行项目均为 TAD，跳过生产工单创建');
+                return {
+                    code: 'S',
+                    message: '所有行项目均为 TAD，跳过生产工单创建',
+                    objkey: ''
+                };
+            }
+
             // 获取 SalesGroup 并调用外部接口获取映射关系
             let salesGroupMap = new Map();
             const firstBusinessData = businessDataList.find(item => item.SalesGroup);

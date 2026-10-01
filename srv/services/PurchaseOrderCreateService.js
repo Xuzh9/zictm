@@ -49,6 +49,16 @@ class PurchaseOrderCreateService {
 
             // 构建采购订单数据，同时获取行号映射和计算后的价格
             const { purchaseOrderData, itemPrices } = await this.buildPurchaseOrderData(businessDataList, mptStepConfig, zrfcid, zdfjy, canum);
+
+            // 全部行项目为 TAD 时无采购订单行项目，不调用创建 API，直接跳过
+            if (!purchaseOrderData._PurchaseOrderItem || purchaseOrderData._PurchaseOrderItem.length === 0) {
+                console.log('[PurchaseOrderService] 所有行项目均为 TAD，跳过采购订单创建');
+                return {
+                    code: 'S',
+                    message: '所有行项目均为 TAD，跳过采购订单创建',
+                    objkey: ''
+                };
+            }
             
             // 调试：打印请求数据
             console.log('[PurchaseOrderService] 请求数据:', JSON.stringify(purchaseOrderData, null, 2));
@@ -284,12 +294,13 @@ class PurchaseOrderCreateService {
             }
 
             // 根据 zrfcid 选择不同的字段映射
-            let poItemNumber, material, netPriceAmount, unitOfMeasure;
+            let poItemNumber, material, netPriceAmount, unitOfMeasure, priceUnitQty;
             switch (zrfcid) {
                 case 'SD01':
                     poItemNumber = item.PIOrderItem;
                     material = item.Material || "";
                     netPriceAmount = parseFloat((item.PurchasePrice ? parseFloat(item.PurchasePrice) : 0).toFixed(2));
+                    priceUnitQty = item.NetPriceQuantity || 1;
                     // unitOfMeasure = item.RequestedQuantityUnit;
                     // 有值用业务表单位，没有则取物料主数据基本单位 add by zengcf 20260930
                     unitOfMeasure = item.RequestedQuantityUnit || (await this.getMaterialBaseUnit(material)) || "";
@@ -301,7 +312,9 @@ class PurchaseOrderCreateService {
                     const netAmount = item.NetAmount ? parseFloat(item.NetAmount) : 0;
                     const requestedQty = item.RequestedQuantity ? parseFloat(item.RequestedQuantity) : 1;
                     const zjgbl = mptStepConfig?.zjgbl ? parseFloat(mptStepConfig.zjgbl) : 100;
-                    netPriceAmount = parseFloat(((requestedQty > 0 ? (netAmount / requestedQty) * (zjgbl / 100) : 0)).toFixed(2));
+                    const zsl = mptStepConfig?.zsl ? parseFloat(mptStepConfig.zsl) : 0;
+                    netPriceAmount = parseFloat(((requestedQty > 0 ? (netAmount / requestedQty) * (zjgbl / 100) * (1 - zsl / 100) : 0)).toFixed(2));
+                    priceUnitQty = item.NetPriceQuantity || 1;
                     // 需要通过物料主数据 API 获取单位
                     const baseUnit = await this.getMaterialBaseUnit(material);
                     unitOfMeasure = baseUnit || "EA";
@@ -312,7 +325,9 @@ class PurchaseOrderCreateService {
                     material = item.Material || "";
                     const zp00Value = item.ZP00_Value ? parseFloat(item.ZP00_Value) : 0;
                     const sd06Zjgbl = mptStepConfig?.zjgbl ? parseFloat(mptStepConfig.zjgbl) : 100;
-                    netPriceAmount = parseFloat((zp00Value * (sd06Zjgbl / 100)).toFixed(2));
+                    const sd06Zsl = mptStepConfig?.zsl ? parseFloat(mptStepConfig.zsl) : 0;
+                    netPriceAmount = parseFloat((zp00Value * (sd06Zjgbl / 100) * (1 - sd06Zsl / 100)).toFixed(2));
+                    priceUnitQty = item.NetPriceQuantity || 1;
                     // unitOfMeasure = item.RequestedQuantityUnit;
                     // 有值用业务表单位，没有则取物料主数据基本单位 add by zengcf 20260930
                     unitOfMeasure = item.RequestedQuantityUnit || (await this.getMaterialBaseUnit(material)) || "";
@@ -321,14 +336,27 @@ class PurchaseOrderCreateService {
                     poItemNumber = item.PIOrderItem;
                     material = item.Material || "";
                     unitOfMeasure = item.RequestedQuantityUnit;
+                    priceUnitQty = item.NetPriceQuantity || 1;
                     const step = parseInt(canum);
                     if (step === 10) {
                         netPriceAmount = parseFloat((item.PurchasePrice ? parseFloat(item.PurchasePrice) : 0).toFixed(2));
                     } else if (step === 40) {
                         const sd08Zjgbl = mptStepConfig?.zjgbl ? parseFloat(mptStepConfig.zjgbl) : 100;
-                        netPriceAmount = parseFloat(((item.PurchasePrice ? parseFloat(item.PurchasePrice) : 0) * (sd08Zjgbl / 100)).toFixed(2));
+                        const sd08Zsl = mptStepConfig?.zsl ? parseFloat(mptStepConfig.zsl) : 0;
+                        netPriceAmount = parseFloat(((item.PurchasePrice ? parseFloat(item.PurchasePrice) : 0) * (sd08Zjgbl / 100) * (1 - sd08Zsl / 100)).toFixed(2));
                     } 
                     break;
+                }
+            }
+
+            // 销售订单行项目类别为 CBLN/CBXN（服务类）时，净价取物料主数据评估视图标准价，价格单位取 PriceUnitQty
+            if (itemTypeOrCategory === 'CBLN' || itemTypeOrCategory === 'CBXN') {
+                const valuationArea = isReturn ? (mptStepConfig?.umwrk || "") : (mptStepConfig?.lifnr || "");
+                const valuation = await this.getMaterialValuation(material, valuationArea);
+                if (valuation) {
+                    netPriceAmount = valuation.standardPrice;
+                    priceUnitQty = valuation.priceUnitQty;
+                    console.log(`[PurchaseOrderService] CBLN/CBXN 行使用物料标准价: material=${material}, ValuationArea=${valuationArea}, StandardPrice=${netPriceAmount}, PriceUnitQty=${priceUnitQty}`);
                 }
             }
 
@@ -371,7 +399,7 @@ class PurchaseOrderCreateService {
                             ConditionType: "PMP0",
                             ConditionBaseAmount: netPriceAmount,
                             ConditionCurrency: item.TransactionCurrency || "",
-                            ConditionQuantity: item.NetPriceQuantity || 1,  // 价格单位 add by zengcf 20260929
+                            ConditionQuantity: priceUnitQty,  // 价格单位（CBLN/CBXN 取物料主数据 PriceUnitQty，其他取业务表 NetPriceQuantity）add by zengcf 20260929
                             ConditionQuantityUnit: unitOfMeasure || ""
                         });
                     }
@@ -634,6 +662,47 @@ class PurchaseOrderCreateService {
             return baseUnit;
         } catch (error) {
             console.warn('[PurchaseOrderCreateService] 获取物料主数据失败:', materialNumber, error.message);
+            return null;
+        }
+    }
+
+    // 查询物料主数据评估视图（to_Valuation），按 ValuationArea（工厂）过滤，获取标准价 StandardPrice 和价格单位 PriceUnitQty
+    async getMaterialValuation(materialNumber, valuationArea) {
+        if (!materialNumber) {
+            return null;
+        }
+
+        try {
+            let url = `/sap/opu/odata/sap/API_PRODUCT_SRV/A_Product('${materialNumber}')/to_Valuation`;
+            if (valuationArea) {
+                url += `?$filter=ValuationArea eq '${valuationArea}'`;
+            }
+            console.log('[PurchaseOrderCreateService] 查询物料评估数据:', url);
+
+            const response = await this.commonUtils.executeHttpRequestWithRetry({
+                destinationName: this.commonUtils.getDestinationName()
+            }, {
+                method: 'GET',
+                url: url,
+                headers: {
+                    'sap-language': 'ZH',
+                    'Accept': 'application/json'
+                }
+            });
+
+            const valuation = response.data?.d?.results?.[0];
+            if (!valuation) {
+                console.warn('[PurchaseOrderCreateService] 未找到物料评估数据:', materialNumber, 'ValuationArea:', valuationArea);
+                return null;
+            }
+
+            const standardPrice = valuation.StandardPrice !== undefined && valuation.StandardPrice !== null
+                ? parseFloat(parseFloat(valuation.StandardPrice).toFixed(2)) : null;
+            const priceUnitQty = valuation.PriceUnitQty ? parseInt(valuation.PriceUnitQty, 10) : null;
+            console.log('[PurchaseOrderCreateService] 物料评估数据:', materialNumber, 'ValuationArea:', valuationArea, 'StandardPrice:', standardPrice, 'PriceUnitQty:', priceUnitQty);
+            return { standardPrice, priceUnitQty };
+        } catch (error) {
+            console.warn('[PurchaseOrderCreateService] 获取物料评估数据失败:', materialNumber, error.message);
             return null;
         }
     }
