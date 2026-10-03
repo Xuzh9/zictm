@@ -414,6 +414,8 @@ module.exports = cds.service.impl(async function () {
         const headLogCode = headLogs[zrfcLogid];
         if (headLogCode === 'S') {
           errors.push(`第 ${rowNum} 条数据的主键 [${key}] 已成功推送，无法重复推送`);
+        } else if (headLogCode === 'P') {
+          errors.push(`第 ${rowNum} 条数据的主键 [${key}] 正在执行中，请稍后获取状态后再判断是否需要执行`);
         }
       }
     });
@@ -454,7 +456,7 @@ module.exports = cds.service.impl(async function () {
     
     // 调用 MultiStepInvoker，传入查询到的业务流程ID、zdfjy 和 id
     const invokerResult = await invoker.process(mptConfig.zrfcid, data, null, null, mptConfig.zdfjy, id);
-    
+
     // --------------------------
     // 返回创建成功的数据
     // --------------------------
@@ -617,6 +619,8 @@ module.exports = cds.service.impl(async function () {
         const headLogCode = headLogs[zrfcLogid];
         if (headLogCode === 'S') {
           errors.push(`第 ${rowNum} 条数据的主键 [${key}] 已成功推送，无法重复推送`);
+        } else if (headLogCode === 'P') {
+          errors.push(`第 ${rowNum} 条数据的主键 [${key}] 正在执行中，请稍后获取状态后再判断是否需要执行`);
         }
       }
     });
@@ -786,6 +790,8 @@ module.exports = cds.service.impl(async function () {
         const headLogCode = headLogs[zrfcLogid];
         if (headLogCode === 'S') {
           errors.push(`第 ${rowNum} 条数据的主键 [${key}] 已成功推送，无法重复推送`);
+        } else if (headLogCode === 'P') {
+          errors.push(`第 ${rowNum} 条数据的主键 [${key}] 正在执行中，请稍后获取状态后再判断是否需要执行`);
         }
       }
     });
@@ -837,7 +843,7 @@ module.exports = cds.service.impl(async function () {
     
     // 调用 MultiStepInvoker，传入 SD03 作为固定的业务流程ID
     const invokerResult = await invoker.process('SD03', data, null, null, null, id);
-    
+
     // --------------------------
     // 返回创建成功的数据
     // --------------------------

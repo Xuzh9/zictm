@@ -392,7 +392,7 @@ class SalesOrderAsyncCreateService {
                             ConditionType: conditionType || "",
                             ConditionRateAmount: parseFloat(item[valueField]) || 0,
                             ConditionCurrency: item[`${conditionType}_CurrencyCode`] || item.ItemTransactionCurrency || "",
-                            ConditionQuantity: item.NetPriceQuantity || 1,
+                            ConditionQuantity: item[`${conditionType}_UnitOfMeasure`] || 1,
                             ConditionQuantityISOUnit: unit || ""
                         });
                     }
@@ -420,11 +420,13 @@ class SalesOrderAsyncCreateService {
                 RequestedQuantity: parseFloat(item.RequestedQuantity) || 0,
                 RequestedQuantityISOUnit: unit || "",
                 Plant: plantValue || "",
-                MaterialByCustomer: item.MaterialByCustomer || "",
+                // 客户物料编号：有值才传，避免传空值触发 SAP 必输字段校验 add by zengcf 20261003
+                ...(item.MaterialByCustomer ? { MaterialByCustomer: item.MaterialByCustomer } : {}),
                 [apiConfig.itemCategoryField]: item.SalesOrderItemCategory || itemCategory || "",
                 YY1_FD_FNSKU_SDI: item.YY1_FD_FNSKU || "",
                 YY1_FD_SKU_SDI: item.YY1_FD_SKU || "",
                 YY1_FD_DZKB_SDI: item.YY1_FD_DZKB || "",
+                YY1_FD_KHHTH_SDI: item.YY1_FD_KHHTH || "",
                 _ItemPricingElement: pricingElements
             };
             

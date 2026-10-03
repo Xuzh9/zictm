@@ -294,7 +294,7 @@ class PurchaseOrderCreateService {
             }
 
             // 根据 zrfcid 选择不同的字段映射
-            let poItemNumber, material, netPriceAmount, unitOfMeasure, priceUnitQty;
+            let poItemNumber, material, netPriceAmount, unitOfMeasure, priceUnitQty, conditionCurrency = item.TransactionCurrency || "";
             switch (zrfcid) {
                 case 'SD01':
                     poItemNumber = item.PIOrderItem;
@@ -313,7 +313,7 @@ class PurchaseOrderCreateService {
                     const requestedQty = item.RequestedQuantity ? parseFloat(item.RequestedQuantity) : 1;
                     const zjgbl = mptStepConfig?.zjgbl ? parseFloat(mptStepConfig.zjgbl) : 100;
                     const zsl = mptStepConfig?.zsl ? parseFloat(mptStepConfig.zsl) : 0;
-                    netPriceAmount = parseFloat(((requestedQty > 0 ? (netAmount / requestedQty) * (zjgbl / 100) * (1 - zsl / 100) : 0)).toFixed(2));
+                    netPriceAmount = parseFloat(((requestedQty > 0 ? (netAmount / requestedQty) * (zjgbl / 100) / (1 + (zsl / 100)) : 0)).toFixed(2));
                     priceUnitQty = item.NetPriceQuantity || 1;
                     // 需要通过物料主数据 API 获取单位
                     const baseUnit = await this.getMaterialBaseUnit(material);
@@ -326,7 +326,7 @@ class PurchaseOrderCreateService {
                     const zp00Value = item.ZP00_Value ? parseFloat(item.ZP00_Value) : 0;
                     const sd06Zjgbl = mptStepConfig?.zjgbl ? parseFloat(mptStepConfig.zjgbl) : 100;
                     const sd06Zsl = mptStepConfig?.zsl ? parseFloat(mptStepConfig.zsl) : 0;
-                    netPriceAmount = parseFloat((zp00Value * (sd06Zjgbl / 100) * (1 - sd06Zsl / 100)).toFixed(2));
+                    netPriceAmount = parseFloat((zp00Value * (sd06Zjgbl / 100) / (1 + (sd06Zsl / 100))).toFixed(2));
                     priceUnitQty = item.NetPriceQuantity || 1;
                     // unitOfMeasure = item.RequestedQuantityUnit;
                     // 有值用业务表单位，没有则取物料主数据基本单位 add by zengcf 20260930
@@ -343,7 +343,7 @@ class PurchaseOrderCreateService {
                     } else if (step === 40) {
                         const sd08Zjgbl = mptStepConfig?.zjgbl ? parseFloat(mptStepConfig.zjgbl) : 100;
                         const sd08Zsl = mptStepConfig?.zsl ? parseFloat(mptStepConfig.zsl) : 0;
-                        netPriceAmount = parseFloat(((item.PurchasePrice ? parseFloat(item.PurchasePrice) : 0) * (sd08Zjgbl / 100) * (1 - sd08Zsl / 100)).toFixed(2));
+                        netPriceAmount = parseFloat(((item.PurchasePrice ? parseFloat(item.PurchasePrice) : 0) * (sd08Zjgbl / 100) / (1 + (sd08Zsl / 100))).toFixed(2));
                     } 
                     break;
                 }
@@ -356,6 +356,7 @@ class PurchaseOrderCreateService {
                 if (valuation) {
                     netPriceAmount = valuation.standardPrice;
                     priceUnitQty = valuation.priceUnitQty;
+                    conditionCurrency = "CNY";
                     console.log(`[PurchaseOrderService] CBLN/CBXN 行使用物料标准价: material=${material}, ValuationArea=${valuationArea}, StandardPrice=${netPriceAmount}, PriceUnitQty=${priceUnitQty}`);
                 }
             }
@@ -398,7 +399,7 @@ class PurchaseOrderCreateService {
                             PurchaseOrderItem: poItemNumber || "",
                             ConditionType: "PMP0",
                             ConditionBaseAmount: netPriceAmount,
-                            ConditionCurrency: item.TransactionCurrency || "",
+                            ConditionCurrency: conditionCurrency,
                             ConditionQuantity: priceUnitQty,  // 价格单位（CBLN/CBXN 取物料主数据 PriceUnitQty，其他取业务表 NetPriceQuantity）add by zengcf 20260929
                             ConditionQuantityUnit: unitOfMeasure || ""
                         });

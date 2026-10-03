@@ -262,6 +262,7 @@ entity SalesOrderCreate {
     YY1_FD_FNSKU                  : String(60) @title: 'FNSKU/快递袋编码';    // FNSKU/快递袋编码
     YY1_FD_SKU                    : String(30) @title: '客户SKU';    // 客户SKU 
     YY1_FD_DZKB                   : String(2) @title: '定制卡板';    // 定制卡板
+    YY1_FD_KHHTH                  : String(40) @title: '客户合同号';    // 客户合同号
     PurchasePrice                 : Decimal(15,2) @title: '采购单价'; // 采购单价
     NetPriceQuantity              : Integer  @title: '价格单位'; // 价格单位 add by zengcf 20260929
     ZB01_Value                    : Decimal(15,2) @title: 'ZB01价格'; // ZB01价格

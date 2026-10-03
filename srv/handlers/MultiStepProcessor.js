@@ -204,10 +204,21 @@ class MultiStepProcessor {
             if (skipPreparation && (!steps || steps.length === 0)) {
                 steps = await this.getSteps(zrfcid);
             }
-            
-            // 不再单独重置 HeadLog 为 P：如果步骤循环执行前崩溃，会导致 HeadLog=P 但 StepLog 没更新的不一致
-            // HeadLog 状态统一由 finalizeHeadAndStepLog 原子事务更新（成功→S，失败→E）
-            
+
+            // 重推时先把头表置为 P（执行中），步骤循环结束后由 finalizeHeadAndStepLog 原子更新为 S/E
+            if (isRetry) {
+                try {
+                    await cds.run(
+                        UPDATE(cds.entities['com.sap.zictm.MultistepHeadLog'])
+                            .set({ code: 'P', message: '处理中（重推）', lastExecutionAt: executionAt })
+                            .where({ zrfc_logid: zrfcLogid })
+                    );
+                    console.log('[MultiStepProcessor] 重推开始，HeadLog 已置为 P:', zrfcLogid);
+                } catch (retryHeadError) {
+                    console.error('[MultiStepProcessor] 重推时重置 HeadLog 为 P 失败:', retryHeadError.message);
+                }
+            }
+
             // 4. 先查询该 zrfcLogid 的所有日志记录，提高效率
             const MultistepLog = cds.entities['com.sap.zictm.MultistepLog'];
             let allLogs = [];

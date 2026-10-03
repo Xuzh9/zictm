@@ -121,6 +121,8 @@ module.exports = cds.service.impl(async function () {
         const headLogCode = headLogs[zrfcLogid];
         if (headLogCode === 'S') {
           errors.push(`第 ${rowNum} 条数据的主键 [${key}] 已成功推送，无法重复推送`);
+        } else if (headLogCode === 'P') {
+          errors.push(`第 ${rowNum} 条数据的主键 [${key}] 正在执行中，请稍后获取状态后再判断是否需要执行`);
         }
       }
     });
@@ -293,6 +295,8 @@ module.exports = cds.service.impl(async function () {
         const headLogCode = headLogs[zrfcLogid];
         if (headLogCode === 'S') {
           errors.push(`第 ${rowNum} 条数据的主键 [${key}] 已成功推送，无法重复推送`);
+        } else if (headLogCode === 'P') {
+          errors.push(`第 ${rowNum} 条数据的主键 [${key}] 正在执行中，请稍后获取状态后再判断是否需要执行`);
         }
       }
     });
@@ -493,8 +497,10 @@ module.exports = cds.service.impl(async function () {
           const headLogCode = headLogs[zrfcLogid];
           if (headLogCode === 'S') {
             errors.push(`第 ${rowNum} 条数据的主键 [${key}] 已成功推送，无法重复推送`);
+          } else if (headLogCode === 'P') {
+            errors.push(`第 ${rowNum} 条数据的主键 [${key}] 正在执行中，请稍后获取状态后再判断是否需要执行`);
           }
-          // 如果状态不是成功（可能是失败或处理中），则允许更新业务表并重推，不报错
+          // 状态为 E/空时允许更新业务表并重新推送，不报错（重推不受此校验影响）
         }
       });
     } catch (error) {
