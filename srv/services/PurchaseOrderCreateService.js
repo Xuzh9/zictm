@@ -372,6 +372,8 @@ class PurchaseOrderCreateService {
 
             purchaseOrderItems.push({
                 PurchaseOrderItem: poItemNumber || "",
+                // SD08 canum=10 赋值 N，其他流程/步骤赋值 Y
+                YY1_FD_SGGZ_PDH: (zrfcid === 'SD08' && parseInt(canum) === 10) ? 'N' : 'Y',
                 Material: material,
                 Plant: isReturn ? (mptStepConfig?.lifnr || "") : (mptStepConfig?.umwrk || ""),
                 StorageLocation: mptStepConfig?.umlgo || item.ReceivingStorageLocation || item.StorageLocation || "",

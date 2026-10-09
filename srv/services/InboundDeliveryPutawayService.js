@@ -92,8 +92,8 @@
 
                 const apiPath = '/sap/opu/odata/sap/API_INBOUND_DELIVERY_SRV;v=0002';
 
-                // 获取 CSRF token
-                const csrfUrl = `${apiPath}/A_InbDeliveryHeader('${deliveryDocument}')`;
+                // 获取 CSRF token 和交货单行项目（展开 to_DeliveryDocumentItem）
+                const csrfUrl = `${apiPath}/A_InbDeliveryHeader('${deliveryDocument}')?$expand=to_DeliveryDocumentItem`;
                 console.log('[InboundDeliveryPutawayService] 获取 CSRF token URL:', csrfUrl);
 
                 const csrfResult = await this.commonUtils.executeHttpRequestWithRetry(
@@ -119,9 +119,13 @@
                 const csrfToken = csrfResult.headers['x-csrf-token'];
                 console.log('[InboundDeliveryPutawayService] CSRF token:', csrfToken ? '获取成功' : '获取失败');
 
+                // 解析响应数据
+                const responseHeader = csrfResult.data?.d || csrfResult.data || {};
+                const deliveryItems = responseHeader.to_DeliveryDocumentItem?.results || [];
+                console.log('[InboundDeliveryPutawayService] 交货单行项目数量:', deliveryItems.length);
+
                 // 检查货物移动状态，如果为 C（已过帐）则跳过本步骤
-                const responseData = csrfResult.data?.d || csrfResult.data || {};
-                const goodsMovementStatus = responseData.OverallGoodsMovementStatus || responseData.GoodsMovementStatus || '';
+                const goodsMovementStatus = responseHeader.OverallGoodsMovementStatus || responseHeader.GoodsMovementStatus || '';
                 console.log(`[InboundDeliveryPutawayService] 货物移动状态: ${goodsMovementStatus}`);
                 if (goodsMovementStatus === 'C') {
                     console.log('[InboundDeliveryPutawayService] 货物移动状态为 C（已过帐），跳过上架');
@@ -132,9 +136,19 @@
                     };
                 }
 
-                // 循环处理每个行项目
-                for (const businessData of businessDataList) {
-                    const deliveryDocumentItem = businessData.SalesOrderItem || businessData.DeliveryDocumentItem || '';
+                // 全部行项目都为空时跳过
+                if (deliveryItems.length === 0) {
+                    console.warn('[InboundDeliveryPutawayService] 未找到任何行项目，跳过上架');
+                    return {
+                        code: 'S',
+                        message: '未找到交货单行项目，跳过上架',
+                        objkey: deliveryDocument
+                    };
+                }
+
+                // 循环处理每个行项目（按 SAP 返回的行项目，避免批次拆分行号不一致）
+                for (const deliveryItem of deliveryItems) {
+                    const deliveryDocumentItem = deliveryItem.DeliveryDocumentItem || '';
 
                     if (!deliveryDocumentItem) {
                         console.warn('[InboundDeliveryPutawayService] 跳过空行项目');
@@ -191,7 +205,7 @@
                     // 调用 PutawayOneItem API
                     const result = await this.commonUtils.executeHttpRequestWithRetry(
                         {
-                            destinationName: 'ES_API'
+                            destinationName: this.commonUtils.getDestinationName()
                         },
                         {
                             method: 'POST',
