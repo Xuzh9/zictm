@@ -62,10 +62,9 @@ class PurchaseOrderScheduleLineUpdateService {
             for (const mapping of itemMapping) {
                 const { purchaseOrder, purchaseOrderItem, businessData } = mapping;
 
-                // 销售订单行项目类型/类别为 TAD 时跳过（文本/服务行无采购订单行项目）
-                const itemTypeOrCategory = businessData.SalesOrderItemType || businessData.SalesOrderItemCategory || '';
-                if (itemTypeOrCategory === 'TAD') {
-                    console.log(`[PurchaseOrderScheduleLineUpdateService] 跳过 TAD 行: PurchaseOrder=${purchaseOrder}, PurchaseOrderItem=${purchaseOrderItem}`);
+                // 服务类物料（保费 50199998/运费 50199999）无采购订单行项目，跳过
+                if (this.commonUtils.isServiceMaterial(businessData)) {
+                    console.log(`[PurchaseOrderScheduleLineUpdateService] 跳过服务类物料行: PurchaseOrder=${purchaseOrder}, PurchaseOrderItem=${purchaseOrderItem}`);
                     continue;
                 }
 

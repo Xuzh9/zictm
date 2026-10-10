@@ -77,12 +77,12 @@ class SalesOrderPricingUpdateService {
             // 从查询结果中获取行项目号映射
             const itemMapping = this.buildItemMappingFromRecords(businessDataList, piSalesOrderRelRecords, zrfcid, canum);
 
-            // 全部行项目为 TAD 时不执行定价更新 PATCH，直接跳过
+            // 全部行项目为服务类物料（保费/运费）时不执行定价更新 PATCH，直接跳过
             if (!itemMapping || itemMapping.length === 0) {
-                console.log('[SalesOrderPricingUpdateService] 所有行项目均为 TAD，跳过定价更新');
+                console.log('[SalesOrderPricingUpdateService] 所有行项目均为服务类物料（保费/运费），跳过定价更新');
                 return {
                     code: 'S',
-                    message: '所有行项目均为 TAD，跳过定价更新',
+                    message: '所有行项目均为服务类物料（保费/运费），跳过定价更新',
                     objkey: salesOrderNumber
                 };
             }
@@ -488,10 +488,9 @@ class SalesOrderPricingUpdateService {
         console.log(`[buildItemMappingFromRecords] piSalesOrderRelRecords: ${JSON.stringify(piSalesOrderRelRecords)}`);
         
         for (const businessData of businessDataList) {
-            // 销售订单行项目类型/类别为 TAD 时跳过（文本/服务行不更新定价）
-            const itemTypeOrCategory = businessData.SalesOrderItemType || businessData.SalesOrderItemCategory || '';
-            if (itemTypeOrCategory === 'TAD') {
-                console.log(`[buildItemMappingFromRecords] 跳过 TAD 行: PIOrder=${businessData.PIOrder}, PIOrderItem=${businessData.PIOrderItem}, SalesOrderItem=${businessData.SalesOrderItem}`);
+            // 服务类物料（保费 50199998/运费 50199999）不更新定价
+            if (this.commonUtils.isServiceMaterial(businessData)) {
+                console.log(`[buildItemMappingFromRecords] 跳过服务类物料行: PIOrder=${businessData.PIOrder}, PIOrderItem=${businessData.PIOrderItem}, SalesOrderItem=${businessData.SalesOrderItem}`);
                 continue;
             }
 

@@ -50,12 +50,12 @@ class PurchaseOrderCreateService {
             // 构建采购订单数据，同时获取行号映射和计算后的价格
             const { purchaseOrderData, itemPrices } = await this.buildPurchaseOrderData(businessDataList, mptStepConfig, zrfcid, zdfjy, canum);
 
-            // 全部行项目为 TAD 时无采购订单行项目，不调用创建 API，直接跳过
+            // 全部行项目为服务类物料（保费/运费）时无采购订单行项目，不调用创建 API，直接跳过
             if (!purchaseOrderData._PurchaseOrderItem || purchaseOrderData._PurchaseOrderItem.length === 0) {
-                console.log('[PurchaseOrderService] 所有行项目均为 TAD，跳过采购订单创建');
+                console.log('[PurchaseOrderService] 所有行项目均为服务类物料（保费/运费），跳过采购订单创建');
                 return {
                     code: 'S',
-                    message: '所有行项目均为 TAD，跳过采购订单创建',
+                    message: '所有行项目均为服务类物料（保费/运费），跳过采购订单创建',
                     objkey: ''
                 };
             }
@@ -286,10 +286,9 @@ class PurchaseOrderCreateService {
         // 构建采购订单行项目数据（根据 zrfcid 使用不同的字段映射）
         const purchaseOrderItems = [];
         for (const item of businessDataList) {
-            // 销售订单行项目类型/类别为 TAD 时跳过（文本/服务行不产生采购订单行项目）
-            const itemTypeOrCategory = item.SalesOrderItemType || item.SalesOrderItemCategory || '';
-            if (itemTypeOrCategory === 'TAD') {
-                console.log(`[PurchaseOrderService] 跳过 TAD 行: PIOrder=${item.PIOrder}, PIOrderItem=${item.PIOrderItem}`);
+            // 服务类物料（保费 50199998/运费 50199999）不产生采购订单行项目
+            if (this.commonUtils.isServiceMaterial(item)) {
+                console.log(`[PurchaseOrderService] 跳过服务类物料行: PIOrder=${item.PIOrder}, PIOrderItem=${item.PIOrderItem}, Material=${item.Material || item.Product}`);
                 continue;
             }
 
@@ -372,8 +371,6 @@ class PurchaseOrderCreateService {
 
             purchaseOrderItems.push({
                 PurchaseOrderItem: poItemNumber || "",
-                // SD08 canum=10 赋值 N，其他流程/步骤赋值 Y
-                YY1_FD_SGGZ_PDH: (zrfcid === 'SD08' && parseInt(canum) === 10) ? 'N' : 'Y',
                 Material: material,
                 Plant: isReturn ? (mptStepConfig?.lifnr || "") : (mptStepConfig?.umwrk || ""),
                 StorageLocation: mptStepConfig?.umlgo || item.ReceivingStorageLocation || item.StorageLocation || "",
@@ -409,16 +406,17 @@ class PurchaseOrderCreateService {
 
                     // ZQU1/ZQU2 定价条件
                     if (mptStepConfig?.taxFreightAmt) {
+                        const taxFreightAmt = parseFloat(mptStepConfig.taxFreightAmt);
                         pricingElements.push({
                             PurchaseOrderItem: poItemNumber || "",
                             ConditionType: "ZQU1",
-                            ConditionBaseAmount: mptStepConfig.taxFreightAmt,
+                            ConditionBaseAmount: taxFreightAmt,
                             ConditionCurrency: item.TransactionCurrency || "",
                             FreightSupplier: "600000"
                         }, {
                             PurchaseOrderItem: poItemNumber || "",
                             ConditionType: "ZQU2",
-                            ConditionBaseAmount: mptStepConfig.taxFreightAmt,
+                            ConditionBaseAmount: taxFreightAmt,
                             ConditionCurrency: item.TransactionCurrency || "",
                             FreightSupplier: "600000"
                         });
@@ -441,6 +439,8 @@ class PurchaseOrderCreateService {
             //DocumentCurrency: mainData.TransactionCurrency || "",
             YY1_FD_ZDFJY2_PDH: zdfjy || "",
             YY1_FD_ZRFCID_PDH: zrfcid || "",
+            // SD08 canum=10 赋值 N，其他流程/步骤赋值 Y
+            YY1_FD_SGGZ_PDH: (zrfcid === 'SD08' && parseInt(canum) === 10) ? 'N' : 'Y',
             SupplyingPlant: isReturn ? (mptStepConfig?.umwrk || "") : (mptStepConfig?.lifnr || ""),
             _PurchaseOrderItem: purchaseOrderItems
         };
@@ -475,10 +475,9 @@ class PurchaseOrderCreateService {
             const { INSERT, UPDATE } = cds.ql;
             
             for (const item of businessDataList) {
-                // 销售订单行项目类型/类别为 TAD 时跳过（文本/服务行无采购订单行项目）
-                const itemTypeOrCategory = item.SalesOrderItemType || item.SalesOrderItemCategory || '';
-                if (itemTypeOrCategory === 'TAD') {
-                    console.log(`[updatePISalesOrderRel] 跳过 TAD 行: PIOrder=${item.PIOrder}, PIOrderItem=${item.PIOrderItem}`);
+                // 服务类物料（保费/运费）无采购订单行项目，不回写关系表
+                if (this.commonUtils.isServiceMaterial(item)) {
+                    console.log(`[updatePISalesOrderRel] 跳过服务类物料行: PIOrder=${item.PIOrder}, PIOrderItem=${item.PIOrderItem}`);
                     continue;
                 }
 
@@ -548,10 +547,9 @@ class PurchaseOrderCreateService {
             const { INSERT, UPDATE } = cds.ql;
 
             for (const item of businessDataList) {
-                // 销售订单行项目类型/类别为 TAD 时跳过（文本/服务行无采购订单行项目）
-                const itemTypeOrCategory = item.SalesOrderItemType || item.SalesOrderItemCategory || '';
-                if (itemTypeOrCategory === 'TAD') {
-                    console.log(`[PurchaseOrderService.updateSDDocRel] 跳过 TAD 行: SalesOrder=${item.SalesOrder}, SalesOrderItem=${item.SalesOrderItem}`);
+                // 服务类物料（保费/运费）无采购订单行项目，不回写关系表
+                if (this.commonUtils.isServiceMaterial(item)) {
+                    console.log(`[PurchaseOrderCreateService.updateSDDocRel] 跳过服务类物料行: SalesOrder=${item.SalesOrder}, SalesOrderItem=${item.SalesOrderItem}`);
                     continue;
                 }
 

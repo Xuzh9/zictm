@@ -182,10 +182,9 @@ class DeliveryOrderItemUpdateService {
 
             // 循环更新每个行项目
             for (const businessData of businessDataList) {
-                // 销售订单行项目类型/类别为 TAD 时跳过（文本/服务行无交货单行项目）
-                const itemTypeOrCategory = businessData.SalesOrderItemType || businessData.SalesOrderItemCategory || '';
-                if (itemTypeOrCategory === 'TAD') {
-                    console.log(`[DeliveryOrderItemUpdateService] 跳过 TAD 行: DeliveryDocument=${businessData.DeliveryDocument}, DeliveryDocumentItem=${businessData.DeliveryDocumentItem}`);
+                // 服务类物料（保费 50199998/运费 50199999）无交货单行项目，跳过
+                if (this.commonUtils.isServiceMaterial(businessData)) {
+                    console.log(`[DeliveryOrderItemUpdateService] 跳过服务类物料行: Material=${businessData.Material || businessData.Product}, DeliveryDocument=${businessData.DeliveryDocument}, DeliveryDocumentItem=${businessData.DeliveryDocumentItem}`);
                     continue;
                 }
 
@@ -202,25 +201,33 @@ class DeliveryOrderItemUpdateService {
                 // 构建更新数据
                 const updateData = {};
 
-                // 仅 SD07 80 和 SD10 80 步骤需要批次拆分数量更新
+                // SD07 80 / SD10 80：更新交货数量；有无批次拆分行都更新，数量来源不同
                 if ((zrfcid === 'SD07' && canum === 80) || (zrfcid === 'SD10' && canum === 80)) {
-                    // 如果该主行存在批次拆分行，先将交货数量更新为批次拆分行数量之和（后续批次拆分步骤再拆分）
                     const mainItemKey = businessData.DeliveryDocumentItem || businessData.SalesOrderItem;
                     const splitRows = businessDataAll.filter(item =>
                         item.ParentItem && item.ParentItem.trim() !== '' && item.ParentItem !== '000000' &&
                         item.ParentItem === mainItemKey
                     );
                     if (splitRows.length > 0) {
+                        // 有批次拆分行：数量更新为拆分行数量之和，Batch 不更新（后续 BatchSplitService 每行各自带 Batch）
                         const splitTotal = splitRows.reduce((sum, r) => sum + (Number(r.ActualDeliveryQuantity) || 0), 0);
                         if (splitTotal > 0) {
-                            // 以字符串传输
                             updateData.ActualDeliveryQuantity = String(splitTotal);
                             console.log(`[DeliveryOrderItemUpdateService] 主行 ${deliveryDocumentItem} 存在 ${splitRows.length} 条批次拆分行，交货数量更新为: ${splitTotal}`);
+                        }
+                    } else {
+                        // 无批次拆分行：数量和批次都取业务表
+                        if (businessData.ActualDeliveryQuantity) {
+                            updateData.ActualDeliveryQuantity = String(businessData.ActualDeliveryQuantity);
+                            console.log(`[DeliveryOrderItemUpdateService] 主行 ${deliveryDocumentItem} 无批次拆分行，交货数量更新为业务表数量: ${businessData.ActualDeliveryQuantity}`);
+                        }
+                        if (businessData.Batch) {
+                            updateData.Batch = businessData.Batch;
                         }
                     }
                 }
 
-                // 更新 Batch（内向交货单、SD07/SD10 80 不需要更新）
+                // 更新 Batch（内向交货单、SD07/SD10 80 已在上面处理；其余外向交货单固定 '2025'）
                 if (!isInboundDelivery && !((zrfcid === 'SD07' && canum === 80) || (zrfcid === 'SD10' && canum === 80))) {
                     updateData.Batch = '2025';
                 }

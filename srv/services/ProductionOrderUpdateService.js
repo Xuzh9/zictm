@@ -77,6 +77,17 @@ class ProductionOrderUpdateService {
             for (let index = 0; index < businessDataList.length; index++) {
                 const businessData = businessDataList[index];
 
+                // 服务类物料（保费 50199998/运费 50199999）非生产物料，跳过
+                if (this.commonUtils.isServiceMaterial(businessData)) {
+                    console.log(`跳过服务类物料行（保费/运费）: PIOrder=${businessData.PIOrder}, PIOrderItem=${businessData.PIOrderItem}, Material=${businessData.Material || businessData.Product}`);
+                    createResults.push({
+                        success: true,
+                        skipped: true,
+                        index: index
+                    });
+                    continue;
+                }
+
                 // POST 前根据物料+工厂查询 ProcurementType，F（外部采购）的物料不更新工单
                 const procurementType = await this.getProcurementType(businessData.Material, mptStepConfig?.werks);
                 console.log(`[ProductionOrderUpdateService] 物料 ${businessData.Material} 工厂 ${mptStepConfig?.werks} ProcurementType: ${procurementType}`);

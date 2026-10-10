@@ -52,15 +52,13 @@ class ProductionOrderCreateService {
             const businessDataList = businessDataResult.businessData;
             console.log('[ProductionOrderCreateService] 业务数据条数:', businessDataList.length);
 
-            // 全部行项目均为 TAD 时不调用创建 API，直接跳过整个步骤
-            const allTAD = businessDataList.every(item =>
-                (item.SalesOrderItemType || item.SalesOrderItemCategory || '') === 'TAD'
-            );
-            if (allTAD) {
-                console.log('[ProductionOrderCreateService] 所有行项目均为 TAD，跳过生产工单创建');
+            // 全部行项目均为服务类物料（保费/运费）时不调用创建 API，直接跳过整个步骤
+            const allServiceMaterial = businessDataList.every(item => this.commonUtils.isServiceMaterial(item));
+            if (allServiceMaterial) {
+                console.log('[ProductionOrderCreateService] 所有行项目均为服务类物料（保费/运费），跳过生产工单创建');
                 return {
                     code: 'S',
-                    message: '所有行项目均为 TAD，跳过生产工单创建',
+                    message: '所有行项目均为服务类物料（保费/运费），跳过生产工单创建',
                     objkey: ''
                 };
             }
@@ -123,10 +121,9 @@ class ProductionOrderCreateService {
                     continue;
                 }
 
-                // 销售订单行项目类型/类别为 TAD 时跳过（如文本行、服务行等非生产物料）
-                const itemTypeOrCategory = businessData.SalesOrderItemType || businessData.SalesOrderItemCategory || '';
-                if (itemTypeOrCategory === 'TAD') {
-                    console.log(`跳过非生产行项目类型/类别为 TAD: PIOrder=${businessData.PIOrder}, PIOrderItem=${businessData.PIOrderItem}, 值=${itemTypeOrCategory}`);
+                // 服务类物料（保费 50199998/运费 50199999）非生产物料，跳过
+                if (this.commonUtils.isServiceMaterial(businessData)) {
+                    console.log(`跳过服务类物料行（保费/运费）: PIOrder=${businessData.PIOrder}, PIOrderItem=${businessData.PIOrderItem}, Material=${businessData.Material || businessData.Product}`);
                     createResults.push({
                         success: true,
                         skipped: true,

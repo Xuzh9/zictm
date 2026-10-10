@@ -333,10 +333,9 @@ class DeliveryOrderCreateService {
         // 构建行项目
         const deliveryItems = [];
         for (const item of businessDataList) {
-            // 销售订单行项目类型/类别为 TAD 时跳过（文本/服务行不产生交货单行项目）
-            const itemTypeOrCategory = item.SalesOrderItemType || item.SalesOrderItemCategory || '';
-            if (itemTypeOrCategory === 'TAD') {
-                console.log(`[DeliveryOrderCreateService] 跳过 TAD 行: DeliveryDocumentItem=${item.DeliveryDocumentItem}, SalesOrderItem=${item.SalesOrderItem}`);
+            // 服务类物料（保费 50199998/运费 50199999）不产生交货单行项目
+            if (this.commonUtils.isServiceMaterial(item)) {
+                console.log(`[DeliveryOrderCreateService] 跳过服务类物料行: DeliveryDocumentItem=${item.DeliveryDocumentItem}, SalesOrderItem=${item.SalesOrderItem}`);
                 continue;
             }
 
@@ -410,10 +409,9 @@ class DeliveryOrderCreateService {
             for (let i = 0; i < businessDataList.length; i++) {
                 const businessData = businessDataList[i];
 
-                // 销售订单行项目类型/类别为 TAD 时跳过（文本/服务行无交货单行项目）
-                const itemTypeOrCategory = businessData.SalesOrderItemType || businessData.SalesOrderItemCategory || '';
-                if (itemTypeOrCategory === 'TAD') {
-                    console.log(`[updatePIDeliveryRel] 跳过 TAD 行: DeliveryDocumentItem=${businessData.DeliveryDocumentItem}`);
+                // 服务类物料（保费/运费）无交货单行项目，不回写关系表
+                if (this.commonUtils.isServiceMaterial(businessData)) {
+                    console.log(`[updatePIDeliveryRel] 跳过服务类物料行: DeliveryDocumentItem=${businessData.DeliveryDocumentItem}`);
                     continue;
                 }
 
@@ -472,10 +470,9 @@ class DeliveryOrderCreateService {
             let insertedCount = 0;
 
             for (const item of businessDataList) {
-                // 销售订单行项目类型/类别为 TAD 时跳过（文本/服务行无交货单行项目）
-                const itemTypeOrCategory = item.SalesOrderItemType || item.SalesOrderItemCategory || '';
-                if (itemTypeOrCategory === 'TAD') {
-                    console.log(`[DeliveryOrderCreateService.updateSDDocRel] 跳过 TAD 行: SalesOrder=${item.SalesOrder}, SalesOrderItem=${item.SalesOrderItem}`);
+                // 服务类物料（保费/运费）无交货单行项目，不回写关系表
+                if (this.commonUtils.isServiceMaterial(item)) {
+                    console.log(`[DeliveryOrderCreateService.updateSDDocRel] 跳过服务类物料行: SalesOrder=${item.SalesOrder}, SalesOrderItem=${item.SalesOrderItem}`);
                     continue;
                 }
 

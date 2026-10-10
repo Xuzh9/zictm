@@ -252,6 +252,17 @@ class CommonUtils {
             return [];
         }
     }
+
+    /**
+     * 判断是否为服务类物料（保费 50199998 / 运费 50199999）
+     * 这类物料无实物，不产生采购/交货/生产/定价行，各单据步骤需跳过
+     * 兼容业务表 Material / Product 字段及 SAP 前导零格式
+     */
+    isServiceMaterial(item) {
+        if (!item) return false;
+        const materialNo = String(item.Material || item.Product || '').trim().replace(/^0+/, '');
+        return materialNo === '50199998' || materialNo === '50199999';
+    }
 }
 
 module.exports = CommonUtils;
