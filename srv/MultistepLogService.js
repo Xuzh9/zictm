@@ -51,29 +51,17 @@ module.exports = srv => {
         try {
             console.log('[MultistepLogService] 开始处理日志ID:', zrfcLogid);
 
-            const failedSteps = await cds.run(
-                SELECT.from(MultistepLog).where({
-                    zrfc_logid: zrfcLogid,
-                    code: { in: ['E', 'P', null, ''] }
-                })
+            // 检查 HeadLog 状态，只有 E 或 P 才能重推
+            const headLog = await cds.run(
+                SELECT.one.from(MultistepHeadLog).columns(['code']).where({ zrfc_logid: zrfcLogid })
             );
 
-            // 步骤日志为空时，再检查 HeadLog 是否为 P（异步中断导致步骤未执行）
-            if (failedSteps.length === 0) {
-                const headLog = await cds.run(
-                    SELECT.one.from(MultistepHeadLog).columns(['code']).where({ zrfc_logid: zrfcLogid })
-                );
-                if (headLog && (headLog.code === 'P' || headLog.code === '' || headLog.code == null)) {
-                    console.log('[MultistepLogService] HeadLog 仍为 P/空，允许重推');
-                    // 构造一条假的 failedStep，避免后续 length 判断
-                    failedSteps.push({ zrfc_logid: zrfcLogid, canum: '0', code: 'P', message: 'HeadLog 仍为处理中' });
-                }
+            if (!headLog) {
+                return req.error(404, `未找到日志: ${zrfcLogid}`);
             }
 
-            if (failedSteps.length === 0) {
-                const errMsg = `日志ID ${zrfcLogid} 没有失败的步骤，无法重推`;
-                console.error('[MultistepLogService]', errMsg);
-                return req.error(500, errMsg);
+            if (headLog.code !== 'E') {
+                return req.error(400, `只有报错(E)状态的记录才能重推，当前状态: ${headLog.code}`);
             }
             //调用重推功能
             await retryHandler.retry(zrfcLogid);
@@ -82,6 +70,54 @@ module.exports = srv => {
 
         } catch (error) {
             console.error('[MultistepLogService] 日志ID', zrfcLogid, '处理失败:', error.message);
+            return req.error(500, error.message);
+        }
+    });
+
+    // 在头表 MultistepHeadLog 上注册关闭 action（仅报错状态可关闭）
+    srv.on('closeStep', MultistepHeadLog, async (req) => {
+        const targetKey = req.params[0];
+        if (!targetKey) return req.error(400, '请选择数据');
+
+        const zrfcLogid = targetKey.zrfc_logid;
+
+        console.log('[MultistepLogService] 收到关闭请求 - zrfcLogid:', zrfcLogid);
+
+        try {
+            const headLog = await cds.run(
+                SELECT.one.from(MultistepHeadLog).columns(['code']).where({ zrfc_logid: zrfcLogid })
+            );
+
+            if (!headLog) {
+                return req.error(404, `未找到日志: ${zrfcLogid}`);
+            }
+
+            if (headLog.code !== 'E') {
+                return req.error(400, `只有报错状态(E)的记录才能关闭，当前状态: ${headLog.code}`);
+            }
+
+            // 格式化当前时间（UTC+8 东八区）
+            const now = new Date();
+            const utc8 = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+            const pad = (n) => String(n).padStart(2, '0');
+            const timeStr = `${utc8.getFullYear()}-${pad(utc8.getMonth() + 1)}-${pad(utc8.getDate())} ${pad(utc8.getHours())}:${pad(utc8.getMinutes())}:${pad(utc8.getSeconds())}`;
+
+            const dbHeadLog = cds.entities['com.sap.zictm.MultistepHeadLog'];
+            await cds.run(
+                UPDATE(dbHeadLog)
+                    .set({
+                        code: 'S',
+                        message: `在${timeStr}关闭`,
+                        lastExecutionAt: now
+                    })
+                    .where({ zrfc_logid: zrfcLogid })
+            );
+
+            console.log('[MultistepLogService] 日志ID', zrfcLogid, '已关闭');
+            return SELECT.one(MultistepHeadLog).where(targetKey);
+
+        } catch (error) {
+            console.error('[MultistepLogService] 日志ID', zrfcLogid, '关闭失败:', error.message);
             return req.error(500, error.message);
         }
     });

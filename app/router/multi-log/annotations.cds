@@ -28,7 +28,16 @@ annotate service.MultistepHeadLog with @(
                 RequiresSelection: true,
                 Determining: false,
                 @Common: { SideEffects: { TargetProperties: ['/service.MultistepHeadLog'] } },
-                TargetProperties: ['code', 'message', 'lastExecutionAt', 'lastExecutionTime']
+                TargetProperties: ['code', 'message', 'lastExecutionAt']
+            },
+            {
+                $Type: 'UI.DataFieldForAction',
+                Label: '直接关闭',
+                Action: 'service.closeStep',
+                RequiresSelection: true,
+                Determining: false,
+                @Common: { SideEffects: { TargetProperties: ['/service.MultistepHeadLog'] } },
+                TargetProperties: ['code', 'message', 'lastExecutionAt']
             }
         ],
 

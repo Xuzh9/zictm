@@ -313,7 +313,7 @@ class MultiStepInvoker {
     }
 
     /**
-     * 更新业务数据表（包含 zrfcid 和 zrfc_logid 字段，覆盖更新）
+     * 更新业务数据表（包含 zrfcid 和 zrfc_logid 字段，存在则 UPDATE 不存在则 INSERT）
      * @param {string} tableName - 业务表名
      * @param {Array} data - 业务数据（已包含 zrfcid 和 zrfc_logid）
      */
@@ -345,7 +345,7 @@ class MultiStepInvoker {
             // 执行批量更新（数据已包含 zrfcid 和 zrfc_logid）
             if (Array.isArray(data) && data.length > 0) {
                 for (const item of data) {
-                    // 构建更新条件（使用主键）
+                    // 构建查询条件（使用主键）
                     const whereConditions = {};
                     for (const key of keys) {
                         if (item[key] !== undefined) {
@@ -354,16 +354,37 @@ class MultiStepInvoker {
                     }
 
                     if (Object.keys(whereConditions).length === 0) {
-                        console.warn('无法构建更新条件');
+                        console.warn('无法构建查询条件');
                         continue;
                     }
 
-                    // 执行更新
-                    await cds.run(
-                        UPDATE(BusinessEntity)
-                            .set(item)
-                            .where(whereConditions)
+                    // 检查记录是否存在
+                    const existing = await cds.run(
+                        SELECT.from(BusinessEntity).where(whereConditions).limit(1)
                     );
+
+                    if (existing && existing.length > 0) {
+                        // 记录存在，执行 UPDATE（仅更新非空字段，保留数据库已有值）
+                        const updateFields = {};
+                        for (const [key, value] of Object.entries(item)) {
+                            // 排除 undefined/null，空字符串和 0 根据业务需要保留
+                            if (value !== undefined && value !== null) {
+                                updateFields[key] = value;
+                            }
+                        }
+                        if (Object.keys(updateFields).length > 0) {
+                            await cds.run(
+                                UPDATE(BusinessEntity)
+                                    .set(updateFields)
+                                    .where(whereConditions)
+                            );
+                        }
+                    } else {
+                        // 记录不存在，执行 INSERT
+                        await cds.run(
+                            INSERT.into(BusinessEntity).entries(item)
+                        );
+                    }
                 }
             } else {
                 console.warn('数据不是数组或为空');

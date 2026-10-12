@@ -293,6 +293,8 @@ class PurchaseOrderCreateService {
             }
 
             // 根据 zrfcid 选择不同的字段映射
+            // 销售订单行项目类型/类别（用于 CBLN/CBXN 服务类物料判断）
+            const itemTypeOrCategory = item.SalesOrderItemType || item.SalesOrderItemCategory || '';
             let poItemNumber, material, netPriceAmount, unitOfMeasure, priceUnitQty, conditionCurrency = item.TransactionCurrency || "";
             switch (zrfcid) {
                 case 'SD01':
