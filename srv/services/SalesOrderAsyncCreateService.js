@@ -461,6 +461,31 @@ class SalesOrderAsyncCreateService {
             salesOrderItems.push(itemData);
         }
 
+        // 收集合作伙伴（去重）
+        // 注意：业务表 Customer 字段统一存储伙伴编号，
+        // 传给 SAP 时需根据 PartnerFunction 切换字段名：
+        //   VE  → Personnel（人员）
+        //   RS  → Supplier（供应商）
+        //   其他→ Customer（客户类，如 AG/WE/RE/RG）
+        const partnerMap = new Map();
+        for (const item of businessDataList) {
+            if (item.PartnerFunction && item.Customer) {
+                const key = `${item.PartnerFunction}|${item.Customer}`;
+                if (!partnerMap.has(key)) {
+                    const partner = { PartnerFunction: item.PartnerFunction };
+                    if (item.PartnerFunction === 'VE') {
+                        partner.Personnel = item.Customer;
+                    } else if (item.PartnerFunction === 'RS') {
+                        partner.Supplier = item.Customer;
+                    } else {
+                        partner.Customer = item.Customer;
+                    }
+                    partnerMap.set(key, partner);
+                }
+            }
+        }
+        const partners = Array.from(partnerMap.values());
+
         let salesOrderData = {
             [apiConfig.orderTypeField]: apiConfig.orderTypeValue || salesOrderType || '',
             SalesOrganization: mainData.SalesOrganization || mptStepConfig?.vkorg || "",
@@ -488,6 +513,7 @@ class SalesOrderAsyncCreateService {
             YY1_FD_ZTMWZ_SDH: mainData.YY1_FD_ZTMWZ || "",              
             YY1_FD_ZH_SDH: mainData.YY1_FD_ZH || "",      
             YY1_FD_SPLLHH_SDH: mainData.YY1_FD_SPLLHH || "",               
+            _Partner: partners,
             _Item: salesOrderItems
         };
         

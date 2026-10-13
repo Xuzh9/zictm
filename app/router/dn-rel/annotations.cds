@@ -11,6 +11,7 @@ annotate service.PIDeliveryRel with @(
         LineItem: [
             { $Type: 'UI.DataField', Label: 'PI单号', Value: PIOrder },
             { $Type: 'UI.DataField', Label: 'PI单行号', Value: PIOrderItem },
+            { $Type: 'UI.DataField', Label: '物料编号', Value: Material },
             { $Type: 'UI.DataField', Label: '交货单号', Value: DeliveryDocument },
             { $Type: 'UI.DataField', Label: '交货单行号', Value: DeliveryDocumentItem},
             { $Type: 'UI.DataField', Label: '多步ID', Value: zrfc_logid },
@@ -26,6 +27,7 @@ annotate service.PIDeliveryRel with @(
         Identification: [
             { $Type: 'UI.DataField', Label: 'PI单号', Value: PIOrder },
             { $Type: 'UI.DataField', Label: 'PI单行号', Value: PIOrderItem },
+            { $Type: 'UI.DataField', Label: '物料编号', Value: Material },
             { $Type: 'UI.DataField', Label: '交货单号', Value: DeliveryDocument },
             { $Type: 'UI.DataField', Label: '交货单行号', Value: DeliveryDocumentItem},
             { $Type: 'UI.DataField', Label: '多步ID', Value: zrfc_logid },

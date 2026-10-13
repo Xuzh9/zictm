@@ -141,15 +141,17 @@ class DeliveryOrderCreateService {
                         });
 
                         // 根据 zrfcid 将对应字段设置到 mainRowDataList 中
-                        // SD07 设置 SalesOrder，SD10 设置 PurchaseOrder1
+                        // SD07 设置 SalesOrder + SalesOrderItem，SD10 设置 PurchaseOrder1 + PurchaseOrderItem1
                         mainRowDataList.forEach(item => {
                             const piKey = `${item.PIOrder}-${item.PIOrderItem}`;
                             if (piToRelMap.has(piKey)) {
                                 const rel = piToRelMap.get(piKey);
                                 if (zrfcid === 'SD07') {
                                     item.SalesOrder = rel.SalesOrder;
+                                    item.SalesOrderItem = rel.SalesOrderItem;
                                 } else if (zrfcid === 'SD10') {
                                     item.PurchaseOrder1 = rel.PurchaseOrder1;
+                                    item.PurchaseOrderItem1 = rel.PurchaseOrderItem1;
                                 }
                             }
                         });
@@ -339,10 +341,16 @@ class DeliveryOrderCreateService {
                 continue;
             }
 
-            // SD02、SD04 使用 SalesOrderItem，其他使用 PIOrderItem
-            const referenceItem = (zrfcid === 'SD02' || zrfcid === 'SD04' || zrfcid === 'SD11') 
-                ? item.SalesOrderItem 
-                : item.PIOrderItem;
+            // 行号取值：SD02/SD04/SD11 用业务表 SalesOrderItem；SD07 用 PISalesOrderRel 回写的 SalesOrderItem；
+            // SD10 用 PISalesOrderRel 回写的 PurchaseOrderItem1；其他用 PIOrderItem
+            let referenceItem;
+            if (zrfcid === 'SD02' || zrfcid === 'SD04' || zrfcid === 'SD11' || zrfcid === 'SD07') {
+                referenceItem = item.SalesOrderItem;
+            } else if (zrfcid === 'SD10') {
+                referenceItem = item.PurchaseOrderItem1;
+            } else {
+                referenceItem = item.PIOrderItem;
+            }
             
             // (STO) 使用 5 位数，其他情况使用 6 位数
             const digitCount = (zrfcid === 'SD04' && canum === 60) || (zrfcid === 'SD11' && canum === 100) ? 5 : 6;

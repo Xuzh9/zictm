@@ -313,7 +313,7 @@ class MultiStepInvoker {
     }
 
     /**
-     * 更新业务数据表（包含 zrfcid 和 zrfc_logid 字段，存在则 UPDATE 不存在则 INSERT）
+     * 更新业务数据表（重推场景：先按 zrfc_logid 删除原数据，再批量插入新数据）
      * @param {string} tableName - 业务表名
      * @param {Array} data - 业务数据（已包含 zrfcid 和 zrfc_logid）
      */
@@ -331,64 +331,25 @@ class MultiStepInvoker {
                 return;
             }
 
-            // 获取表的主键字段
-            const keys = Object.keys(BusinessEntity.elements).filter(key => {
-                const element = BusinessEntity.elements[key];
-                return element && element.key;
-            });
-
-            if (keys.length === 0) {
-                console.warn('未找到业务表的主键字段');
+            if (!Array.isArray(data) || data.length === 0) {
+                console.warn('数据不是数组或为空');
                 return;
             }
 
-            // 执行批量更新（数据已包含 zrfcid 和 zrfc_logid）
-            if (Array.isArray(data) && data.length > 0) {
-                for (const item of data) {
-                    // 构建查询条件（使用主键）
-                    const whereConditions = {};
-                    for (const key of keys) {
-                        if (item[key] !== undefined) {
-                            whereConditions[key] = item[key];
-                        }
-                    }
-
-                    if (Object.keys(whereConditions).length === 0) {
-                        console.warn('无法构建查询条件');
-                        continue;
-                    }
-
-                    // 检查记录是否存在
-                    const existing = await cds.run(
-                        SELECT.from(BusinessEntity).where(whereConditions).limit(1)
-                    );
-
-                    if (existing && existing.length > 0) {
-                        // 记录存在，执行 UPDATE（仅更新非空字段，保留数据库已有值）
-                        const updateFields = {};
-                        for (const [key, value] of Object.entries(item)) {
-                            // 排除 undefined/null，空字符串和 0 根据业务需要保留
-                            if (value !== undefined && value !== null) {
-                                updateFields[key] = value;
-                            }
-                        }
-                        if (Object.keys(updateFields).length > 0) {
-                            await cds.run(
-                                UPDATE(BusinessEntity)
-                                    .set(updateFields)
-                                    .where(whereConditions)
-                            );
-                        }
-                    } else {
-                        // 记录不存在，执行 INSERT
-                        await cds.run(
-                            INSERT.into(BusinessEntity).entries(item)
-                        );
-                    }
-                }
-            } else {
-                console.warn('数据不是数组或为空');
+            // 取第一条数据的 zrfc_logid，删除该流程下的所有原数据
+            const zrfcLogid = data[0].zrfc_logid;
+            if (zrfcLogid) {
+                const deleteResult = await cds.run(
+                    DELETE.from(BusinessEntity).where({ zrfc_logid: zrfcLogid })
+                );
+                console.log(`[MultiStepInvoker.updateBusinessData] 删除表 ${tableName} 中 zrfc_logid=${zrfcLogid} 的原数据, 影响行数: ${deleteResult || 0}`);
             }
+
+            // 批量插入新数据
+            await cds.run(
+                INSERT.into(BusinessEntity).entries(data)
+            );
+            console.log(`[MultiStepInvoker.updateBusinessData] 插入表 ${tableName} 新数据, 行数: ${data.length}`);
         } catch (error) {
             console.error('更新业务数据失败:', error);
             throw error;

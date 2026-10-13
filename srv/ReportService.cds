@@ -59,6 +59,7 @@ service ReportService {
         PIDeliveryRel.DeliveryNoItem2,
         PIDeliveryRel.InboundDeliveryNo2,
         PIDeliveryRel.InboundDeliveryNoItem2,
+        DeliveryActualInfo.Material,
         DeliveryActualInfo.zrfcid,
         MultistepHeadLog.code,
         MultistepHeadLog.message
