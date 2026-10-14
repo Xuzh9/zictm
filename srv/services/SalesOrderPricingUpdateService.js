@@ -64,12 +64,8 @@ class SalesOrderPricingUpdateService {
             if (zrfcid === 'SD01' || zrfcid === 'SD03' || zrfcid === 'SD06' || zrfcid === 'SD08' || zrfcid === 'SD12') {
                 // 查询 PISalesOrderRel 表获取销售订单号和行号
                 piSalesOrderRelRecords = await this.getPISalesOrderRelRecords(businessDataList);
-
-                // 检查是否需要跳过此步骤
-                const skipResult = await this.checkSkipCondition(zrfcid, canum, piSalesOrderRelRecords);
-                if (skipResult) {
-                   return skipResult;
-                }
+                // 注意：运保费行（服务物料）不会生成销售订单号，
+                // 行级跳过逻辑在 buildItemMappingFromRecords 中处理，不在此处整步跳过
             } else if (zrfcid === 'SD04' || zrfcid === 'SD11') {
                 piSalesOrderRelRecords = await this.getSalesOrderItemsFromAPI(salesOrderNumber);
             }
@@ -355,88 +351,6 @@ class SalesOrderPricingUpdateService {
     }
 
     /**
-     * 检查是否需要跳过此步骤
-     * @param {string} zrfcid - 业务流程ID
-     * @param {string} canum - 步骤号
-     * @param {Array} piSalesOrderRelRecords - PISalesOrderRel 记录列表
-     * @returns {Promise<Object|null>} 如果需要跳过返回跳过结果，否则返回null
-     */
-    async checkSkipCondition(zrfcid, canum, piSalesOrderRelRecords) {
-        const step = parseInt(canum);
-
-        switch (zrfcid) {
-            case 'SD03':
-                if (step === 10) {
-                    for (const record of piSalesOrderRelRecords) {
-                        if (!record || !record.SalesOrder) {
-                            console.log(`PISalesOrderRel 中 SalesOrder 为空，步骤跳过: PIOrder=${record?.PIOrder}, PIOrderItem=${record?.PIOrderItem}`);
-                            return {
-                                code: 'S',
-                                message: 'PISalesOrderRel 中 SalesOrder 为空，步骤跳过',
-                                objkey: ''
-                            };
-                        }
-                    }
-                } else if (step === 50) {
-                    for (const record of piSalesOrderRelRecords) {
-                        if (!record || !record.SalesOrder1) {
-                            console.log(`PISalesOrderRel 中 SalesOrder1 为空，步骤跳过: PIOrder=${record?.PIOrder}, PIOrderItem=${record?.PIOrderItem}`);
-                            return {
-                                code: 'S',
-                                message: 'PISalesOrderRel 中 SalesOrder1 为空，步骤跳过',
-                                objkey: ''
-                            };
-                        }
-                    }
-                }
-                break;
-
-            case 'SD01':
-            case 'SD06':
-            case 'SD12':
-                for (const record of piSalesOrderRelRecords) {
-                    if (!record || !record.SalesOrder1) {
-                        console.log(`PISalesOrderRel 中 SalesOrder1 为空，步骤跳过: PIOrder=${record?.PIOrder}, PIOrderItem=${record?.PIOrderItem}`);
-                        return {
-                            code: 'S',
-                            message: 'PISalesOrderRel 中 SalesOrder1 为空，步骤跳过',
-                            objkey: ''
-                        };
-                    }
-                }
-                break;
-
-            case 'SD08':
-                if (step === 30) {
-                    for (const record of piSalesOrderRelRecords) {
-                        if (!record || !record.SalesOrder1) {
-                            console.log(`PISalesOrderRel 中 SalesOrder1 为空，步骤跳过: PIOrder=${record?.PIOrder}, PIOrderItem=${record?.PIOrderItem}`);
-                            return {
-                                code: 'S',
-                                message: 'PISalesOrderRel 中 SalesOrder1 为空，步骤跳过',
-                                objkey: ''
-                            };
-                        }
-                    }
-                } else if (step === 60) {
-                    for (const record of piSalesOrderRelRecords) {
-                        if (!record || !record.SalesOrder2) {
-                            console.log(`PISalesOrderRel 中 SalesOrder2 为空，步骤跳过: PIOrder=${record?.PIOrder}, PIOrderItem=${record?.PIOrderItem}`);
-                            return {
-                                code: 'S',
-                                message: 'PISalesOrderRel 中 SalesOrder2 为空，步骤跳过',
-                                objkey: ''
-                            };
-                        }
-                    }
-                }
-                break;
-        }
-
-        return null;
-    }
-
-    /**
      * 统一查询 PISalesOrderRel 表获取所有需要的字段
      * @param {Array} businessDataList - 业务数据列表
      * @returns {Promise<Array>} PISalesOrderRel 记录列表
@@ -573,6 +487,8 @@ class SalesOrderPricingUpdateService {
                         netPriceAmount: businessData.PurchasePrice || 0,
                         businessData: businessData
                     });
+                } else {
+                    console.log(`[buildItemMappingFromRecords] 销售订单号为空，跳过该行: PIOrder=${piOrder}, PIOrderItem=${piOrderItem}, salesOrder=${salesOrder}, salesOrderItem=${salesOrderItem}`);
                 }
             }
         }

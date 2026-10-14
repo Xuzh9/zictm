@@ -15,7 +15,7 @@ annotate service.MultistepHeadLog with @(
 
         LineItem: [
             { $Type: 'UI.DataField', Label: '多步ID', Value: zrfc_logid, Editable: false },
-            { $Type: 'UI.DataField', Label: '关联ID', Value: id, Editable: false },
+            { $Type: 'UI.DataField', Label: '入参日志ID', Value: id, Editable: false },
             { $Type: 'UI.DataField', Label: '业务流程ID', Value: zrfcid, Editable: false },
             { $Type: 'UI.DataField', Label: '多方交易类型ID', Value: zdfjy, Editable: false },
             { $Type: 'UI.DataField', Label: '执行状态', Value: code, Editable: false },
@@ -43,7 +43,7 @@ annotate service.MultistepHeadLog with @(
 
         Identification: [
             { $Type: 'UI.DataField', Label: '多步ID', Value: zrfc_logid, Editable: false },
-            { $Type: 'UI.DataField', Label: '关联ID', Value: id, Editable: false },
+            { $Type: 'UI.DataField', Label: '入参日志ID', Value: id, Editable: false },
             { $Type: 'UI.DataField', Label: '业务流程ID', Value: zrfcid, Editable: false },
             { $Type: 'UI.DataField', Label: '多方交易类型ID', Value: zdfjy, Editable: false },
             { $Type: 'UI.DataField', Label: '执行状态', Value: code, Editable: false },

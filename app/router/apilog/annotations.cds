@@ -6,7 +6,7 @@ annotate service.ApiInputLog with @(
             TypeName: '接口日志',
             TypeNamePlural: '接口日志列表'
         },
-        SelectionFields: [id,code],
+        SelectionFields: [id,code,executionAt],
         LineItem: [
             { $Type: 'UI.DataField', Label: 'ID', Value: id },
             { $Type: 'UI.DataField', Label: '消息状态', Value: code },
