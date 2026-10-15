@@ -442,6 +442,9 @@ class AccountingDocumentService {
                 }
             }
         }
+        // 会计凭证创建用户：PRD 空间使用 CC0000000003，其他空间使用 CC0000000002
+        const createdByUser = this.commonUtils.getDestinationName() === 'ES_API_PRD' ? 'CC0000000003' : 'CC0000000002';
+
         // 完整的 SOAP 请求 (根据 SAP JournalEntryBulkCreateRequest 官方格式)
         const soapRequest = `<?xml version="1.0" encoding="UTF-8"?>
             <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:sfin="http://sap.com/xi/SAPSCORE/SFIN">
@@ -460,7 +463,7 @@ class AccountingDocumentService {
                                 <BusinessTransactionType>RFBU</BusinessTransactionType>
                                 <AccountingDocumentType>Z1</AccountingDocumentType>
                                 <!-- <DocumentHeaderText>${firstBusinessData.paymentPurpose}</DocumentHeaderText> -->
-                                <CreatedByUser>CC0000000002</CreatedByUser>
+                                <CreatedByUser>${createdByUser}</CreatedByUser>
                                 <CompanyCode>${firstBusinessData.salesOrganization || firstBusinessData.procurementOrganization || firstBusinessData.receivingOrganization || ''}</CompanyCode>
                                 <DocumentDate>${currentDate.toISOString().substring(0, 10)}</DocumentDate>
                                 <PostingDate>${businessDate}</PostingDate>

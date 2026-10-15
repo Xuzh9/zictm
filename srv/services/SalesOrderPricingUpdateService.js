@@ -102,7 +102,14 @@ class SalesOrderPricingUpdateService {
                 // 处理每种定价类型
                 for (const pricingType of pricingTypes) {
                     const { conditionType, valueField, currencyField, quantityField } = pricingType;
-                    const fieldValue = businessData[valueField];
+                    // 取值：PMP0 时 calcPrice（计算单价）有值则优先使用，否则用 PurchasePrice
+                    let fieldValue = businessData[valueField];
+                    if (valueField === 'PurchasePrice') {
+                        const calcPrice = parseFloat(businessData.calcPrice);
+                        if (!isNaN(calcPrice) && calcPrice !== 0) {
+                            fieldValue = calcPrice;
+                        }
+                    }
                     
                     // 如果字段值为空或0，则跳过该定价类型
                     if (!fieldValue || fieldValue === 0) {
@@ -323,7 +330,7 @@ class SalesOrderPricingUpdateService {
     getPricingTypes(zrfcid, canum) {
         const step = parseInt(canum);
         
-        // 更新 PMP0（当 PurchasePrice 有值时）
+        // 更新 PMP0（取值优先 calcPrice 计算单价，否则用 PurchasePrice 采购单价）
         if (zrfcid === 'SD01' || zrfcid === 'SD04' || zrfcid === 'SD06' || zrfcid === 'SD08' || zrfcid === 'SD11' || zrfcid === 'SD12' || (zrfcid === 'SD03' && step === 50)) {
             return [{
                 conditionType: 'PMP0',

@@ -153,6 +153,7 @@ entity OutboundDelivery{
     ReceivingStorageLocation : String(4) @title: '库存地点';          // 库存地点
     DeliveryDate             : Date @title: '发货日期';               // 发货日期
     PurchasePrice            : Decimal(15,2) @title: '采购单价';      // 采购单价
+    calcPrice                : Decimal(15,2) @title: '计算单价';      // 计算单价
     zrfcid                   : String(10) @title: '业务流程ID';         // 业务流程ID
     zrfc_logid               : UUID @title: '多步ID';               // 多步ID
     zdfjy                    : String(10) @title: '多方交易类型ID';     // 多方交易类型ID
@@ -264,6 +265,7 @@ entity SalesOrderCreate {
     YY1_FD_DZKB                   : String(2) @title: '定制卡板';    // 定制卡板
     YY1_FD_KHHTH                  : String(40) @title: '客户合同号';    // 客户合同号
     PurchasePrice                 : Decimal(15,2) @title: '采购单价'; // 采购单价
+    calcPrice                     : Decimal(15,2) @title: '计算单价'; // 计算单价
     NetPriceQuantity              : Integer  @title: '价格单位'; // 价格单位 add by zengcf 20260929
     ZB01_Value                    : Decimal(15,2) @title: 'ZB01价格'; // ZB01价格
     ZB01_CurrencyCode             : String(3) @title: 'ZB01价格单位';     // ZB01价格单位

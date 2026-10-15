@@ -157,38 +157,6 @@
 
                     console.log('[InboundDeliveryPutawayService] 处理行项目:', deliveryDocumentItem);
 
-                    // 获取行项目的 ETag
-                    const itemEtagUrl = `${apiPath}/A_InbDeliveryItem(DeliveryDocument='${deliveryDocument}',DeliveryDocumentItem='${deliveryDocumentItem}')`;
-                    let itemEtag; 
-                    try {
-                        const itemEtagResult = await this.commonUtils.executeHttpRequestWithRetry(
-                            {
-                                destinationName: this.commonUtils.getDestinationName()
-                            },
-                            {
-                                method: 'GET',
-                                url: itemEtagUrl,
-                                headers: {
-                                    'Accept': 'application/json',
-                                    'Cookie': cookieString,
-                                    'sap-language': 'ZH'
-                                },
-                                validateStatus: function (status) {
-                                    return true;
-                                }
-                            }
-                        );
-
-                        if (itemEtagResult.status >= 200 && itemEtagResult.status < 300) {
-                            itemEtag = itemEtagResult.headers['etag'] || itemEtagResult.headers['Etag'] || itemEtagResult.headers['ETag'];
-                            console.log('[InboundDeliveryPutawayService] 获取行项目 ETag 成功:', deliveryDocumentItem);
-                        } else {
-                            console.warn('[InboundDeliveryPutawayService] 获取行项目 ETag 失败:', deliveryDocumentItem);
-                        }
-                    } catch (error) {
-                        console.warn('[InboundDeliveryPutawayService] 获取行项目 ETag 异常:', deliveryDocumentItem, error.message);
-                    }
-
                     // 构建 PutawayOneItem API URL (通过查询参数方式)
                     const putawayUrl = `${apiPath}/PutawayOneItem?DeliveryDocument='${deliveryDocument}'&DeliveryDocumentItem='${deliveryDocumentItem}'`;
                     console.log('[InboundDeliveryPutawayService] 上架API地址:', putawayUrl);
@@ -199,7 +167,7 @@
                         'Accept': 'application/json',
                         'Cookie': cookieString,
                         'sap-language': 'ZH',
-                        'If-Match': itemEtag || '*'
+                        'If-Match': '*'
                     };
 
                     // 调用 PutawayOneItem API
@@ -221,6 +189,8 @@
 
                     if (result.status >= 200 && result.status < 300) {
                         console.log('[InboundDeliveryPutawayService] 行项目入库更新成功:', deliveryDocumentItem);
+                        // 等待单据锁释放后再处理下一行项目，避免出现 /026 更新交货时出错
+                        await new Promise(resolve => setTimeout(resolve, 500));
                     } else {
                         const errorMessage = this.parseError(result.data);
                         console.error('[InboundDeliveryPutawayService] 行项目入库更新失败:', deliveryDocumentItem, errorMessage);

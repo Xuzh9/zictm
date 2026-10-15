@@ -1,4 +1,5 @@
 const cds = require('@sap/cds');
+const { SELECT } = cds.ql;
 
 module.exports = cds.service.impl(async function () {
   const service = this;
@@ -116,6 +117,37 @@ module.exports = cds.service.impl(async function () {
     // 保存 ApiInputLog（在调用 MultiStepInvoker 之前）
     // --------------------------
     const id = await ApiInputLogHelper.saveApiInputLog({ businessTable1: data }, null);
+
+    // --------------------------
+    // 根据交货单号查询 DeliveryActualInfo，若所属多步流程已成功（MultistepHeadLog = S）
+    // 则直接返回 200，跳过多步执行
+    // --------------------------
+    const deliveryDocument = data[0].DeliveryDocument;
+    if (deliveryDocument) {
+      const deliveryActualRows = await cds.run(
+        SELECT.from(cds.entities['com.sap.zictm.DeliveryActualInfo'])
+          .columns(['zrfc_logid'])
+          .where({ DeliveryDocument: deliveryDocument })
+          .limit(1)
+      );
+
+      if (deliveryActualRows?.[0]?.zrfc_logid) {
+        const headLog = await cds.run(
+          SELECT.one.from(MultistepHeadLog)
+            .columns(['code'])
+            .where({ zrfc_logid: deliveryActualRows[0].zrfc_logid })
+        );
+
+        if (headLog?.code === 'S') {
+          console.log('[DN] 交货单所属流程已成功(S)，跳过多步执行:', deliveryDocument);
+          return {
+            code: 200,
+            message: `交货单 ${deliveryDocument} 所属流程已成功，跳过多步执行`,
+            id: id
+          };
+        }
+      }
+    }
     
     // --------------------------
     // 调用 MultiStepInvoker 处理多步流程
@@ -126,7 +158,7 @@ module.exports = cds.service.impl(async function () {
     
     // 调用 MultiStepInvoker，传入业务流程ID和业务表数据
     const invokerResult = await invoker.process(zrfcid, data, null, null, null, id);
-    
+
     // --------------------------
     // 返回创建成功的数据
     // --------------------------

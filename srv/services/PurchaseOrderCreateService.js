@@ -121,22 +121,36 @@ class PurchaseOrderCreateService {
                 // 根据 zrfcid 执行不同的更新操作
                 switch (zrfcid) {
                     case 'SD01':
-                    case 'SD06':
-                    case 'SD12':
-                    case 'SD08':
                         // 更新 PISalesOrderRel 表
                         await this.updatePISalesOrderRel(purchaseOrder, businessDataList, zrfcid, canum);
                         break;
+                    case 'SD06':
+                    case 'SD12':
+                        // 更新 PISalesOrderRel 表 + 回写计算后的调价
+                        await this.updatePISalesOrderRel(purchaseOrder, businessDataList, zrfcid, canum);
+                        await this.updateBusinessTableCalcPrice(businessTable, itemPrices, zrfcid);
+                        break;
+                    case 'SD08':
+                        // 更新 PISalesOrderRel 表，仅步骤40回写计算后的调价
+                        await this.updatePISalesOrderRel(purchaseOrder, businessDataList, zrfcid, canum);
+                        if (parseInt(canum) === 40) {
+                            await this.updateBusinessTableCalcPrice(businessTable, itemPrices, zrfcid);
+                        }
+                        break;
                     case 'SD02':
-                    case 'SD04':
                         // 更新 SDDocRel 表的公司间采购订单号/行号
                         await this.updateSDDocRel(purchaseOrder, businessDataList, zrfcid);
                         break;
+                    case 'SD04':
+                        // 更新 SDDocRel 表的公司间采购订单号/行号 + 回写计算后的调价
+                        await this.updateSDDocRel(purchaseOrder, businessDataList, zrfcid);
+                        await this.updateBusinessTableCalcPrice(businessTable, itemPrices, zrfcid);
+                        break;
+                    case 'SD11':
+                        // 无关系表更新，仅回写计算后的调价
+                        await this.updateBusinessTableCalcPrice(businessTable, itemPrices, zrfcid);
+                        break;
                 }
-
-                // 将计算后的采购价格回写到当前流程的业务表 PurchasePrice 字段，
-                // 供后续 SalesOrderPricingUpdateService 读取并更新销售订单价格
-                await this.updateBusinessTablePurchasePrice(businessTable, itemPrices, zrfcid);
 
                 return {
                     code: 'S',
@@ -598,17 +612,18 @@ class PurchaseOrderCreateService {
     }
 
     /**
-     * 将计算后的采购价格回写到当前流程配置的业务表 PurchasePrice 字段
-     * 供后续 SalesOrderPricingUpdateService 读取
+     * 将计算后的调价回写到当前流程配置的业务表 calcPrice（计算单价）字段
+     * 仅 SD04/SD11/SD06/SD12 及 SD08 步骤40 调用，PurchasePrice 不在此处更新，
+     * 供后续 SalesOrderPricingUpdateService 读取（calcPrice 有值时优先）
      * @param {string} businessTable - 业务表名（ProcessConfig.businessTable1）
-     * @param {Array} itemPrices - 行项目价格映射
-     * @param {string} zrfcid - 业务流程 ID
+     * @param {Array} itemPrices - 行项目价格映射（含计算后的净价）
+     * @param {string} zrfcid - 业务流程 ID（用于区分业务表主键）
      */
-    async updateBusinessTablePurchasePrice(businessTable, itemPrices, zrfcid) {
+    async updateBusinessTableCalcPrice(businessTable, itemPrices, zrfcid) {
         try {
             const entity = cds.entities[`com.sap.zictm.${businessTable}`];
             if (!entity) {
-                console.warn(`[PurchaseOrderService.updateBusinessTablePurchasePrice] 业务表 ${businessTable} 不存在，跳过价格回写`);
+                console.warn(`[PurchaseOrderService.updateBusinessTableCalcPrice] 业务表 ${businessTable} 不存在，跳过价格回写`);
                 return;
             }
 
@@ -628,14 +643,14 @@ class PurchaseOrderCreateService {
 
                 const affectedRows = await cds.run(
                     UPDATE(entity)
-                        .set({ PurchasePrice: item.PurchasePrice })
+                        .set({ calcPrice: item.PurchasePrice })
                         .where(whereCondition)
                 );
 
-                console.log(`[PurchaseOrderService.updateBusinessTablePurchasePrice] 回写 ${businessTable}: ${JSON.stringify(whereCondition)}, PurchasePrice=${item.PurchasePrice}, 更新行数: ${affectedRows}`);
+                console.log(`[PurchaseOrderService.updateBusinessTableCalcPrice] 回写 ${businessTable}: ${JSON.stringify(whereCondition)}, calcPrice=${item.PurchasePrice}, 更新行数: ${affectedRows}`);
             }
         } catch (error) {
-            console.error('[PurchaseOrderService.updateBusinessTablePurchasePrice] 回写业务表 PurchasePrice 失败:', error);
+            console.error('[PurchaseOrderService.updateBusinessTableCalcPrice] 回写业务表 calcPrice 失败:', error);
         }
     }
 
