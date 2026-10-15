@@ -170,30 +170,41 @@
                         'If-Match': '*'
                     };
 
-                    // 调用 PutawayOneItem API
-                    const result = await this.commonUtils.executeHttpRequestWithRetry(
-                        {
-                            destinationName: this.commonUtils.getDestinationName()
-                        },
-                        {
-                            method: 'POST',
-                            url: putawayUrl,
-                            headers: requestHeaders,
-                            validateStatus: function (status) {
-                                return true;
+                    // 调用 PutawayOneItem API（失败后等 500ms 重试，最多尝试 3 次）
+                    const maxAttempts = 3;
+                    let result = null;
+                    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+                        result = await this.commonUtils.executeHttpRequestWithRetry(
+                            {
+                                destinationName: this.commonUtils.getDestinationName()
+                            },
+                            {
+                                method: 'POST',
+                                url: putawayUrl,
+                                headers: requestHeaders,
+                                validateStatus: function (status) {
+                                    return true;
+                                }
                             }
+                        );
+
+                        console.log('[InboundDeliveryPutawayService] 状态码:', result.status, '尝试次数:', attempt);
+
+                        if (result.status >= 200 && result.status < 300) {
+                            console.log('[InboundDeliveryPutawayService] 行项目入库更新成功:', deliveryDocumentItem);
+                            break;
                         }
-                    );
 
-                    console.log('[InboundDeliveryPutawayService] 状态码:', result.status);
+                        // 最后一次尝试不再等待
+                        if (attempt < maxAttempts) {
+                            console.warn(`[InboundDeliveryPutawayService] 行项目入库更新失败（第 ${attempt} 次），等待 500ms 后重试:`, deliveryDocumentItem);
+                            await new Promise(resolve => setTimeout(resolve, 500));
+                        }
+                    }
 
-                    if (result.status >= 200 && result.status < 300) {
-                        console.log('[InboundDeliveryPutawayService] 行项目入库更新成功:', deliveryDocumentItem);
-                        // 等待单据锁释放后再处理下一行项目，避免出现 /026 更新交货时出错
-                        await new Promise(resolve => setTimeout(resolve, 500));
-                    } else {
+                    if (!(result.status >= 200 && result.status < 300)) {
                         const errorMessage = this.parseError(result.data);
-                        console.error('[InboundDeliveryPutawayService] 行项目入库更新失败:', deliveryDocumentItem, errorMessage);
+                        console.error('[InboundDeliveryPutawayService] 行项目入库更新失败（已重试 3 次）:', deliveryDocumentItem, errorMessage);
                         console.error('[InboundDeliveryPutawayService] 完整错误数据:', JSON.stringify(result.data));
                         const returnResult = {
                             code: 'E',
