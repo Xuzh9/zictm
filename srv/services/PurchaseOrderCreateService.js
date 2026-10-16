@@ -357,8 +357,7 @@ class PurchaseOrderCreateService {
                         netPriceAmount = parseFloat((item.PurchasePrice ? parseFloat(item.PurchasePrice) : 0).toFixed(2));
                     } else if (step === 40) {
                         const sd08Zjgbl = mptStepConfig?.zjgbl ? parseFloat(mptStepConfig.zjgbl) : 100;
-                        const sd08Zsl = mptStepConfig?.zsl ? parseFloat(mptStepConfig.zsl) : 0;
-                        netPriceAmount = parseFloat(((item.PurchasePrice ? parseFloat(item.PurchasePrice) : 0) * (sd08Zjgbl / 100) / (1 + (sd08Zsl / 100))).toFixed(2));
+                        netPriceAmount = parseFloat(((item.PurchasePrice ? parseFloat(item.PurchasePrice) : 0) * (sd08Zjgbl / 100)).toFixed(2));
                     } 
                     break;
                 }

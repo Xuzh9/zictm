@@ -117,8 +117,22 @@ class SalesOrderQueryService {
                     console.log('销售订单行项目数量:', salesOrderItems.length);
 
                     // 更新 PISalesOrderRel 表
-                    if ((zrfcid === 'SD01' || zrfcid === 'SD06' || zrfcid === 'SD08' || zrfcid === 'SD12') && salesOrderItems.length > 0) {
-                        await this.updatePISalesOrderRel(purchaseOrderByCustomer, salesOrderItems, zrfcid, canum);
+                    if (zrfcid === 'SD01' || zrfcid === 'SD06' || zrfcid === 'SD08' || zrfcid === 'SD12') {
+                        if (salesOrderItems.length > 0) {
+                            await this.updatePISalesOrderRel(purchaseOrderByCustomer, salesOrderItems, zrfcid, canum);
+                        }
+
+                        // 校验：前序单据行必须全部匹配到销售订单号，存在未匹配的行则报错
+                        const { total, unmatched } = await this.findUnmatchedPrecedingLines(zrfcid, canum);
+                        if (unmatched.length > 0) {
+                            const detail = unmatched.map(line => `${line.PurchaseOrder}-${line.PurchaseOrderItem}`).join(', ');
+                            console.error(`[SalesOrderQueryService] 前序单据共 ${total} 行，其中 ${unmatched.length} 行未匹配到销售订单号: ${detail}`);
+                            return {
+                                code: 'E',
+                                message: `前序单据共 ${total} 行，其中 ${unmatched.length} 行未匹配到销售订单号: ${detail}`,
+                                objkey: ''
+                            };
+                        }
                     }
 
                     return {
@@ -209,6 +223,52 @@ class SalesOrderQueryService {
             }
         } catch (error) {
             console.error('更新 PISalesOrderRel 失败:', error);
+        }
+    }
+
+    /**
+     * 校验本流程的前序单据行是否都已匹配到销售订单号
+     * 前序单据行 = PISalesOrderRel 中已写入前序单据号的行（服务类物料在写入时已跳过）
+     * @param {string} zrfcid - 业务流程 ID
+     * @param {number} canum - 步骤号
+     * @returns {Promise<{total: number, unmatched: Array}>} 前序单据总行数 + 未匹配到销售订单号的行
+     */
+    async findUnmatchedPrecedingLines(zrfcid, canum) {
+        try {
+            const PISalesOrderRel = cds.entities['com.sap.zictm.PISalesOrderRel'];
+            const { SELECT } = cds.ql;
+
+            // SD08 步骤50 回写的是 PurchaseOrder2/SalesOrder2，其余流程回写 PurchaseOrder1/SalesOrder1
+            const useSecondary = zrfcid === 'SD08' && canum === 50;
+            const purchaseOrderField = useSecondary ? 'PurchaseOrder2' : 'PurchaseOrder1';
+            const purchaseOrderItemField = useSecondary ? 'PurchaseOrderItem2' : 'PurchaseOrderItem1';
+            const salesOrderField = useSecondary ? 'SalesOrder2' : 'SalesOrder1';
+            const salesOrderItemField = useSecondary ? 'SalesOrderItem2' : 'SalesOrderItem1';
+
+            const rows = await cds.run(
+                SELECT.from(PISalesOrderRel)
+                    .columns('PIOrder', 'PIOrderItem',
+                        purchaseOrderField, purchaseOrderItemField,
+                        salesOrderField, salesOrderItemField)
+                    .where({ zrfc_logid: this.zrfcLogid })
+            );
+
+            // 前序单据行（已写入前序单据号的行）
+            const precedingLines = (rows || []).filter(row => row[purchaseOrderField]);
+            // 未匹配到销售订单号的前序单据行
+            const unmatched = precedingLines
+                .filter(row => !row[salesOrderField])
+                .map(row => ({
+                    PurchaseOrder: row[purchaseOrderField],
+                    PurchaseOrderItem: row[purchaseOrderItemField] || ''
+                }));
+
+            console.log(`[SalesOrderQueryService.findUnmatchedPrecedingLines] 前序单据共 ${precedingLines.length} 行，未匹配 ${unmatched.length} 行`);
+
+            return { total: precedingLines.length, unmatched };
+        } catch (error) {
+            console.error('[SalesOrderQueryService.findUnmatchedPrecedingLines] 校验失败:', error);
+            return { total: 0, unmatched: [] };
         }
     }
 

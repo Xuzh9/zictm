@@ -212,13 +212,13 @@ class DeliveryOrderItemUpdateService {
                         // 有批次拆分行：数量更新为拆分行数量之和，Batch 不更新（后续 BatchSplitService 每行各自带 Batch）
                         const splitTotal = splitRows.reduce((sum, r) => sum + (Number(r.ActualDeliveryQuantity) || 0), 0);
                         if (splitTotal > 0) {
-                            updateData.ActualDeliveryQuantity = String(splitTotal);
+                            updateData.ActualDeliveredQtyInBaseUnit = String(splitTotal);
                             console.log(`[DeliveryOrderItemUpdateService] 主行 ${deliveryDocumentItem} 存在 ${splitRows.length} 条批次拆分行，交货数量更新为: ${splitTotal}`);
                         }
                     } else {
                         // 无批次拆分行：数量和批次都取业务表
                         if (businessData.ActualDeliveryQuantity) {
-                            updateData.ActualDeliveryQuantity = String(businessData.ActualDeliveryQuantity);
+                            updateData.ActualDeliveredQtyInBaseUnit = String(businessData.ActualDeliveryQuantity);
                             console.log(`[DeliveryOrderItemUpdateService] 主行 ${deliveryDocumentItem} 无批次拆分行，交货数量更新为业务表数量: ${businessData.ActualDeliveryQuantity}`);
                         }
                         if (businessData.Batch) {

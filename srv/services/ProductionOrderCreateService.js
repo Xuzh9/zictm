@@ -252,11 +252,9 @@ class ProductionOrderCreateService {
             // 数量
             TotalQuantity: businessData.RequestedQuantity,
             // 计划开始日期（格式：/Date(timestamp)/）
-           // MfgOrderPlannedStartDate: this.formatDateForSAP(businessData.ConfirmedDeliveryDate),
-            MfgOrderPlannedStartDate: this.formatDateForSAP('2026-10-04'),
+            MfgOrderPlannedStartDate: this.formatDateForSAP(businessData.ConfirmedDeliveryDate),
             // 计划结束日期（格式：/Date(timestamp)/）
-            //MfgOrderPlannedEndDate: this.formatDateForSAP(businessData.ConfirmedDeliveryDate),
-            MfgOrderPlannedEndDate: this.formatDateForSAP('2026-10-04'),
+            MfgOrderPlannedEndDate: this.formatDateForSAP(businessData.ConfirmedDeliveryDate),
             //销售部门（根据 SalesGroup 从映射中获取 Description）
             YY1_FD_ZSalesGroupName_ORD: salesGroupMap?.get(businessData.SalesGroup) || '',
             //客户编号
