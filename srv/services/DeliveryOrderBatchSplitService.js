@@ -153,9 +153,17 @@ class DeliveryOrderBatchSplitService {
                     'DeliveryDocument:', deliveryDocument,
                     'DeliveryDocumentItem:', deliveryDocumentItem);
 
-                // 按 DeliveryDocumentItem 匹配业务数据（主行）
+                // 跳过 SAP 已存在的批次拆分子行（900xxx 段或带父项引用），避免重复拆分
+                if (deliveryItem.HigherLevelItemOfBatchSplitItem || /^9\d{5}$/.test(deliveryDocumentItem || '')) {
+                    console.log('[DeliveryOrderBatchSplitService] 跳过已拆分子行:', deliveryDocumentItem);
+                    continue;
+                }
+
+                // 按物料号匹配业务数据（主行，物料号归一化：去空格、去前导零）
+                const itemMaterial = this.normalizeMaterial(deliveryItem.Material);
                 const matchedBusinessData = relevantBusinessData.filter(item =>
-                    item.DeliveryDocumentItem === deliveryDocumentItem
+                    (!item.ParentItem || item.ParentItem.trim() === '' || item.ParentItem === '000000') &&
+                    this.normalizeMaterial(item.Material || item.Product) === itemMaterial
                 );
 
                 if (!matchedBusinessData || matchedBusinessData.length === 0) {
@@ -164,16 +172,17 @@ class DeliveryOrderBatchSplitService {
                 }
 
                 // 从 PIDeliveryRel 获取 PIOrder/PIOrderItem
-                const piKey = `${matchedBusinessData[0].DeliveryDocument}-${deliveryDocumentItem}`;
+                const piKey = `${matchedBusinessData[0].DeliveryDocument}-${matchedBusinessData[0].DeliveryDocumentItem}`;
                 const piInfo = deliveryToPiMap.get(piKey);
                 if (!piInfo) {
                     console.warn('[DeliveryOrderBatchSplitService] 未找到匹配的 PIDeliveryRel:', piKey);
                     continue;
                 }
 
-                // 过滤出 ParentItem 等于当前主行 DeliveryDocumentItem 的批次拆分数据，并按行号排序
+                // 过滤出与当前主行物料号相同的批次拆分数据（ParentItem 非空），并按行号排序
                 const batchSplitData = relevantBusinessData
-                    .filter(item => item.ParentItem && item.ParentItem.trim() !== '' && item.ParentItem !== '000000' && item.ParentItem === deliveryDocumentItem)
+                    .filter(item => item.ParentItem && item.ParentItem.trim() !== '' && item.ParentItem !== '000000' &&
+                        this.normalizeMaterial(item.Material || item.Product) === itemMaterial)
                     .sort((a, b) => (a.DeliveryDocumentItem || '').localeCompare(b.DeliveryDocumentItem || ''));
 
                 console.log('[DeliveryOrderBatchSplitService] 找到批次拆分数据:', batchSplitData.length, '条');
@@ -297,6 +306,11 @@ class DeliveryOrderBatchSplitService {
                 objkey: ''
             };
         }
+    }
+
+    // 物料号归一化：去空格、去前导零（与 DeliveryOrderCreateService 口径一致）
+    normalizeMaterial(material) {
+        return String(material || '').trim().replace(/^0+/, '');
     }
 
     sleep(ms) {

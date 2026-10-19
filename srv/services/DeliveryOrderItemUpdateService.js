@@ -137,11 +137,13 @@ class DeliveryOrderItemUpdateService {
 
             let csrfToken = null;
             let cookieString = null;
+            // 物料号 -> SAP 交货单行项目 的映射（SAP 行号与业务表行号可能错位，按物料号匹配）
+            const deliveryItemByMaterial = new Map();
 
-            // 获取 CSRF token（只获取一次）
-            const firstBusinessData = businessDataList.find(bd => bd.SalesOrderItem || bd.DeliveryDocumentItem);
-            if (firstBusinessData) {
-                const firstItemUrl = `${apiPath}/${itemEntity}(DeliveryDocument='${deliveryDocument}',DeliveryDocumentItem='${firstBusinessData.SalesOrderItem || firstBusinessData.DeliveryDocumentItem}')`;
+            // 获取 CSRF token（只获取一次），同时展开交货单行项目用于按物料号匹配
+            const headerEntity = itemEntity.replace('Item', 'Header');
+            {
+                const firstItemUrl = `${apiPath}/${headerEntity}('${deliveryDocument}')?$expand=to_DeliveryDocumentItem`;
                 console.log('[DeliveryOrderItemUpdateService] 获取 CSRF token:', firstItemUrl);
                 const csrfResult = await this.commonUtils.executeHttpRequestWithRetry(
                     {
@@ -165,8 +167,16 @@ class DeliveryOrderItemUpdateService {
 
                 // 检查货物移动状态，如果为 C（已过帐）则跳过本步骤
                 const responseData = csrfResult.data?.d || csrfResult.data || {};
-                const itemResults = responseData.results || [responseData];
-                const goodsMovementStatus = itemResults[0]?.GoodsMovementStatus || '';
+                const sapDeliveryItems = responseData.to_DeliveryDocumentItem?.results || [];
+                // 构建 物料号 -> SAP 行项目 映射（物料号归一化）
+                sapDeliveryItems.forEach(item => {
+                    const key = this.normalizeMaterial(item.Material);
+                    if (key) {
+                        deliveryItemByMaterial.set(key, item);
+                    }
+                });
+                console.log('[DeliveryOrderItemUpdateService] SAP 交货单行项目数量:', sapDeliveryItems.length);
+                const goodsMovementStatus = responseData.OverallGoodsMovementStatus || sapDeliveryItems[0]?.GoodsMovementStatus || '';
                 console.log(`[DeliveryOrderItemUpdateService] 货物移动状态: ${goodsMovementStatus}`);
                 if (goodsMovementStatus === 'C') {
                     console.log('[DeliveryOrderItemUpdateService] 货物移动状态为 C（已过帐），跳过行项目修改');
@@ -188,12 +198,16 @@ class DeliveryOrderItemUpdateService {
                     continue;
                 }
 
-                const deliveryDocumentItem = businessData.SalesOrderItem || businessData.DeliveryDocumentItem || '';
-                
+                // 按物料号从 SAP 交货单行项目中匹配实际行号（SAP 行号与业务表行号可能错位）
+                const businessMaterial = this.normalizeMaterial(businessData.Material || businessData.Product);
+                const sapItem = deliveryItemByMaterial.get(businessMaterial);
+                const deliveryDocumentItem = sapItem?.DeliveryDocumentItem || '';
+
                 if (!deliveryDocumentItem) {
-                    console.warn('[DeliveryOrderItemUpdateService] 跳过空行项目');
+                    console.warn(`[DeliveryOrderItemUpdateService] 未按物料号匹配到 SAP 交货单行项目，跳过: Material=${businessData.Material || businessData.Product}`);
                     continue;
                 }
+                console.log(`[DeliveryOrderItemUpdateService] 物料 ${businessData.Material || businessData.Product} 匹配到 SAP 行项目: ${deliveryDocumentItem}`);
 
                 // 构建更新 URL
                 const itemUrl = `${apiPath}/${itemEntity}(DeliveryDocument='${deliveryDocument}',DeliveryDocumentItem='${deliveryDocumentItem}')`;
@@ -203,10 +217,12 @@ class DeliveryOrderItemUpdateService {
 
                 // SD07 80 / SD10 80：更新交货数量；有无批次拆分行都更新，数量来源不同
                 if ((zrfcid === 'SD07' && canum === 80) || (zrfcid === 'SD10' && canum === 80)) {
-                    const mainItemKey = businessData.DeliveryDocumentItem || businessData.SalesOrderItem;
+                    // 按物料号匹配批次拆分行（物料号归一化：去空格、去前导零）
+                    const normalizeMaterial = (m) => String(m || '').trim().replace(/^0+/, '');
+                    const mainMaterial = normalizeMaterial(businessData.Material || businessData.Product);
                     const splitRows = businessDataAll.filter(item =>
                         item.ParentItem && item.ParentItem.trim() !== '' && item.ParentItem !== '000000' &&
-                        item.ParentItem === mainItemKey
+                        normalizeMaterial(item.Material || item.Product) === mainMaterial
                     );
                     if (splitRows.length > 0) {
                         // 有批次拆分行：数量更新为拆分行数量之和，Batch 不更新（后续 BatchSplitService 每行各自带 Batch）
@@ -330,6 +346,11 @@ class DeliveryOrderItemUpdateService {
                 objkey: ''
             };
         }
+    }
+
+    // 物料号归一化：去空格、去前导零
+    normalizeMaterial(material) {
+        return String(material || '').trim().replace(/^0+/, '');
     }
 
     async getPurchaseOrderStorageLocation(purchaseOrder, itemDeliveryAddress) {

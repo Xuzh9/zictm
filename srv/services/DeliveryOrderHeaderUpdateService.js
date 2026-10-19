@@ -182,25 +182,45 @@
                     'If-Match': etag || '*'
                 };
 
-                // 调用交货单修改 API
-                const result = await this.commonUtils.executeHttpRequestWithRetry(
-                    {
-                        destinationName: this.commonUtils.getDestinationName()
-                    },
-                    {
-                        method: 'PATCH',
-                        url: updateUrl,
-                        data: updateData,
-                        headers: requestHeaders,
-                        validateStatus: function (status) {
-                            return true;
-                        }
+                // 调用交货单修改 API（带重试：SAP 交货单锁可能未立即释放）
+                const maxAttempts = 3;
+                let patchSuccess = false;
+                let patchErrorMessage = '';
+                let result = null;
+
+                for (let attempt = 1; attempt <= maxAttempts && !patchSuccess; attempt++) {
+                    if (attempt > 1) {
+                        const delay = 1000 * attempt; // 2s, 3s
+                        console.warn(`[DeliveryOrderHeaderUpdateService] 等待 ${delay}ms 后重试 PATCH (尝试 ${attempt}/${maxAttempts}) 交货单: ${deliveryDocument}`);
+                        await this.sleep(delay);
                     }
-                );
 
-                console.log('交货单修改状态码:', result.status);
+                    result = await this.commonUtils.executeHttpRequestWithRetry(
+                        {
+                            destinationName: this.commonUtils.getDestinationName()
+                        },
+                        {
+                            method: 'PATCH',
+                            url: updateUrl,
+                            data: updateData,
+                            headers: requestHeaders,
+                            validateStatus: function (status) {
+                                return true;
+                            }
+                        }
+                    );
 
-                if (result.status >= 200 && result.status < 300) {
+                    console.log('交货单修改状态码:', result.status);
+
+                    if (result.status >= 200 && result.status < 300) {
+                        patchSuccess = true;
+                    } else {
+                        patchErrorMessage = this.parseError(result.data);
+                        console.error(`[DeliveryOrderHeaderUpdateService] 交货单修改失败 (尝试 ${attempt}/${maxAttempts}): ${patchErrorMessage}`);
+                    }
+                }
+
+                if (patchSuccess) {
                     console.log('交货单修改成功');
                     
                     const returnResult = {
@@ -211,11 +231,10 @@
                     console.log('[DeliveryOrderUpdateService] 返回结果:', JSON.stringify(returnResult));
                     return returnResult;
                 } else {
-                    const errorMessage = this.parseError(result.data);
-                    console.error('交货单修改失败:', errorMessage);
+                    console.error('交货单修改失败:', patchErrorMessage);
                     const returnResult = {
                         code: 'E',
-                        message: errorMessage,
+                        message: patchErrorMessage,
                         objkey: deliveryDocument
                     };
                     console.log('[DeliveryOrderUpdateService] 返回结果:', JSON.stringify(returnResult));
@@ -347,6 +366,10 @@
             // 转换为 /Date(timestamp)/ 格式
             const timestamp = date.getTime();
             return `/Date(${timestamp})/`;
+        }
+
+        sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
         }
 
         /**
