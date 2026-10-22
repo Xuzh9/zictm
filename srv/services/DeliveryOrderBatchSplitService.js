@@ -271,7 +271,7 @@ class DeliveryOrderBatchSplitService {
                             success = true;
                             console.log('[DeliveryOrderBatchSplitService] 批次拆分项创建成功');
                             // 拆分成功后短暂等待，让 SAP 释放交货单锁，避免影响下一个拆分
-                            await this.sleep(500);
+                            await this.sleep(1000);
                         } else {
                             lastErrorMessage = this.parseError(createResult.data);
                             console.error(`[DeliveryOrderBatchSplitService] 批次拆分项创建失败 (尝试 ${attempt}/${maxAttempts}):`, lastErrorMessage);

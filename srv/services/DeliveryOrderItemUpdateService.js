@@ -64,9 +64,11 @@ class DeliveryOrderItemUpdateService {
             // 使用通用工具类读取之前步骤的 objkey（交货单号）
             const previousObjkey = await this.commonUtils.getPreviousStepObjkey(zrfcLogid, zrfcid, readsteps, canum);
 
-            // 获取销售订单类型（SD07/SD11 80 及 SD10 从 PIDeliveryRel 获取，其他从业务表获取）
+            // 获取销售订单类型（SD07 80 / SD10 从 PIDeliveryRel 获取，其他从业务表获取）
+            // 注意：SD11 业务表为 OutboundDelivery，无 DeliveryDocument/DeliveryDocumentItem 字段，无法查 PIDeliveryRel，
+            // 需从业务表 SalesOrderType 获取（SD11 由 SD04 + CBRE 转成，业务表 SalesOrderType 即为 CBRE）
             let salesOrderType;
-            if ((zrfcid === 'SD07' && canum === 80) || zrfcid === 'SD10' || (zrfcid === 'SD11' && canum === 80)) {
+            if ((zrfcid === 'SD07' && canum === 80) || zrfcid === 'SD10') {
                 try {
                     const PIDeliveryRel = cds.entities['com.sap.zictm.PIDeliveryRel'];
                     const { SELECT } = cds.ql;
@@ -259,8 +261,8 @@ class DeliveryOrderItemUpdateService {
                                 updateData.StorageLocation = poStorageLocation;
                             }
                         }
-                    } else if (zrfcid === 'SD04' && canum === 80) {
-                        // SD04 80：取业务表的收货库存地点
+                    } else if ((zrfcid === 'SD04' && canum === 80) || (zrfcid === 'SD11' && canum === 120)) {
+                        // SD04 80 / SD11 120：取业务表的收货库存地点
                         if (businessData.ReceivingStorageLocation || businessData.StorageLocation) {
                             updateData.StorageLocation = businessData.ReceivingStorageLocation || businessData.StorageLocation;
                         }
@@ -312,7 +314,7 @@ class DeliveryOrderItemUpdateService {
                         patchSuccess = true;
                         console.log('[DeliveryOrderItemUpdateService] 行项目修改成功:', deliveryDocumentItem);
                         // 成功后短暂等待，让 SAP 释放交货单锁，避免影响下一个行项目
-                        await this.sleep(500);
+                        await this.sleep(2000);
                     } else {
                         patchErrorMessage = this.parseError(patchResult.data);
                         console.error(`[DeliveryOrderItemUpdateService] 行项目修改失败 (尝试 ${attempt}/${maxAttempts}): ${deliveryDocumentItem} ${patchErrorMessage}`);

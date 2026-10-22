@@ -170,7 +170,7 @@
                         'If-Match': '*'
                     };
 
-                    // 调用 PutawayOneItem API（失败后等 500ms 重试，最多尝试 3 次）
+                    // 调用 PutawayOneItem API（失败后等 2s 重试，最多尝试 3 次）
                     const maxAttempts = 3;
                     let result = null;
                     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -198,7 +198,7 @@
                         // 最后一次尝试不再等待
                         if (attempt < maxAttempts) {
                             console.warn(`[InboundDeliveryPutawayService] 行项目入库更新失败（第 ${attempt} 次），等待 500ms 后重试:`, deliveryDocumentItem);
-                            await new Promise(resolve => setTimeout(resolve, 500));
+                            await new Promise(resolve => setTimeout(resolve, 2000));
                         }
                     }
 

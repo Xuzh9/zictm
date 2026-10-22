@@ -255,14 +255,13 @@ class SalesOrderPricingUpdateService {
                             message: errorMessage
                         });
                     } else {
-                        // 如果找不到定价元素，记录警告但不报错
-                        console.warn(`行项目 ${salesOrderItem} 未找到 ${conditionType} 定价元素`);
+                        // 找不到定价元素：按失败处理，整步返回报错
+                        console.error(`行项目 ${salesOrderItem} 未找到 ${conditionType} 定价元素`);
                         updateResults.push({
                             salesOrderItem: salesOrderItem,
                             conditionType: conditionType,
                             status: 0,
                             success: false,
-                            warning: true,
                             message: `行项目 ${salesOrderItem} 未找到 ${conditionType} 定价元素`
                         });
                     }
@@ -277,7 +276,7 @@ class SalesOrderPricingUpdateService {
             // 检查所有定价元素修改结果
             const hasError = updateResults.some(r => r.error);
             const allSuccess = updateResults.length > 0 && updateResults.every(r => r.success) && !hasError;
-            const failedItems = updateResults.filter(r => !r.success && !r.warning);
+            const failedItems = updateResults.filter(r => !r.success);
             
             if (allSuccess) {
                 console.log('所有销售订单定价元素修改成功:', firstSalesOrder);
@@ -291,14 +290,6 @@ class SalesOrderPricingUpdateService {
                 return {
                     code: 'S',
                     message: '所有定价类型都没有需要更新的字段，步骤跳过',
-                    objkey: firstSalesOrder
-                };
-            } else if (failedItems.length === 0) {
-                // 只有警告，没有错误
-                console.log('销售订单定价修改完成（部分定价元素未找到）:', firstSalesOrder);
-                return {
-                    code: 'S',
-                    message: '销售订单定价修改完成（部分定价元素未找到）',
                     objkey: firstSalesOrder
                 };
             } else {

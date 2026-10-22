@@ -61,9 +61,10 @@
                     deliveryDocument = String(deliveryDocument).padStart(10, '0');
                 }
 
-                // 获取销售订单类型（SD07/SD10 从 PIDeliveryRel 获取，其他从业务表获取）
+                // 获取销售订单类型（SD07/SD10 canum=70 从 PIDeliveryRel 获取，其他从业务表获取）
+                // 需从业务表 SalesOrderType 获取（SD11 由 SD04 + CBRE 转成，业务表 SalesOrderType 即为 CBRE）
                 let salesOrderType;
-                if ((zrfcid === 'SD07' && canum === 70) || (zrfcid === 'SD11' && canum === 70) ) {
+                if ((zrfcid === 'SD07' && canum === 70) || (zrfcid === 'SD10' && canum === 70)) {
                     try {
                         const PIDeliveryRel = cds.entities['com.sap.zictm.PIDeliveryRel'];
                         const { SELECT } = cds.ql;
@@ -145,11 +146,10 @@
                     }
                 );
 
-                // 提取 cookie、CSRF token 和 ETag
+                // 提取 cookie、CSRF token
                 const cookies = csrfResult.headers['set-cookie'] || [];
                 const cookieString = cookies.map(cookie => cookie.split(';')[0]).join('; ');
                 const csrfToken = csrfResult.headers['x-csrf-token'];
-                const etag = csrfResult.headers['etag'] || csrfResult.headers['Etag'] || csrfResult.headers['ETag'];
 
                 // 检查货物移动状态，如果为 C（已过帐）则跳过本步骤
                 const responseData = csrfResult.data?.d || csrfResult.data || {};
@@ -179,7 +179,7 @@
                     'Accept': 'application/json',
                     'Cookie': cookieString,
                     'sap-language': 'ZH',
-                    'If-Match': etag || '*'
+                    'If-Match': '*'
                 };
 
                 // 调用交货单修改 API（带重试：SAP 交货单锁可能未立即释放）
@@ -323,7 +323,7 @@
                     csrfUrl: '/sap/opu/odata/sap/API_INBOUND_DELIVERY_SRV;v=0002/A_InbDeliveryHeader(\'{DeliveryDocument}\')',
                     updateUrl: "/sap/opu/odata/sap/API_INBOUND_DELIVERY_SRV;v=0002/A_InbDeliveryHeader('{DeliveryDocument}')"
                 };
-            } else if (((zrfcid === 'SD11' && canum === 70) || (zrfcid === 'SD07' && canum === 70) ) && salesOrderType === 'CBRE') {
+            } else if (((zrfcid === 'SD11' && canum === 70) || (zrfcid === 'SD07' && canum === 70) || (zrfcid === 'SD10' && canum === 70)) && salesOrderType === 'CBRE') {
                 //退货交货单 API
                 return {
                     csrfUrl: '/sap/opu/odata/sap/API_CUSTOMER_RETURNS_DELIVERY_SRV;v=2/A_ReturnsDeliveryHeader(\'{DeliveryDocument}\')',
