@@ -108,6 +108,7 @@ class SalesOrderAsyncResultService {
                             break;
                         case 'SD02':
                         case 'SD04':
+                        case 'SD11':
                             // 更新数帝单据关系表的对外销售订单号和行号
                             await this.updateSDDocRel(salesOrder, zrfcLogid, zrfcid, responseData);
                             break;

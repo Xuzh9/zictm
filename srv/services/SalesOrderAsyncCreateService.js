@@ -441,7 +441,7 @@ class SalesOrderAsyncCreateService {
             if (apiConfig.isReturn) {
                 itemData.Batch = "2025";
                 itemData.ReturnsInspectionCode = "0001";
-                itemData.CustRetItmFollowUpActivity = "0001";
+                itemData.CustRetItmFollowUpActivity = "0002";
                 itemData.ReturnsProductHasBeenReceived = true;
                 itemData.ReturnsRefundProcgMode = "I";
             }

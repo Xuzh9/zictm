@@ -209,6 +209,18 @@ class DeliveryOrderCreateService {
                 console.log('[DeliveryOrderCreateService] 返回结果:', JSON.stringify(returnResult));
                 return returnResult;
             }
+
+            // SD02 退货订单（CBRE）不需要生成交货单，直接跳过
+            if (zrfcid === 'SD02' && salesOrderType === 'CBRE') {
+                console.log('[DeliveryOrderCreateService] SD02 销售订单类型 CBRE，步骤跳过');
+                const returnResult = {
+                    code: 'S',
+                    message: 'SD02 销售订单类型 CBRE，跳过交货单创建',
+                    objkey: ''
+                };
+                console.log('[DeliveryOrderCreateService] 返回结果:', JSON.stringify(returnResult));
+                return returnResult;
+            }
             
             // 根据 zrfcid、canum 和销售订单类型确定 API 配置
             let csrfUrl, createUrl;
@@ -286,6 +298,7 @@ class DeliveryOrderCreateService {
                         break;
                     case 'SD02':
                     case 'SD04':
+                    case 'SD11':
                         // 更新 SDDocRel 表的交货单号/行号（SD02 固定对外，SD04 按 canum 区分公司间/对外）
                         await this.updateSDDocRel(deliveryDocument, businessDataList, canum, zrfcid);
                         break;
@@ -353,7 +366,7 @@ class DeliveryOrderCreateService {
             }
             
             // (STO) 使用 5 位数，其他情况使用 6 位数
-            const digitCount = (zrfcid === 'SD04' && canum === 60) || (zrfcid === 'SD11' && canum === 100) ? 5 : 6;
+            const digitCount = (zrfcid === 'SD04' && canum === 60) || (zrfcid === 'SD11' && canum === 70) ? 5 : 6;
             
             deliveryItems.push({
                 ReferenceSDDocument: sourceDocument,

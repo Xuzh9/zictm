@@ -388,7 +388,10 @@ class PurchaseOrderCreateService {
                 PurchaseOrderItem: poItemNumber || "",
                 Material: material,
                 Plant: isReturn ? (mptStepConfig?.lifnr || "") : (mptStepConfig?.umwrk || ""),
-                StorageLocation: mptStepConfig?.umlgo || item.ReceivingStorageLocation || item.StorageLocation || "",
+                // 库存地点：SD11 只取业务表收货库存地点，其他流程优先取步骤配置 umlgo
+                StorageLocation: zrfcid === 'SD11'
+                    ? (item.ReceivingStorageLocation || item.StorageLocation || "")
+                    : (mptStepConfig?.umlgo || item.ReceivingStorageLocation || item.StorageLocation || ""),
                 PurchaseOrderQuantityUnit: unitOfMeasure || "",
                 TaxCode: mptStepConfig?.mwskz || "",
                 OrderQuantity: item.RequestedQuantity ? parseFloat(item.RequestedQuantity) : 0,

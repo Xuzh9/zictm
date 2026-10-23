@@ -100,6 +100,18 @@
                     return returnResult;
                 }
 
+                // SD02 退货订单（CBRE）不需要交货单操作，直接跳过
+                if (zrfcid === 'SD02' && salesOrderType === 'CBRE') {
+                    console.log('[DeliveryOrderHeaderUpdateService] SD02 销售订单类型 CBRE，步骤跳过');
+                    const returnResult = {
+                        code: 'S',
+                        message: 'SD02 销售订单类型 CBRE，跳过交货单抬头修改',
+                        objkey: ''
+                    };
+                    console.log('[DeliveryOrderHeaderUpdateService] 返回结果:', JSON.stringify(returnResult));
+                    return returnResult;
+                }
+
                 // 检查交货单号是否存在
                 if (!deliveryDocument) {
                     const returnResult = {
@@ -317,13 +329,13 @@
                 (zrfcid === 'SD07' && canum === 20) || 
                 zrfcid === 'SD09' || 
                 (zrfcid === 'SD10' && (canum === 20 || canum === 120)) ||
-                (zrfcid === 'SD11' && canum === 150) ) {
+                (zrfcid === 'SD11' && canum === 120) ) {
                 //内向交货单 API
                 return {
                     csrfUrl: '/sap/opu/odata/sap/API_INBOUND_DELIVERY_SRV;v=0002/A_InbDeliveryHeader(\'{DeliveryDocument}\')',
                     updateUrl: "/sap/opu/odata/sap/API_INBOUND_DELIVERY_SRV;v=0002/A_InbDeliveryHeader('{DeliveryDocument}')"
                 };
-            } else if (((zrfcid === 'SD11' && canum === 70) || (zrfcid === 'SD07' && canum === 70) || (zrfcid === 'SD10' && canum === 70)) && salesOrderType === 'CBRE') {
+            } else if (( (zrfcid === 'SD07' && canum === 70) || (zrfcid === 'SD10' && canum === 70)) && salesOrderType === 'CBRE') {
                 //退货交货单 API
                 return {
                     csrfUrl: '/sap/opu/odata/sap/API_CUSTOMER_RETURNS_DELIVERY_SRV;v=2/A_ReturnsDeliveryHeader(\'{DeliveryDocument}\')',

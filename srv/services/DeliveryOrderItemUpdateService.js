@@ -104,6 +104,18 @@ class DeliveryOrderItemUpdateService {
                 return returnResult;
             }
 
+            // SD02 退货订单（CBRE）不需要交货单操作，直接跳过
+            if (zrfcid === 'SD02' && salesOrderType === 'CBRE') {
+                console.log('[DeliveryOrderItemUpdateService] SD02 销售订单类型 CBRE，步骤跳过');
+                const returnResult = {
+                    code: 'S',
+                    message: 'SD02 销售订单类型 CBRE，跳过交货单行项目修改',
+                    objkey: ''
+                };
+                console.log('[DeliveryOrderItemUpdateService] 返回结果:', JSON.stringify(returnResult));
+                return returnResult;
+            }
+
             // 获取交货单号（从 objkey 或业务数据中获取）
             const deliveryDocument = previousObjkey || businessDataList[0]?.DeliveryDocument || '';
             if (!deliveryDocument) {
@@ -124,11 +136,11 @@ class DeliveryOrderItemUpdateService {
                 (zrfcid === 'SD07' && canum === 30) || 
                 zrfcid === 'SD09' || 
                 (zrfcid === 'SD10' && (canum === 30 || canum === 130)) ||
-                (zrfcid === 'SD11' && canum === 160)) {
+                (zrfcid === 'SD11' && canum === 130)) {
                 apiPath = '/sap/opu/odata/sap/API_INBOUND_DELIVERY_SRV;v=0002';
                 itemEntity = 'A_InbDeliveryItem';
                 isInboundDelivery = true; // 设置为内向交货单
-            } else if (((zrfcid === 'SD11' && canum === 80) || (zrfcid === 'SD07' && canum === 80)) && salesOrderType === 'CBRE') {
+            } else if (((zrfcid === 'SD07' && canum === 80)) && salesOrderType === 'CBRE') {
                 apiPath = '/sap/opu/odata/sap/API_CUSTOMER_RETURNS_DELIVERY_SRV;v=2';
                 itemEntity = 'A_ReturnsDeliveryItem';
             } else {
@@ -261,10 +273,15 @@ class DeliveryOrderItemUpdateService {
                                 updateData.StorageLocation = poStorageLocation;
                             }
                         }
-                    } else if ((zrfcid === 'SD04' && canum === 80) || (zrfcid === 'SD11' && canum === 120)) {
-                        // SD04 80 / SD11 120：取业务表的收货库存地点
+                    } else if (zrfcid === 'SD04' && canum === 80) {
+                        // SD04 80：取业务表的收货库存地点
                         if (businessData.ReceivingStorageLocation || businessData.StorageLocation) {
                             updateData.StorageLocation = businessData.ReceivingStorageLocation || businessData.StorageLocation;
+                        }
+                    } else if (zrfcid === 'SD11' && canum === 90) {
+                        // SD11 90：取步骤配置表的库存地点 umlgo
+                        if (mptStepConfig?.umlgo) {
+                            updateData.StorageLocation = mptStepConfig.umlgo;
                         }
                     }
                 }
