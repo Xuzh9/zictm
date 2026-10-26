@@ -61,25 +61,27 @@ class SalesOrderPricingUpdateService {
 
             // 根据 zrfcid 获取销售订单行项目数据
             let piSalesOrderRelRecords = [];
+            let salesOrderItems = [];
             if (zrfcid === 'SD01' || zrfcid === 'SD03' || zrfcid === 'SD06' || zrfcid === 'SD08' || zrfcid === 'SD12') {
                 // 查询 PISalesOrderRel 表获取销售订单号和行号
                 piSalesOrderRelRecords = await this.getPISalesOrderRelRecords(businessDataList);
                 // 注意：运保费行（服务物料）不会生成销售订单号，
                 // 行级跳过逻辑在 buildItemMappingFromRecords 中处理，不在此处整步跳过
             } else if (zrfcid === 'SD04' || zrfcid === 'SD11') {
-                // SD04/SD11：以业务表 SalesOrder+SalesOrderItem 为键查 SDDocRel，取对外销售订单号/行号
+                // SD04/SD11：查询 SDDocRel 获取公司间采购订单行号，并按上一步销售订单号获取 SAP 行项目
                 piSalesOrderRelRecords = await this.getSDDocRelRecords(businessDataList);
+                salesOrderItems = await this.getSalesOrderItemsFromAPI(salesOrderNumber);
             }
 
             // 从查询结果中获取行项目号映射
-            const itemMapping = this.buildItemMappingFromRecords(businessDataList, piSalesOrderRelRecords, zrfcid, canum);
+            const itemMapping = this.buildItemMappingFromRecords(businessDataList, piSalesOrderRelRecords, zrfcid, canum, salesOrderNumber, salesOrderItems);
 
-            // 全部行项目为服务类物料（保费/运费）时不执行定价更新 PATCH，直接跳过
+            // 无有效映射：要么全部是服务类物料（保费/运费），要么未匹配到 SAP 行项目
             if (!itemMapping || itemMapping.length === 0) {
-                console.log('[SalesOrderPricingUpdateService] 所有行项目均为服务类物料（保费/运费），跳过定价更新');
+                console.log(`[SalesOrderPricingUpdateService] 行项目映射为空（业务数据 ${businessDataList.length} 条），跳过定价更新`);
                 return {
                     code: 'S',
-                    message: '所有行项目均为服务类物料（保费/运费），跳过定价更新',
+                    message: '行项目映射为空（可能均为服务类物料，或未匹配到 SAP 行项目），跳过定价更新',
                     objkey: salesOrderNumber
                 };
             }
@@ -383,12 +385,14 @@ class SalesOrderPricingUpdateService {
     /**
      * 从查询结果中构建行项目号映射
      * @param {Array} businessDataList - 业务数据列表
-     * @param {Array} piSalesOrderRelRecords - PISalesOrderRel 记录列表
+     * @param {Array} piSalesOrderRelRecords - PISalesOrderRel / SDDocRel 记录列表
      * @param {string} zrfcid - 业务流程ID
      * @param {string} canum - 步骤号
+     * @param {string} salesOrderNumber - 上一步单据号（销售订单号）
+     * @param {Array} salesOrderItems - 销售订单 API 返回的行项目
      * @returns {Array} 行项目号映射列表
      */
-    buildItemMappingFromRecords(businessDataList, piSalesOrderRelRecords, zrfcid, canum) {
+    buildItemMappingFromRecords(businessDataList, piSalesOrderRelRecords, zrfcid, canum, salesOrderNumber, salesOrderItems = []) {
         
         const mappings = [];
         const step = parseInt(canum);
@@ -408,23 +412,29 @@ class SalesOrderPricingUpdateService {
 
             let salesOrder, salesOrderItem;
             
-            // SD04/SD11：使用业务表 SalesOrder+SalesOrderItem 从 SDDocRel 查找对外销售订单号/行号
+            // SD04/SD11：按上一步销售订单号获取的 SAP 行项目，用其采购订单行号匹配 SDDocRel 的公司间采购订单行号
             if (zrfcid === 'SD04' || zrfcid === 'SD11') {
                 const businessSalesOrder = businessData.SalesOrder || '';
                 const businessSalesOrderItem = String(businessData.SalesOrderItem || '');
 
-                const record = piSalesOrderRelRecords.find(
+                const relRecord = piSalesOrderRelRecords.find(
                     r => r.SalesOrder === businessSalesOrder && String(r.SalesOrderItem) === businessSalesOrderItem
                 );
+                const interPoItem = String(relRecord?.InterCompanyPurchaseOrderItem || '').replace(/^0+/, '');
 
-                if (record && record.ExternalSalesOrder && record.ExternalSalesOrderItem) {
+                // SAP 销售订单行项目上的采购订单行号字段：UnderlyingPurchaseOrderItem（兼容 ReferenceSDDocumentItem）
+                const apiItem = salesOrderItems.find(
+                    i => String(i.UnderlyingPurchaseOrderItem || i.ReferenceSDDocumentItem || '').replace(/^0+/, '') === interPoItem
+                );
+
+                if (interPoItem && apiItem) {
                     mappings.push({
-                        salesOrderItem: String(record.ExternalSalesOrderItem),
-                        salesOrder: record.ExternalSalesOrder,
+                        salesOrder: salesOrderNumber,
+                        salesOrderItem: apiItem.SalesOrderItem,
                         businessData: businessData
                     });
                 } else {
-                    console.warn(`[buildItemMappingFromRecords] SDDocRel 未找到对外销售订单: SalesOrder=${businessSalesOrder}, SalesOrderItem=${businessSalesOrderItem}`);
+                    console.warn(`[buildItemMappingFromRecords] 未匹配到销售订单行项目: 查询用销售订单号=${salesOrderNumber}, SAP行项目数=${salesOrderItems.length}, SDDocRel键 SalesOrder=${businessSalesOrder}, SalesOrderItem=${businessSalesOrderItem}, InterCompanyPurchaseOrderItem=${interPoItem}`);
                 }
             } else {
                 // 使用 PIOrder 和 PIOrderItem 从 PISalesOrderRel 表查找
@@ -511,6 +521,48 @@ class SalesOrderPricingUpdateService {
         );
         console.log(`[SalesOrderPricingUpdateService] SDDocRel 查询完成, 命中: ${(records || []).length} 条`);
         return records || [];
+    }
+
+    /**
+     * 通过 OData API 获取销售订单行项目数据
+     * @param {string} salesOrderNumber - 销售订单号
+     * @returns {Array} 行项目记录数组（含 SalesOrderItem、PurchaseOrderItem）
+     */
+    async getSalesOrderItemsFromAPI(salesOrderNumber) {
+        try {
+            const itemUrl = `/sap/opu/odata/sap/API_SALES_ORDER_SRV/A_SalesOrder('${salesOrderNumber}')/to_Item`;
+            console.log('[SalesOrderPricingUpdateService] 查询销售订单行项目 URL:', itemUrl);
+
+            const response = await this.commonUtils.executeHttpRequestWithRetry(
+                {
+                    destinationName: this.commonUtils.getDestinationName()
+                },
+                {
+                    method: 'GET',
+                    url: itemUrl,
+                    headers: {
+                        'Accept': 'application/json',
+                        'sap-language': 'ZH'
+                    },
+                    validateStatus: function (status) {
+                        return true;
+                    }
+                }
+            );
+
+            if (response.status < 200 || response.status >= 300) {
+                console.error(`[SalesOrderPricingUpdateService] 获取销售订单 ${salesOrderNumber} 行项目失败，状态码: ${response.status}，响应: ${JSON.stringify(response.data).substring(0, 500)}`);
+                return [];
+            }
+
+            const data = typeof response.data === 'string' ? JSON.parse(response.data) : response.data;
+            const items = data?.d?.results || [];
+            console.log(`[SalesOrderPricingUpdateService] 获取销售订单 ${salesOrderNumber} 行项目 ${items.length} 条`);
+            return items;
+        } catch (error) {
+            console.error('[SalesOrderPricingUpdateService] 获取销售订单行项目失败:', error);
+            return [];
+        }
     }
 
     parseError(errorData) {
