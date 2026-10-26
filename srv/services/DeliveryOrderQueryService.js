@@ -30,6 +30,19 @@ class DeliveryOrderQueryService {
                 };
             }
 
+            // SD02 canum=70：仅当业务数据中存在 CBXN 行项目（退货收费项目类别）时才查询退货交货单，否则跳过
+            if (zrfcid === 'SD02' && canum === 70) {
+                const hasCbxn = await this.hasCbxnItem(zrfcLogid, zrfcid);
+                if (!hasCbxn) {
+                    console.log('[DeliveryOrderQueryService] SD02 70 业务数据无 CBXN 行项目，步骤跳过');
+                    return {
+                        code: 'S',
+                        message: 'SD02 70 业务数据无 CBXN 行项目，跳过退货交货单查询',
+                        objkey: ''
+                    };
+                }
+            }
+
             // 待查询单据号：
             // - SD07/SD09/SD10(canum=10)：从业务表 DeliveryActualInfo 取交货单号
             // - 其他（含 SD11 canum=60 的参考销售订单号）：取上一步 objkey，补齐前导零 10 位
@@ -148,6 +161,32 @@ class DeliveryOrderQueryService {
         } catch (error) {
             console.error('[DeliveryOrderQueryService.getSalesOrderType] 查询失败:', error);
             return null;
+        }
+    }
+
+    /**
+     * 判断业务表数据是否存在 CBXN 行项目（项目类别 SalesOrderItemCategory = CBXN）
+     */
+    async hasCbxnItem(zrfcLogid, zrfcid) {
+        try {
+            const ProcessConfig = cds.entities['com.sap.zictm.ProcessConfig'];
+            const config = await cds.run(
+                SELECT.one.from(ProcessConfig).where({ zrfcid: zrfcid })
+            );
+            if (!config?.businessTable1) return false;
+
+            const entity = cds.entities[`com.sap.zictm.${config.businessTable1}`];
+            if (!entity) return false;
+
+            const rows = await cds.run(
+                SELECT.one.from(entity)
+                    .columns(['SalesOrderItemCategory'])
+                    .where({ zrfc_logid: zrfcLogid, SalesOrderItemCategory: 'CBXN' })
+            );
+            return !!rows;
+        } catch (error) {
+            console.error('[DeliveryOrderQueryService.hasCbxnItem] 查询失败:', error);
+            return false;
         }
     }
 

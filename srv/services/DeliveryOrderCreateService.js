@@ -345,6 +345,26 @@ class DeliveryOrderCreateService {
      * @returns {Object} 交货单创建数据
      */
     async buildDeliveryOrderData(businessDataList, mptStepConfig, zrfcid, canum, salesOrderType, sourceDocument) {
+        const { SELECT } = cds.ql;
+
+        // 批量预查 SDDocRel，构建 SalesOrder+SalesOrderItem -> 记录 的映射
+        let sdDocRelMap = new Map();
+        const SDDocRel = cds.entities['com.sap.zictm.SDDocRel'];
+        const salesOrders = [...new Set(businessDataList.map(i => i.SalesOrder).filter(v => v))];
+        const salesOrderItems = [...new Set(businessDataList.map(i => i.SalesOrderItem).filter(v => v))];
+        if (salesOrders.length > 0 && salesOrderItems.length > 0) {
+            const relRows = await cds.run(
+                SELECT.from(SDDocRel).where({
+                    SalesOrder: { in: salesOrders },
+                    SalesOrderItem: { in: salesOrderItems }
+                })
+            );
+            (relRows || []).forEach(r => {
+                sdDocRelMap.set(`${r.SalesOrder}-${r.SalesOrderItem}`, r);
+            });
+        }
+        console.log(`[DeliveryOrderCreateService] SDDocRel 预查询完成, 命中: ${sdDocRelMap.size} 条`);
+
         // 构建行项目
         const deliveryItems = [];
         for (const item of businessDataList) {
@@ -354,10 +374,16 @@ class DeliveryOrderCreateService {
                 continue;
             }
 
-            // 行号取值：SD02/SD04/SD11 用业务表 SalesOrderItem；SD07 用 PISalesOrderRel 回写的 SalesOrderItem；
-            // SD10 用 PISalesOrderRel 回写的 PurchaseOrderItem1；其他用 PIOrderItem
             let referenceItem;
-            if (zrfcid === 'SD02' || zrfcid === 'SD04' || zrfcid === 'SD11' || zrfcid === 'SD07') {
+            if ((zrfcid === 'SD04' && canum === 60) || (zrfcid === 'SD11' && canum === 70)) {
+                // SDDocRel：公司间采购订单行号
+                const relRow = sdDocRelMap.get(`${item.SalesOrder}-${item.SalesOrderItem}`);
+                referenceItem = relRow?.InterCompanyPurchaseOrderItem;
+            } else if (zrfcid === 'SD02' || (zrfcid === 'SD04' && canum === 150)) {
+                // SDDocRel：对外销售订单行号
+                const relRow = sdDocRelMap.get(`${item.SalesOrder}-${item.SalesOrderItem}`);
+                referenceItem = relRow.ExternalSalesOrderItem;                
+            } else if (zrfcid === 'SD07') {
                 referenceItem = item.SalesOrderItem;
             } else if (zrfcid === 'SD10') {
                 referenceItem = item.PurchaseOrderItem1;

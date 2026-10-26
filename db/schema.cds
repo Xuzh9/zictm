@@ -310,6 +310,7 @@ entity SalesOrderChange {
     ProductionPlant               : String(4) @title: '工厂';      // 工厂
     StorageLocation               : String(4) @title: '库存地点';          // 库存地点
     PurchasePrice                 : Decimal(15,2) @title: '采购单价'; // 采购单价
+    calcPrice                     : Decimal(15,2) @title: '计算单价'; // 计算单价
     ZB01_Value                    : Decimal(15,2) @title: 'ZB01价格';  // ZB01价格
     ZB01_CurrencyCode             : String(3) @title: 'ZB01价格单位';      // ZB01价格单位
     ZB01_UnitOfMeasure            : Integer @title: 'ZB01数量单位';        // ZB01数量单位
@@ -417,8 +418,8 @@ entity PIDeliveryRel {
 
 // 银行信息
 entity BankInfo {
-    key bankAccountNo : String(20) @title: '银行账号';      // 银行账号
-    key bankReceiptNo : String(20) @title: '银行回单编号';      // 银行回单编号
+    key bankAccountNo : String(80) @title: '银行账号';      // 银行账号
+    key bankReceiptNo : String(80) @title: '银行回单编号';      // 银行回单编号
     shortUrl : String(200) @title: '短URL';      // 短URL
     memoLine : String(2000) @title: '长URL';      // 长URL
 }

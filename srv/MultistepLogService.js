@@ -106,7 +106,7 @@ module.exports = srv => {
             await cds.run(
                 UPDATE(dbHeadLog)
                     .set({
-                        code: 'S',
+                        code: 'C',
                         message: `在${timeStr}关闭`,
                         lastExecutionAt: now
                     })

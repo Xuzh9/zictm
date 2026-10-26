@@ -172,13 +172,13 @@ class ProductionOrderCreateService {
                     }
                 );
 
-                console.log('创建生产工单位状态码:', result.status);
+                console.log(`物料 ${businessData.Material} 创建生产工单状态码:`, result.status);
 
                 if (result.status >= 200 && result.status < 300) {
                     const responseData = typeof result.data === 'string' ? JSON.parse(result.data) : result.data;
                     const productionOrder = responseData?.d?.ManufacturingOrder || '';
                     
-                    console.log('生产工单创建成功:', productionOrder);
+                    console.log(`物料 ${businessData.Material} 生产工单创建成功:`, productionOrder);
                     
                     // 将生产工单号更新到 PISalesOrderRel 表
                     await this.updatePISalesOrderRel(productionOrder, businessData);
@@ -191,10 +191,10 @@ class ProductionOrderCreateService {
                     createdOrderNumbers.push(productionOrder);
                 } else {
                     const errorMessage = this.parseError(result.data);
-                    console.error(`生产工单 ${index + 1} 创建失败:`, errorMessage);
+                    console.error(`物料 ${businessData.Material} 生产工单创建失败:`, errorMessage);
                     createResults.push({
                         success: false,
-                        errorMessage: errorMessage,
+                        errorMessage: `物料 ${businessData.Material}: ${errorMessage}`,
                         index: index
                     });
                 }

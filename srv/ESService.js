@@ -138,8 +138,8 @@ module.exports = cds.service.impl(async function () {
             .where({ zrfc_logid: deliveryActualRows[0].zrfc_logid })
         );
 
-        if (headLog?.code === 'S') {
-          console.log('[DN] 交货单所属流程已成功(S)，跳过多步执行:', deliveryDocument);
+        if (headLog?.code === 'S' || headLog?.code === 'C') {
+          console.log('[DN] 交货单所属流程已结束(S/C)，跳过多步执行:', deliveryDocument);
           return {
             code: 200,
             message: `交货单 ${deliveryDocument} 所属流程已成功，跳过多步执行`,

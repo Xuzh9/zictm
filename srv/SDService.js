@@ -121,6 +121,8 @@ module.exports = cds.service.impl(async function () {
         const headLogCode = headLogs[zrfcLogid];
         if (headLogCode === 'S') {
           errors.push(`第 ${rowNum} 条数据的主键 [${key}] 已成功推送，无法重复推送`);
+        } else if (headLogCode === 'C') {
+          errors.push(`第 ${rowNum} 条数据的主键 [${key}] 已关闭，无法重复推送`);
         } else if (headLogCode === 'P') {
           errors.push(`第 ${rowNum} 条数据的主键 [${key}] 正在执行中，请稍后获取状态后再判断是否需要执行`);
         }
@@ -295,6 +297,8 @@ module.exports = cds.service.impl(async function () {
         const headLogCode = headLogs[zrfcLogid];
         if (headLogCode === 'S') {
           errors.push(`第 ${rowNum} 条数据的主键 [${key}] 已成功推送，无法重复推送`);
+        } else if (headLogCode === 'C') {
+          errors.push(`第 ${rowNum} 条数据的主键 [${key}] 已关闭，无法重复推送`);
         } else if (headLogCode === 'P') {
           errors.push(`第 ${rowNum} 条数据的主键 [${key}] 正在执行中，请稍后获取状态后再判断是否需要执行`);
         }
