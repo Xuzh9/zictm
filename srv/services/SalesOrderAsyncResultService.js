@@ -140,6 +140,11 @@ class SalesOrderAsyncResultService {
         }
     }
 
+    // 物料号归一化：去空格、去前导零（与项目其他服务口径一致）
+    normalizeMaterial(material) {
+        return String(material || '').trim().replace(/^0+/, '');
+    }
+
     sleep(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
@@ -221,14 +226,12 @@ class SalesOrderAsyncResultService {
 
             const sapItems = responseData?._Item || responseData?.to_Item?.results || [];
             
+            // SAP 行项目按归一化物料号做一对一映射（业务上同一销售订单不会同物料多行）
             const sapItemMap = new Map();
             sapItems.forEach(item => {
-                const product = item.Product || item.Material || '';
-                if (product) {
-                    if (!sapItemMap.has(product)) {
-                        sapItemMap.set(product, []);
-                    }
-                    sapItemMap.get(product).push(item);
+                const normalizedKey = this.normalizeMaterial(item.Product || item.Material);
+                if (normalizedKey && !sapItemMap.has(normalizedKey)) {
+                    sapItemMap.set(normalizedKey, item);
                 }
             });
 
@@ -239,22 +242,21 @@ class SalesOrderAsyncResultService {
             let insertedCount = 0;
 
             for (const item of businessData) {
-                const material = (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') 
+                const rawMaterial = (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') 
                     ? (item.Material || "") 
                     : (item.Product || "");
+                const material = this.normalizeMaterial(rawMaterial);
                 
                 if (!material) {
                     console.warn('[SalesOrderAsyncResultService.updatePISalesOrderRel] 业务数据物料号为空');
                     continue;
                 }
 
-                const matchedSapItems = sapItemMap.get(material);
-                if (!matchedSapItems || matchedSapItems.length === 0) {
+                const sapItem = sapItemMap.get(material);
+                if (!sapItem) {
                     console.warn('[SalesOrderAsyncResultService.updatePISalesOrderRel] 未找到匹配的 SAP 行项目, 物料号:', material);
                     continue;
                 }
-
-                const sapItem = matchedSapItems.shift();
                 const salesOrderItem = sapItem.SalesOrderItem || sapItem.CreditMemoRequestItem || sapItem.DebitMemoRequestItem || sapItem.CustomerReturnItem || '';
 
                 const piOrder = item.PIOrder || '';
@@ -329,16 +331,13 @@ class SalesOrderAsyncResultService {
                 return;
             }
 
-            // SAP 返回行项目按物料号分组，用于匹配行号
+            // SAP 返回行项目按归一化物料号做一对一映射
             const sapItems = responseData?._Item || responseData?.to_Item?.results || [];
             const sapItemMap = new Map();
             sapItems.forEach(item => {
-                const product = item.Product || item.Material || '';
-                if (product) {
-                    if (!sapItemMap.has(product)) {
-                        sapItemMap.set(product, []);
-                    }
-                    sapItemMap.get(product).push(item);
+                const normalizedKey = this.normalizeMaterial(item.Product || item.Material);
+                if (normalizedKey && !sapItemMap.has(normalizedKey)) {
+                    sapItemMap.set(normalizedKey, item);
                 }
             });
 
@@ -349,19 +348,17 @@ class SalesOrderAsyncResultService {
             let insertedCount = 0;
 
             for (const item of businessData) {
-                const material = item.Product || item.Material || '';
+                const material = this.normalizeMaterial(item.Product || item.Material);
                 if (!material) {
                     console.warn('[SalesOrderAsyncResultService.updateSDDocRel] 业务数据物料号为空');
                     continue;
                 }
 
-                const matchedSapItems = sapItemMap.get(material);
-                if (!matchedSapItems || matchedSapItems.length === 0) {
+                const sapItem = sapItemMap.get(material);
+                if (!sapItem) {
                     console.warn('[SalesOrderAsyncResultService.updateSDDocRel] 未找到匹配的 SAP 行项目, 物料号:', material);
                     continue;
                 }
-
-                const sapItem = matchedSapItems.shift();
                 const externalSalesOrderItem = sapItem.SalesOrderItem || sapItem.CreditMemoRequestItem || sapItem.DebitMemoRequestItem || sapItem.CustomerReturnItem || '';
 
                 const docSalesOrder = item.SalesOrder || '';

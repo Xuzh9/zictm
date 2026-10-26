@@ -202,7 +202,7 @@
 
                 for (let attempt = 1; attempt <= maxAttempts && !patchSuccess; attempt++) {
                     if (attempt > 1) {
-                        const delay = 1000 * attempt; // 2s, 3s
+                        const delay = 3000 * attempt; // 3s
                         console.warn(`[DeliveryOrderHeaderUpdateService] 等待 ${delay}ms 后重试 PATCH (尝试 ${attempt}/${maxAttempts}) 交货单: ${deliveryDocument}`);
                         await this.sleep(delay);
                     }

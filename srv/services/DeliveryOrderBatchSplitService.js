@@ -24,28 +24,22 @@ class DeliveryOrderBatchSplitService {
 
             console.log('[DeliveryOrderBatchSplitService] 开始执行, zrfcid:', zrfcid, 'canum:', canum, 'zdfjy:', zdfjy);
 
-            // 读取 ProcessConfig 表获取业务表名（使用业务表1）
-            const businessTable = await this.commonUtils.getBusinessTableName(zrfcid, true);
-            if (!businessTable) {
+            // 根据 zrfcid + zrfc_logid 查询 DeliveryActualInfo 表获取批次拆分数据
+            const DeliveryActualInfo = cds.entities['com.sap.zictm.DeliveryActualInfo'];
+            let deliveryActualInfoList = await cds.run(
+                SELECT.from(DeliveryActualInfo).where({ zrfcid, zrfc_logid: zrfcLogid })
+            );
+
+            if (!deliveryActualInfoList || deliveryActualInfoList.length === 0) {
                 return {
                     code: 'E',
-                    message: `未找到业务流程配置: ${zrfcid}`,
+                    message: `未找到 DeliveryActualInfo 数据，zrfcid: ${zrfcid}, zrfc_logid: ${zrfcLogid}`,
                     objkey: ''
                 };
             }
-            console.log('[DeliveryOrderBatchSplitService] 业务表名:', businessTable);
+            console.log('[DeliveryOrderBatchSplitService] DeliveryActualInfo 数据条数:', deliveryActualInfoList.length);
 
-            // 读取业务表数据（使用 zrfc_logid 查询）
-            const businessDataList = await this.commonUtils.getBusinessData(businessTable, zrfcLogid, 'zrfc_logid');
-            if (!businessDataList || businessDataList.length === 0) {
-                return {
-                    code: 'E',
-                    message: `未找到业务数据，zrfc_logid: ${zrfcLogid}`,
-                    objkey: ''
-                };
-            }
-
-            // 使用通用工具类读取之前步骤的 objkey（交货单号）
+            // 确定交货单号：优先用 objkey，否则取上一步骤的 objkey
             let deliveryDocument = objkey;
             const previousObjkey = await this.commonUtils.getPreviousStepObjkey(zrfcLogid, zrfcid, readsteps, canum);
             if (previousObjkey) {
@@ -60,6 +54,15 @@ class DeliveryOrderBatchSplitService {
                 };
             }
             console.log('[DeliveryOrderBatchSplitService] 交货单号:', deliveryDocument);
+
+            // DeliveryActualInfo 已按 zrfcid + zrfc_logid 限定流程范围，这里不再按 DeliveryDocument 过滤
+            // （DeliveryActualInfo.DeliveryDocument 为数帝源交货单号，与本次 SAP 交货单号不一定一致）
+            const MAIN_ITEM_VALUES = ['', '000000'];
+            const splitRowCount = deliveryActualInfoList.filter(item =>
+                item.ParentItem && !MAIN_ITEM_VALUES.includes(item.ParentItem.trim())
+            ).length;
+            console.log('[DeliveryOrderBatchSplitService] 批次拆分行数:', splitRowCount,
+                '物料号样例:', deliveryActualInfoList.slice(0, 5).map(item => `${item.Material}->${this.normalizeMaterial(item.Material)}`).join(', '));
 
             // 构建 API 路径（参考 DeliveryOrderItemUpdateService 使用相对路径）
             const apiPath = '/sap/opu/odata/sap/API_OUTBOUND_DELIVERY_SRV;v=0002';
@@ -105,42 +108,8 @@ class DeliveryOrderBatchSplitService {
             
             console.log('[DeliveryOrderBatchSplitService] 交货单行项目数量:', deliveryItems.length);
 
-            // 通过业务表的旧交货单号关联查询 PIDeliveryRel
-            const PIDeliveryRel = cds.entities['com.sap.zictm.PIDeliveryRel'];
-
-            // 收集业务数据的 DeliveryDocument（旧交货单号）和 DeliveryDocumentItem
-            const deliveryDocuments = [...new Set(businessDataList.map(item => item.DeliveryDocument).filter(v => v))];
-            const deliveryDocumentItems = [...new Set(businessDataList.map(item => item.DeliveryDocumentItem).filter(v => v))];
-
-            // 查询 PIDeliveryRel 获取交货单与 PI 订单的关联
-            let piDeliveryRels = [];
-            if (deliveryDocuments.length > 0 && deliveryDocumentItems.length > 0) {
-                piDeliveryRels = await cds.run(
-                    SELECT.from(PIDeliveryRel).where({
-                        DeliveryDocument: { in: deliveryDocuments },
-                        DeliveryDocumentItem: { in: deliveryDocumentItems }
-                    })
-                );
-            }
-
-            console.log('[DeliveryOrderBatchSplitService] PIDeliveryRel 数据:', JSON.stringify(piDeliveryRels));
-
-            // 构建 DeliveryDocument+DeliveryDocumentItem -> PI 订单的映射
-            const deliveryToPiMap = new Map();
-            piDeliveryRels.forEach(rel => {
-                const key = `${rel.DeliveryDocument}-${rel.DeliveryDocumentItem}`;
-                deliveryToPiMap.set(key, {
-                    PIOrder: rel.PIOrder,
-                    PIOrderItem: rel.PIOrderItem
-                });
-            });
-
-            // 按旧交货单号过滤业务数据（主行+批次拆分行）
-            const relevantBusinessData = businessDataList.filter(item =>
-                item.DeliveryDocument === deliveryDocuments[0]
-            );
-
-            console.log('[DeliveryOrderBatchSplitService] 匹配到业务数据条数:', relevantBusinessData.length);
+            // DeliveryActualInfo 按行号排序
+            deliveryActualInfoList.sort((a, b) => (a.DeliveryDocumentItem || '').localeCompare(b.DeliveryDocumentItem || ''));
 
             // 交货单行项目按行号排序
             deliveryItems.sort((a, b) => (a.DeliveryDocumentItem || '').localeCompare(b.DeliveryDocumentItem || ''));
@@ -151,7 +120,8 @@ class DeliveryOrderBatchSplitService {
 
                 console.log('[DeliveryOrderBatchSplitService] 处理交货单行项目:',
                     'DeliveryDocument:', deliveryDocument,
-                    'DeliveryDocumentItem:', deliveryDocumentItem);
+                    'DeliveryDocumentItem:', deliveryDocumentItem,
+                    'Material:', deliveryItem.Material);
 
                 // 跳过 SAP 已存在的批次拆分子行（900xxx 段或带父项引用），避免重复拆分
                 if (deliveryItem.HigherLevelItemOfBatchSplitItem || /^9\d{5}$/.test(deliveryDocumentItem || '')) {
@@ -159,33 +129,16 @@ class DeliveryOrderBatchSplitService {
                     continue;
                 }
 
-                // 按物料号匹配业务数据（主行，物料号归一化：去空格、去前导零）
+                // 按物料号匹配 DeliveryActualInfo 中的批次拆分行（ParentItem 非空，物料号两侧均去前导零）
                 const itemMaterial = this.normalizeMaterial(deliveryItem.Material);
-                const matchedBusinessData = relevantBusinessData.filter(item =>
-                    (!item.ParentItem || item.ParentItem.trim() === '' || item.ParentItem === '000000') &&
-                    this.normalizeMaterial(item.Material || item.Product) === itemMaterial
-                );
-
-                if (!matchedBusinessData || matchedBusinessData.length === 0) {
-                    console.warn('[DeliveryOrderBatchSplitService] 未找到匹配的主行业务数据, DeliveryDocumentItem:', deliveryDocumentItem);
-                    continue;
-                }
-
-                // 从 PIDeliveryRel 获取 PIOrder/PIOrderItem
-                const piKey = `${matchedBusinessData[0].DeliveryDocument}-${matchedBusinessData[0].DeliveryDocumentItem}`;
-                const piInfo = deliveryToPiMap.get(piKey);
-                if (!piInfo) {
-                    console.warn('[DeliveryOrderBatchSplitService] 未找到匹配的 PIDeliveryRel:', piKey);
-                    continue;
-                }
-
-                // 过滤出与当前主行物料号相同的批次拆分数据（ParentItem 非空），并按行号排序
-                const batchSplitData = relevantBusinessData
-                    .filter(item => item.ParentItem && item.ParentItem.trim() !== '' && item.ParentItem !== '000000' &&
-                        this.normalizeMaterial(item.Material || item.Product) === itemMaterial)
+                const batchSplitData = deliveryActualInfoList
+                    .filter(item =>
+                        !MAIN_ITEM_VALUES.includes((item.ParentItem || '').trim()) &&
+                        this.normalizeMaterial(item.Material) === itemMaterial
+                    )
                     .sort((a, b) => (a.DeliveryDocumentItem || '').localeCompare(b.DeliveryDocumentItem || ''));
 
-                console.log('[DeliveryOrderBatchSplitService] 找到批次拆分数据:', batchSplitData.length, '条');
+                console.log('[DeliveryOrderBatchSplitService] 物料号匹配到批次拆分数据:', batchSplitData.length, '条, Material:', itemMaterial);
 
                 // 如果没有批次拆分数据，跳过
                 if (batchSplitData.length === 0) {
