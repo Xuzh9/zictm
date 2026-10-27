@@ -94,13 +94,10 @@ class DeliveryOrderQueryService {
                         await this.updatePIDeliveryRel(zrfcLogid, queryDocument, deliveryItems, zrfcid, canum);
                         break;
                     case 'SD04':
-                        // 更新 SDDocRel 表的公司间内向交货单号/行号
-                        await this.updateSDDocRel(zrfcLogid, deliveryItems, zrfcid);
-                        break;
                     case 'SD02':
                     case 'SD11':
-                        // 更新 SDDocRel 表的对外外向（退货）交货单号/行号
-                        await this.updateSDDocRel(zrfcLogid, deliveryItems, zrfcid);
+                        // 更新 SDDocRel 表（SD04：公司间内向交货单；SD02/SD11：对外退货交货单）
+                        await this.updateSDDocRel(zrfcLogid, deliveryItems, zrfcid, canum);
                         break;
                 }
             }
@@ -759,9 +756,12 @@ class DeliveryOrderQueryService {
      *   通过 SDDocRel 中已有的 InterCompanyPurchaseOrder 匹配内向交货单的 ReferenceSDDocument
      * - SD11 canum=60 / SD02 canum=70：退货交货单。通过退货交货单行项目的 ReferenceSDDocumentItem（销售订单行号）匹配
      */
-    async updateSDDocRel(zrfcLogid, deliveryItems, zrfcid) {
+    async updateSDDocRel(zrfcLogid, deliveryItems, zrfcid, canum) {
         try {
-            console.log('[updateSDDocRel] 开始更新 SDDocRel, zrfcLogid:', zrfcLogid, 'zrfcid:', zrfcid, '交货单行项目数量:', deliveryItems?.length);
+            console.log('[updateSDDocRel] 开始更新 SDDocRel, zrfcLogid:', zrfcLogid, 'zrfcid:', zrfcid, 'canum:', canum, '交货单行项目数量:', deliveryItems?.length);
+
+            // 是否退货交货单匹配（仅 SD11 canum=60 / SD02 canum=70）
+            const isReturnsDelivery = (zrfcid === 'SD11' && canum === 60) || (zrfcid === 'SD02' && canum === 70);
 
             // 业务表从 ProcessConfig 获取（SD04/SD11 为 OutboundDelivery，SD02 按其配置）
             const businessTable = await this.commonUtils.getBusinessTableName(zrfcid, true);
@@ -808,10 +808,13 @@ class DeliveryOrderQueryService {
             // 3. 交货单行项目映射
             // - SD11 canum=60 / SD02 canum=70：退货交货单按参考行号（销售订单行号）建立映射
             // - SD04：内向交货单按 ReferenceSDDocument（采购订单号）建立映射
+            // 采购订单号/行号键归一化：单号 10 位补零，行号取后 5 位补零（与 SAP NUMC 口径一致）
+            const normPoKey = (po, poItem) =>
+                `${String(po || '').padStart(10, '0')}-${String(poItem || '').slice(-5).padStart(5, '0')}`;
             const inboundByPO = new Map();
             const outboundByRefItem = new Map();
             (deliveryItems || []).forEach(item => {
-                if (zrfcid === 'SD11' || zrfcid === 'SD02') {
+                if (isReturnsDelivery) {
                     const refItem = String(item.ReferenceSDDocumentItem || '').padStart(6, '0');
                     if (refItem && !outboundByRefItem.has(refItem)) {
                         outboundByRefItem.set(refItem, item);
@@ -820,7 +823,7 @@ class DeliveryOrderQueryService {
                     const po = item.ReferenceSDDocument;
                     const poItem = item.ReferenceSDDocumentItem;
                     if (po) {
-                        const key = `${po}-${poItem}`;
+                        const key = normPoKey(po, poItem);
                         if (!inboundByPO.has(key)) {
                             inboundByPO.set(key, []);
                         }
@@ -838,7 +841,7 @@ class DeliveryOrderQueryService {
 
                 let setData;
 
-                if (zrfcid === 'SD11' || zrfcid === 'SD02') {
+                if (isReturnsDelivery) {
                     // SD11 60 / SD02 70：按参考销售订单行号匹配退货交货单行项目，回写对外（退货）交货单
                     const sapItem = outboundByRefItem.get(String(biz.SalesOrderItem || '').padStart(6, '0'));
                     if (!sapItem) {
@@ -859,8 +862,8 @@ class DeliveryOrderQueryService {
                         continue;
                     }
 
-                    // 通过采购订单号+行号匹配内向交货单行项目
-                    const matchedItems = inboundByPO.get(`${poNo}-${poItem}`) || inboundByPO.get(`${poNo}-undefined`) || [];
+                    // 通过采购订单号+行号匹配内向交货单行项目（键两侧同一归一化口径）
+                    const matchedItems = inboundByPO.get(normPoKey(poNo, poItem)) || [];
                     const matchedInbound = matchedItems[0];
 
                     if (!matchedInbound) {

@@ -116,23 +116,26 @@ class SalesOrderQueryService {
                     console.log('找到销售订单:', salesOrderNumber);
                     console.log('销售订单行项目数量:', salesOrderItems.length);
 
-                    // 更新 PISalesOrderRel 表
-                    if (zrfcid === 'SD01' || zrfcid === 'SD06' || zrfcid === 'SD08' || zrfcid === 'SD12') {
-                        if (salesOrderItems.length > 0) {
+                    if (salesOrderItems.length > 0) {
+                        if (zrfcid === 'SD01' || zrfcid === 'SD06' || zrfcid === 'SD08' || zrfcid === 'SD12') {
+                            // 更新 PISalesOrderRel 表
                             await this.updatePISalesOrderRel(purchaseOrderByCustomer, salesOrderItems, zrfcid, canum);
+                        } else if (zrfcid === 'SD04' || zrfcid === 'SD11') {
+                            // SD04 / SD11：更新 SDDocRel 的公司间销售订单号/行号
+                            await this.updateSDDocRel(salesOrderNumber, salesOrderItems, zrfcid, canum);
                         }
+                    }
 
-                        // 校验：前序单据行必须全部匹配到销售订单号，存在未匹配的行则报错
-                        const { total, unmatched } = await this.findUnmatchedPrecedingLines(zrfcid, canum);
-                        if (unmatched.length > 0) {
-                            const detail = unmatched.map(line => `${line.PurchaseOrder}-${line.PurchaseOrderItem}`).join(', ');
-                            console.error(`[SalesOrderQueryService] 前序单据共 ${total} 行，其中 ${unmatched.length} 行未匹配到销售订单号: ${detail}`);
-                            return {
-                                code: 'E',
-                                message: `前序单据共 ${total} 行，其中 ${unmatched.length} 行未匹配到销售订单号: ${detail}`,
-                                objkey: ''
-                            };
-                        }
+                    // 校验：前序单据行必须全部匹配到销售订单号，存在未匹配的行则报错（所有 zrfcid 都校验）
+                    const { total, unmatched } = await this.findUnmatchedPrecedingLines(zrfcid, canum);
+                    if (unmatched.length > 0) {
+                        const detail = unmatched.map(line => `${line.PurchaseOrder}-${line.PurchaseOrderItem}`).join(', ');
+                        console.error(`[SalesOrderQueryService] 前序单据共 ${total} 行，其中 ${unmatched.length} 行未匹配到销售订单号: ${detail}`);
+                        return {
+                            code: 'E',
+                            message: `前序单据共 ${total} 行，其中 ${unmatched.length} 行未匹配到销售订单号: ${detail}`,
+                            objkey: ''
+                        };
                     }
 
                     return {
@@ -223,6 +226,67 @@ class SalesOrderQueryService {
             }
         } catch (error) {
             console.error('更新 PISalesOrderRel 失败:', error);
+        }
+    }
+
+    /**
+     * SD04 / SD11：更新 SDDocRel 的 InterCompanySalesOrder / InterCompanySalesOrderItem
+     * 通过 UnderlyingPurchaseOrderItem 匹配 SDDocRel 的 InterCompanyPurchaseOrderItem
+     */
+    async updateSDDocRel(salesOrderNumber, salesOrderItems, zrfcid, canum) {
+        try {
+            const SDDocRel = cds.entities['com.sap.zictm.SDDocRel'];
+            const { UPDATE, SELECT } = cds.ql;
+
+            // 收集所有需要更新的行项目
+            const updatePairs = salesOrderItems
+                .filter(item => item.UnderlyingPurchaseOrderItem)
+                .map(item => ({
+                    interCompanyPurchaseOrderItem: String(item.UnderlyingPurchaseOrderItem).padStart(5, '0'),
+                    interCompanySalesOrderItem: String(item.SalesOrderItem).padStart(5, '0')
+                }));
+
+            if (updatePairs.length === 0) {
+                console.warn('[SalesOrderQueryService.updateSDDocRel] 无 UnderlyingPurchaseOrderItem 的行项目，跳过');
+                return;
+            }
+
+            // 查询当前流程下 SDDocRel 中有 InterCompanyPurchaseOrderItem 的记录
+            const existingRows = await cds.run(
+                SELECT.from(SDDocRel)
+                    .columns('SalesOrder', 'SalesOrderItem', 'InterCompanyPurchaseOrderItem')
+                    .where({ zrfc_logid: this.zrfcLogid })
+                    .and({ InterCompanyPurchaseOrderItem: { in: updatePairs.map(p => p.interCompanyPurchaseOrderItem) } })
+            );
+
+            const pairMap = new Map(updatePairs.map(p => [p.interCompanyPurchaseOrderItem, p.interCompanySalesOrderItem]));
+
+            let updatedCount = 0;
+            for (const row of existingRows) {
+                const key = row.InterCompanyPurchaseOrderItem;
+                if (pairMap.has(key)) {
+                    const affectedRows = await cds.run(
+                        UPDATE(SDDocRel)
+                            .set({
+                                InterCompanySalesOrder: salesOrderNumber,
+                                InterCompanySalesOrderItem: pairMap.get(key)
+                            })
+                            .where({
+                                SalesOrder: row.SalesOrder,
+                                SalesOrderItem: row.SalesOrderItem
+                            })
+                    );
+                    if (affectedRows > 0) {
+                        updatedCount++;
+                    }
+                    console.log(`[SalesOrderQueryService.updateSDDocRel] 更新 SDDocRel: SalesOrder=${row.SalesOrder}, SalesOrderItem=${row.SalesOrderItem}, InterCompanyPurchaseOrderItem=${key} -> InterCompanySalesOrder=${salesOrderNumber}, InterCompanySalesOrderItem=${pairMap.get(key)}`);
+                }
+            }
+
+            console.log(`[SalesOrderQueryService.updateSDDocRel] 更新完成, 共 ${updatedCount} 条`);
+
+        } catch (error) {
+            console.error('[SalesOrderQueryService.updateSDDocRel] 更新失败:', error);
         }
     }
 

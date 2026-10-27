@@ -201,6 +201,8 @@ entity SDDocRel {
     ExternalSalesOrderItem           : String(6) @title: '对外销售订单行号';      // 对外销售订单行号
     InterCompanyPurchaseOrder        : String(10) @title: '公司间采购订单号';     // 公司间采购订单号
     InterCompanyPurchaseOrderItem    : String(5) @title: '公司间采购订单行号';    // 公司间采购订单行号
+    InterCompanySalesOrder           : String(10) @title: '公司间销售订单号';     // 公司间销售订单号
+    InterCompanySalesOrderItem       : String(5) @title: '公司间销售订单行号';    // 公司间销售订单行号
     InterCompanyOutboundDelivery     : String(10) @title: '公司间外向交货单号';   // 公司间外向交货单号
     InterCompanyOutboundDeliveryItem : String(6) @title: '公司间外向交货单行号';  // 公司间外向交货单行号
     InterCompanyInboundDelivery      : String(10) @title: '公司间内向交货单号';   // 公司间内向交货单号
