@@ -104,6 +104,7 @@ class SalesOrderAsyncResultService {
                     switch (zrfcid) {
                         case 'SD05':
                         case 'SD06':
+                        case 'SD12':
                             await this.updatePISalesOrderRel(salesOrder, zrfcLogid, zrfcid, responseData);
                             break;
                         case 'SD02':

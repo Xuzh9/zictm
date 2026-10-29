@@ -355,6 +355,7 @@ class DeliveryOrderCreateService {
         if (salesOrders.length > 0 && salesOrderItems.length > 0) {
             const relRows = await cds.run(
                 SELECT.from(SDDocRel).where({
+                    zrfc_logid: this.zrfcLogid,
                     SalesOrder: { in: salesOrders },
                     SalesOrderItem: { in: salesOrderItems }
                 })
@@ -382,11 +383,11 @@ class DeliveryOrderCreateService {
             } else if (zrfcid === 'SD02' || (zrfcid === 'SD04' && canum === 150)) {
                 // SDDocRel：对外销售订单行号
                 const relRow = sdDocRelMap.get(`${item.SalesOrder}-${item.SalesOrderItem}`);
-                referenceItem = relRow.ExternalSalesOrderItem;                
+                referenceItem = relRow?.ExternalSalesOrderItem;
             } else if (zrfcid === 'SD07') {
                 referenceItem = item.SalesOrderItem;
             } else if (zrfcid === 'SD10') {
-                referenceItem = item.PurchaseOrderItem1;
+                referenceItem = item.PurchaseOrderItem1;    
             } else {
                 referenceItem = item.PIOrderItem;
             }
