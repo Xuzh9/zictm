@@ -327,7 +327,7 @@ class MultiStepProcessor {
                     try {
                         await this.finalizeHeadAndStepLog(
                             zrfcLogid, zrfcid, step.canum, 'E',
-                            lastMessage || '处理失败', lastObjKey, executionAt
+                            lastMessage || '处理失败', lastObjKey, executionAt, id
                         );
                     } catch (finalizeError) {
                         console.error('[MultiStepProcessor] 原子更新失败:', finalizeError.message, ', 尝试兜底...');
@@ -350,7 +350,7 @@ class MultiStepProcessor {
                 try {
                     await this.finalizeHeadAndStepLog(
                         zrfcLogid, zrfcid, lastStepCanum, 'S',
-                        lastMessage || '处理成功', lastObjKey, executionAt
+                        lastMessage || '处理成功', lastObjKey, executionAt, id
                     );
                 } catch (finalizeError) {
                     console.error('[MultiStepProcessor.processWithLogId] 原子更新失败:', finalizeError.message, ', 尝试兜底...');
@@ -379,7 +379,7 @@ class MultiStepProcessor {
             try {
                 await this.finalizeHeadAndStepLog(
                     zrfcLogid, zrfcid, firstStepCanum, 'E',
-                    errorMessage, lastObjKey, new Date()
+                    errorMessage, lastObjKey, new Date(), id
                 );
                 console.log(`[MultiStepProcessor.processWithLogId] 错误原子更新成功, zrfcLogid: ${zrfcLogid}`);
             } catch (finalizeError) {
@@ -574,20 +574,25 @@ class MultiStepProcessor {
      * @param {string} message - 消息
      * @param {string} objkey - 对象号
      * @param {Date} executionAt - 执行时间
+     * @param {string} id - ApiInputLog 的 ID（重推时同步到抬头日志，可选）
      */
-    async finalizeHeadAndStepLog(zrfcLogid, zrfcid, canum, code, message, objkey, executionAt) {
+    async finalizeHeadAndStepLog(zrfcLogid, zrfcid, canum, code, message, objkey, executionAt, id = null) {
         const MultistepHeadLog = cds.entities['com.sap.zictm.MultistepHeadLog'];
         const MultistepLog = cds.entities['com.sap.zictm.MultistepLog'];
         
         await cds.tx(async (tx) => {
-            // 1. 更新抬头日志
+            // 1. 更新抬头日志（重推时同步最新接口入参ID，id 为空则保留原值）
+            const headUpdate = {
+                code: code,
+                message: message ? message.substring(0, 500) : '',
+                lastExecutionAt: executionAt
+            };
+            if (id) {
+                headUpdate.id = id;
+            }
             await tx.run(
                 UPDATE(MultistepHeadLog)
-                    .set({ 
-                        code: code, 
-                        message: message ? message.substring(0, 500) : '', 
-                        lastExecutionAt: executionAt 
-                    })
+                    .set(headUpdate)
                     .where({ zrfc_logid: zrfcLogid })
             );
             
@@ -628,14 +633,18 @@ class MultiStepProcessor {
             );
             
             if (existingHeadLog) {
-                // 更新现有记录
+                // 更新现有记录（重推时同步最新接口入参ID，id 为空则保留原值）
+                const updateData = {
+                    code: code,
+                    message: message ? message.substring(0, 500) : '',
+                    lastExecutionAt: executionAt
+                };
+                if (id) {
+                    updateData.id = id;
+                }
                 await currentTx.run(
                     UPDATE(MultistepHeadLog)
-                        .set({
-                            code: code,
-                            message: message ? message.substring(0, 500) : '',
-                            lastExecutionAt: executionAt
-                        })
+                        .set(updateData)
                         .where({ zrfc_logid: zrfcLogid })
                 );
             } else {

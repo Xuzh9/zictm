@@ -364,15 +364,15 @@ class PurchaseOrderCreateService {
                 }
             }
 
-            // 销售订单行项目类别为 CBLN/CBXN/CRLN/CRXN（服务类）时，净价取物料主数据评估视图标准价，价格单位取 PriceUnitQty
-            if (itemTypeOrCategory === 'CBLN' || itemTypeOrCategory === 'CBXN' || itemTypeOrCategory === 'CRLN' || itemTypeOrCategory === 'CRXN') {
+            // 销售订单行项目类别为 CBLN/CBXN/CRLN/CRXN/RBLN（服务类）时，净价取物料主数据评估视图标准价，价格单位取 PriceUnitQty
+            if (itemTypeOrCategory === 'CBLN' || itemTypeOrCategory === 'CBXN' || itemTypeOrCategory === 'CRLN' || itemTypeOrCategory === 'CRXN' || itemTypeOrCategory === 'RBLN') {
                 const valuationArea = isReturn ? (mptStepConfig?.umwrk || "") : (mptStepConfig?.lifnr || "");
                 const valuation = await this.getMaterialValuation(material, valuationArea);
                 if (valuation) {
                     netPriceAmount = valuation.standardPrice;
                     priceUnitQty = valuation.priceUnitQty;
                     conditionCurrency = "CNY";
-                    console.log(`[PurchaseOrderService] CBLN/CBXN/CRLN/CRXN 行使用物料标准价: material=${material}, ValuationArea=${valuationArea}, StandardPrice=${netPriceAmount}, PriceUnitQty=${priceUnitQty}`);
+                    console.log(`[PurchaseOrderService] CBLN/CBXN/CRLN/CRXN/RBLN 行使用物料标准价: material=${material}, ValuationArea=${valuationArea}, StandardPrice=${netPriceAmount}, PriceUnitQty=${priceUnitQty}`);
                 }
             }
 

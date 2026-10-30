@@ -162,7 +162,9 @@ class DeliveryOrderQueryService {
     }
 
     /**
-     * 判断业务表数据是否存在 CBXN 行项目（项目类别 SalesOrderItemCategory = CBXN）
+     * 判断业务表数据是否存在指定行项目类别（CBXN / RENV / RVNV 等）
+     * 业务表行项目类别字段名不统一：OutboundDelivery 为 SalesOrderItemType，
+     * SalesOrderCreate / SalesOrderChange 为 SalesOrderItemCategory
      */
     async hasCbxnItem(zrfcLogid, zrfcid) {
         try {
@@ -175,10 +177,22 @@ class DeliveryOrderQueryService {
             const entity = cds.entities[`com.sap.zictm.${config.businessTable1}`];
             if (!entity) return false;
 
+            // 按业务表实际字段名取行项目类别字段
+            const elements = entity.elements || {};
+            const categoryField = elements['SalesOrderItemCategory'] ? 'SalesOrderItemCategory'
+                : elements['SalesOrderItemType'] ? 'SalesOrderItemType'
+                    : null;
+
+            if (!categoryField) {
+                console.warn(`[DeliveryOrderQueryService.hasCbxnItem] 业务表 ${config.businessTable1} 无行项目类别字段，跳过`);
+                return false;
+            }
+
             const rows = await cds.run(
                 SELECT.one.from(entity)
-                    .columns(['SalesOrderItemCategory'])
-                    .where({ zrfc_logid: zrfcLogid, SalesOrderItemCategory: 'CBXN' })
+                    .columns([categoryField])
+                    .where({ zrfc_logid: zrfcLogid })
+                    .and({ [categoryField]: { in: ['CBXN', 'RENV', 'RNVN', 'RBPN', 'RBLN'] } })
             );
             return !!rows;
         } catch (error) {

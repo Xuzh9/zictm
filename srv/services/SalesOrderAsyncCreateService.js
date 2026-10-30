@@ -220,6 +220,8 @@ class SalesOrderAsyncCreateService {
 
     async getProductBaseUnit(productId) {
         try {
+            // 去除前后空格，避免上游数据带空格导致主数据查询不到
+            productId = String(productId || '').trim();
             if (!productId) {
                 throw new Error('物料编号为空');
             }
@@ -245,9 +247,13 @@ class SalesOrderAsyncCreateService {
 
             if (result.status >= 200 && result.status < 300) {
                 const responseData = typeof result.data === 'string' ? JSON.parse(result.data) : result.data;
-                const baseUnit = responseData?.d?.results?.[0]?.BaseUnit;
+                const productResults = responseData?.d?.results || [];
+                if (productResults.length === 0) {
+                    throw new Error(`物料 ${productId} 在产品主数据中不存在`);
+                }
+                const baseUnit = productResults[0].BaseUnit;
                 if (!baseUnit) {
-                    throw new Error(`物料 ${productId} 未找到基础单位`);
+                    throw new Error(`物料 ${productId} 未维护基础单位`);
                 }
                 // 转换单位为 ISO 码
                 let unit;
@@ -373,7 +379,7 @@ class SalesOrderAsyncCreateService {
             const itemCategory = apiConfig.itemCategory;
 
             // 单位：优先业务表单位，没有则查物料主数据基本单位
-            let unit = item.RequestedQuantityUnit;
+            let unit = String(item.RequestedQuantityUnit || '').trim();
             if (!unit) {
                 const productId = (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06' || zrfcid === 'SD12') ? (item.Material || "") : (item.Product || "");
                 unit = await this.getProductBaseUnit(productId);
@@ -416,7 +422,7 @@ class SalesOrderAsyncCreateService {
             }
 
             const itemData = {
-                Product: (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06' || zrfcid === 'SD12') ? (item.Material || "") : (item.Product || ""),
+                Product: String((zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06' || zrfcid === 'SD12') ? (item.Material || "") : (item.Product || "")).trim(),
                 RequestedQuantity: parseFloat(item.RequestedQuantity) || 0,
                 RequestedQuantityISOUnit: unit || "",
                 Plant: plantValue || "",

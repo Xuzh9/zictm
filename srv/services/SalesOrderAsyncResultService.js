@@ -243,8 +243,8 @@ class SalesOrderAsyncResultService {
             let insertedCount = 0;
 
             for (const item of businessData) {
-                const rawMaterial = (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') 
-                    ? (item.Material || "") 
+                const rawMaterial = (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06' || zrfcid === 'SD12')
+                    ? (item.Material || "")
                     : (item.Product || "");
                 const material = this.normalizeMaterial(rawMaterial);
                 
@@ -289,6 +289,8 @@ class SalesOrderAsyncResultService {
                         console.log('[SalesOrderAsyncResultService.updatePISalesOrderRel] 插入结果:', insertResult);
                         insertedCount++;
                     }
+                } else {
+                    console.warn(`[SalesOrderAsyncResultService.updatePISalesOrderRel] 业务数据 PIOrder/PIOrderItem 为空，跳过, PIOrder: ${piOrder}, PIOrderItem: ${piOrderItem}, 物料号: ${material}`);
                 }
             }
 

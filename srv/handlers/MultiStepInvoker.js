@@ -66,7 +66,10 @@ class MultiStepInvoker {
                 console.log('[MultiStepInvoker.process] 发现已存在的记录，先更新业务表数据再执行重推, existingZrfcLogid:', existingZrfcLogid);
                 zrfcLogid = existingZrfcLogid;
                 isRetry = true;
-                
+
+                // 写入接口入参与多步日志关系表
+                await this.insertApiMultistepRel(id, zrfcLogid);
+
                 // 更新业务表数据（覆盖更新）
                 await this.updateBusinessDataByConfig(processConfig, businessTable1, businessTable2, businessTable3, zrfcid, zrfcLogid, zdfjy);
                 
@@ -94,7 +97,10 @@ class MultiStepInvoker {
                     result.message = prepareResult.message;
                     return result;
                 }
-                
+
+                // 写入接口入参与多步日志关系表
+                await this.insertApiMultistepRel(id, zrfcLogid);
+
                 // 前置数据保存成功 → 回写 ApiInputLog 为 S → 返回给外围系统
                 if (id) {
                     await ApiInputLogHelper.updateApiInputLog(id, 'S', prepareResult.message);
@@ -207,6 +213,34 @@ class MultiStepInvoker {
     }
 
     /**
+     * 写入接口入参与多步日志关系表（ApiInputLog.id ↔ zrfc_logid，多个入参ID对应一个多步ID）
+     * 幂等：关系已存在时不重复写入，避免同一请求重复提交触发主键冲突
+     * @param {string} id - ApiInputLog 的 ID
+     * @param {string} zrfcLogid - 多步日志 ID
+     */
+    async insertApiMultistepRel(id, zrfcLogid) {
+        if (!id || !zrfcLogid) return;
+        try {
+            const ApiMultistepREL = cds.entities['com.sap.zictm.ApiMultistepREL'];
+            const existing = await cds.run(
+                SELECT.one.from(ApiMultistepREL).where({ id: id, zrfc_logid: zrfcLogid })
+            );
+            if (existing) {
+                console.log(`[MultiStepInvoker.insertApiMultistepRel] 关系已存在，跳过写入, id: ${id}, zrfc_logid: ${zrfcLogid}`);
+                return;
+            }
+
+            await cds.run(
+                INSERT.into(ApiMultistepREL).entries({ id: id, zrfc_logid: zrfcLogid })
+            );
+            console.log(`[MultiStepInvoker.insertApiMultistepRel] 关系写入成功, id: ${id}, zrfc_logid: ${zrfcLogid}`);
+        } catch (error) {
+            // 关系表写入失败不阻断主流程
+            console.error('[MultiStepInvoker.insertApiMultistepRel] 关系写入失败:', error.message);
+        }
+    }
+
+    /**
      * 异步执行多步处理
      * @param {string} zrfcid - 业务流程ID
      * @param {string} zrfcLogid - 日志ID
@@ -243,7 +277,7 @@ class MultiStepInvoker {
                 try {
                     await this.processor.finalizeHeadAndStepLog(
                         zrfcLogid, zrfcid, firstStepCanum, 'E',
-                        errorMessage, '', new Date()
+                        errorMessage, '', new Date(), id
                     );
                     console.log(`[MultiStepInvoker.executeAsync] 异步错误原子更新成功, zrfcLogid: ${zrfcLogid}`);
                 } catch (finalizeError) {

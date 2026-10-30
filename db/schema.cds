@@ -45,6 +45,12 @@ entity ApiInputLog {
     executionAt    : Timestamp @title: '执行时间';      // 执行时间
 }
 
+// 接口入参与多步日志关系表
+entity ApiMultistepREL {
+    key id         : UUID @title: 'ID';                // ID
+    key zrfc_logid : UUID @title: '多步ID';           // 多步ID
+
+}
 //多步执行日志抬头表
 entity MultistepHeadLog {
     key zrfc_logid      : UUID @title: '多步ID';           // 多步ID
