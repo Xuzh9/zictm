@@ -39,6 +39,18 @@ class RetryHandler {
             console.log('[RetryHandler.retry] 失败步骤数:', failedSteps.length);
             
             if (failedSteps.length === 0) {
+                // 没有失败步骤：可能是头表残留为 E 但所有步骤均已成功（如执行中断导致头表未更新为 S）
+                // 校验所有配置步骤是否都已有成功日志，若是则直接修正头表为 S 并返回成功
+                const allStepsCheck = await this.checkAllStepsSucceeded(zrfcLogid);
+                if (allStepsCheck.allSucceeded) {
+                    console.log('[RetryHandler.retry] 所有步骤均已成功，直接修正头表为 S, zrfcLogid:', zrfcLogid);
+                    await this.markHeadLogSucceeded(zrfcLogid, allStepsCheck.zrfcid, id, allStepsCheck.lastMessage);
+                    return {
+                        code: 'S',
+                        message: '所有步骤均已成功，无需重推',
+                        zrfcLogid
+                    };
+                }
                 // 没有失败步骤，返回错误（包含日志ID）
                 throw new Error(`日志ID${zrfcLogid}没有失败的步骤，无法重推`);
             }
@@ -196,28 +208,108 @@ class RetryHandler {
     }
 
     /**
-     * 获取失败的步骤（包括状态为 E、P、空或空字符串的步骤）
+     * 获取失败的步骤
+     * 包括：状态为 E、P、空或空字符串的步骤；以及配置中存在但没有任何日志的步骤（从未执行，如流程中断）
      * @param {string} zrfcLogid - 多步ID
      * @returns {Promise<Array>} 失败步骤列表
      */
     async getFailedSteps(zrfcLogid) {
         const MultistepLog = cds.entities['com.sap.zictm.MultistepLog'];
-        
-        // 调试：先查询所有步骤，看看状态值是什么
+
         const allSteps = await cds.run(
             SELECT.from(MultistepLog).where({ zrfc_logid: zrfcLogid })
         );
         console.log('[RetryHandler.getFailedSteps] 所有步骤:', JSON.stringify(allSteps));
-        
-        // 获取状态为 E、P 或空的步骤（均可重推）
-        const result = await cds.run(
-            SELECT.from(MultistepLog).where({ 
-                zrfc_logid: zrfcLogid, 
-                code: { in: ['E', 'P', null, ''] } 
-            })
-        );
 
-        return result;
+        // 状态为 E、P 或空的步骤（均可重推）
+        const failedSteps = (allSteps || []).filter(s => ['E', 'P', null, ''].includes(s.code));
+
+        // 补充：配置中存在但没有日志的步骤（从未执行），也视为失败步骤
+        if (allSteps && allSteps.length > 0) {
+            const zrfcid = allSteps[0].zrfcid;
+            const configuredSteps = await this.getSteps(zrfcid);
+            const loggedCanums = new Set(allSteps.map(s => String(s.canum)));
+            for (const step of configuredSteps || []) {
+                if (!loggedCanums.has(String(step.canum))) {
+                    console.log('[RetryHandler.getFailedSteps] 步骤', step.canum, '无日志（从未执行），加入重推范围');
+                    failedSteps.push({
+                        canum: step.canum,
+                        zrfcid: step.zrfcid,
+                        code: null,
+                        description: step.description
+                    });
+                }
+            }
+        }
+
+        return failedSteps;
+    }
+
+    /**
+     * 校验该多步ID下所有配置步骤是否都已有成功日志
+     * 必须比对 StepConfig 中配置的全部步骤，防止"部分步骤从未执行"被误判为成功
+     * @param {string} zrfcLogid - 多步ID
+     * @returns {Promise<Object>} { allSucceeded, zrfcid, lastMessage }
+     */
+    async checkAllStepsSucceeded(zrfcLogid) {
+        const MultistepLog = cds.entities['com.sap.zictm.MultistepLog'];
+        const logs = await cds.run(
+            SELECT.from(MultistepLog).where({ zrfc_logid: zrfcLogid })
+        );
+        if (!logs || logs.length === 0) {
+            return { allSucceeded: false };
+        }
+
+        const zrfcid = logs[0].zrfcid;
+        const steps = await this.getSteps(zrfcid);
+        if (!steps || steps.length === 0) {
+            return { allSucceeded: false };
+        }
+
+        const logMap = {};
+        for (const log of logs) {
+            logMap[String(log.canum)] = log;
+        }
+
+        const allSucceeded = steps.every(step => {
+            const log = logMap[String(step.canum)];
+            return log && (log.code === 'S' || log.code === 's');
+        });
+
+        // 取最后一步的消息，用于修正头表（与正常成功收尾口径一致）
+        let lastMessage = '';
+        if (allSucceeded) {
+            const sortedSteps = [...steps].sort((a, b) => parseInt(a.canum) - parseInt(b.canum));
+            const lastLog = logMap[String(sortedSteps[sortedSteps.length - 1].canum)];
+            lastMessage = lastLog?.message || '';
+        }
+
+        return { allSucceeded, zrfcid, lastMessage };
+    }
+
+    /**
+     * 修正头表为成功状态（用于步骤全S但头表残留E的场景）
+     * @param {string} zrfcLogid - 多步ID
+     * @param {string} zrfcid - 业务流程ID
+     * @param {string} id - ApiInputLog 的 ID（可选，有值则同步）
+     * @param {string} lastMessage - 最后一步的消息
+     */
+    async markHeadLogSucceeded(zrfcLogid, zrfcid, id, lastMessage) {
+        const MultistepHeadLog = cds.entities['com.sap.zictm.MultistepHeadLog'];
+        const updateData = {
+            code: 'S',
+            message: lastMessage || '处理成功',
+            lastExecutionAt: new Date()
+        };
+        if (id) {
+            updateData.id = id;
+        }
+        await cds.run(
+            UPDATE(MultistepHeadLog)
+                .set(updateData)
+                .where({ zrfc_logid: zrfcLogid })
+        );
+        console.log('[RetryHandler.markHeadLogSucceeded] 头表已修正为 S, zrfcLogid:', zrfcLogid);
     }
 
     /**

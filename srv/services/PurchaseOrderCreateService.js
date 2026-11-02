@@ -464,11 +464,6 @@ class PurchaseOrderCreateService {
             _PurchaseOrderItem: purchaseOrderItems
         };
 
-        // 只有当日期有值时才添加 PurchaseOrderDate 字段
-        if (mainData.ConfirmedDeliveryDate) {
-            purchaseOrderData.PurchaseOrderDate = mainData.ConfirmedDeliveryDate;
-        }
-
         // 如果存在 MPTStepConfig，应用主数据字段映射
         if (mptStepConfig && mptStepConfig.mainDataMapping) {
             try {
