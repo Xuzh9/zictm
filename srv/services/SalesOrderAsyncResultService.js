@@ -225,12 +225,19 @@ class SalesOrderAsyncResultService {
                 return;
             }
 
-            const sapItems = responseData?._Item || responseData?.to_Item?.results || [];
+            // 异步监控接口返回的 _Item 通常不带行项目（或只含部分行，例如服务类物料行缺失），
+            // 因此统一按销售订单号回查行项目，保证业务表每一行都能匹配到
+            let sapItems = await this.getSalesOrderItemsFromAPI(salesOrder);
+            if (!sapItems || sapItems.length === 0) {
+                sapItems = this.extractItemsFromResponse(responseData);
+                console.log('[SalesOrderAsyncResultService.updatePISalesOrderRel] 回查行项目为空，改用异步返回数据, 行数:', sapItems.length);
+            }
+            console.log(`[SalesOrderAsyncResultService.updatePISalesOrderRel] SAP 行项目数: ${sapItems.length}, 物料: ${sapItems.map(i => i.Product || i.Material || '').join(',')}, zrfcid: ${zrfcid}, zrfcLogid: ${zrfcLogid}`);
             
             // SAP 行项目按归一化物料号做一对一映射（业务上同一销售订单不会同物料多行）
             const sapItemMap = new Map();
             sapItems.forEach(item => {
-                const normalizedKey = this.normalizeMaterial(item.Product || item.Material);
+                const normalizedKey = this.normalizeMaterial(item.Product || item.Material || '');
                 if (normalizedKey && !sapItemMap.has(normalizedKey)) {
                     sapItemMap.set(normalizedKey, item);
                 }
@@ -248,6 +255,8 @@ class SalesOrderAsyncResultService {
                     : (item.Product || "");
                 const material = this.normalizeMaterial(rawMaterial);
                 
+                console.log(`[SalesOrderAsyncResultService.updatePISalesOrderRel] 业务行: PIOrder='${item.PIOrder}', PIOrderItem='${item.PIOrderItem}', 原始物料='${rawMaterial}', 归一化='${material}'`);
+
                 if (!material) {
                     console.warn('[SalesOrderAsyncResultService.updatePISalesOrderRel] 业务数据物料号为空');
                     continue;
@@ -263,19 +272,23 @@ class SalesOrderAsyncResultService {
                 const piOrder = item.PIOrder || '';
                 const piOrderItem = item.PIOrderItem || '';
                 
+                console.log(`[SalesOrderAsyncResultService.updatePISalesOrderRel] 匹配成功: 物料=${material}, SAP行号=${salesOrderItem}, piOrder=${piOrder}, piOrderItem=${piOrderItem}`);
+
                 if (piOrder && piOrderItem && salesOrder) {
+                    // SD12 写 SalesOrder/SalesOrderItem（对外销售订单字段），同时更新 zrfc_logid 归属
+                    const setData = { SalesOrder: salesOrder, SalesOrderItem: String(salesOrderItem).padStart(6, '0'), zrfc_logid: zrfcLogid };
+                    const whereData = { PIOrder: piOrder, PIOrderItem: piOrderItem };
+                    console.log(`[SalesOrderAsyncResultService.updatePISalesOrderRel] 执行UPDATE: where=${JSON.stringify(whereData)}, set=${JSON.stringify(setData)}`);
                     const updateResult = await cds.run(
-                        UPDATE(PISalesOrderRel)
-                            .set({ SalesOrder: salesOrder, SalesOrderItem: String(salesOrderItem).padStart(6, '0') })
-                            .where({ PIOrder: piOrder, PIOrderItem: piOrderItem })
+                        UPDATE(PISalesOrderRel).set(setData).where(whereData)
                     );
                     
-                    console.log('[SalesOrderAsyncResultService.updatePISalesOrderRel] 更新结果:', updateResult);
+                    console.log('[SalesOrderAsyncResultService.updatePISalesOrderRel] UPDATE结果:', updateResult);
                     
-                    if (updateResult && (typeof updateResult !== 'number' || updateResult > 0)) {
+                    if (this.getAffectedRows(updateResult) > 0) {
                         updatedCount++;
                     } else {
-                        console.log('[SalesOrderAsyncResultService.updatePISalesOrderRel] 未找到记录，执行插入');
+                        console.log('[SalesOrderAsyncResultService.updatePISalesOrderRel] 未找到记录，执行插入, PIOrder=', piOrder, 'PIOrderItem=', piOrderItem);
                         const insertResult = await cds.run(
                             INSERT.into(PISalesOrderRel)
                                 .entries({
@@ -298,6 +311,71 @@ class SalesOrderAsyncResultService {
 
         } catch (error) {
             console.error('[SalesOrderAsyncResultService.updatePISalesOrderRel] 更新失败:', error);
+        }
+    }
+
+    // UPDATE 返回值的受影响行数：HANA 返回 { affectedRows: N }，部分数据库返回数字
+    getAffectedRows(result) {
+        if (typeof result === 'number') return result;
+        if (!result) return 0;
+        if (typeof result.affectedRows === 'number') return result.affectedRows;
+        // 返回对象但无 affectedRows 时视为更新成功，兼容不同数据库驱动
+        return 1;
+    }
+
+    // 从异步监控接口返回中提取行项目（OData V4：_Item；V2：to_Item.results）
+    extractItemsFromResponse(responseData) {
+        const v4Items = responseData?._Item;
+        if (Array.isArray(v4Items)) return v4Items;
+        if (Array.isArray(v4Items?.results)) return v4Items.results;
+
+        const v2Items = responseData?.to_Item;
+        if (Array.isArray(v2Items?.results)) return v2Items.results;
+        if (Array.isArray(v2Items)) return v2Items;
+
+        return [];
+    }
+
+    /**
+     * 按销售订单号回查行项目
+     * 异步监控接口返回的 _Item 常常不带行项目或只含部分行（服务类物料行缺失），
+     * 这里直接查 V2 接口 to_Item，拿到全部行项目
+     */
+    async getSalesOrderItemsFromAPI(salesOrderNumber) {
+        if (!salesOrderNumber) return [];
+        try {
+            const itemUrl = `/sap/opu/odata/sap/API_SALES_ORDER_SRV/A_SalesOrder('${salesOrderNumber}')/to_Item`;
+            console.log('[SalesOrderAsyncResultService] 回查销售订单行项目 URL:', itemUrl);
+
+            const response = await this.commonUtils.executeHttpRequestWithRetry(
+                {
+                    destinationName: this.commonUtils.getDestinationName()
+                },
+                {
+                    method: 'GET',
+                    url: itemUrl,
+                    headers: {
+                        'Accept': 'application/json',
+                        'sap-language': 'ZH'
+                    },
+                    validateStatus: function (status) {
+                        return true;
+                    }
+                }
+            );
+
+            if (response.status < 200 || response.status >= 300) {
+                console.error(`[SalesOrderAsyncResultService] 获取销售订单 ${salesOrderNumber} 行项目失败，状态码: ${response.status}，响应: ${JSON.stringify(response.data).substring(0, 500)}`);
+                return [];
+            }
+
+            const data = typeof response.data === 'string' ? JSON.parse(response.data) : response.data;
+            const items = data?.d?.results || [];
+            console.log(`[SalesOrderAsyncResultService] 获取销售订单 ${salesOrderNumber} 行项目 ${items.length} 条`);
+            return items;
+        } catch (error) {
+            console.error('[SalesOrderAsyncResultService] 获取销售订单行项目异常:', error.message);
+            return [];
         }
     }
 
@@ -335,7 +413,12 @@ class SalesOrderAsyncResultService {
             }
 
             // SAP 返回行项目按归一化物料号做一对一映射
-            const sapItems = responseData?._Item || responseData?.to_Item?.results || [];
+            // 同样不依赖异步监控返回的行项目，按销售订单号回查，避免服务类物料行缺失
+            let sapItems = await this.getSalesOrderItemsFromAPI(salesOrder);
+            if (!sapItems || sapItems.length === 0) {
+                sapItems = this.extractItemsFromResponse(responseData);
+            }
+            console.log(`[SalesOrderAsyncResultService.updateSDDocRel] SAP 行项目数: ${sapItems.length}, 物料: ${sapItems.map(i => i.Product || i.Material || '').join(',')}`);
             const sapItemMap = new Map();
             sapItems.forEach(item => {
                 const normalizedKey = this.normalizeMaterial(item.Product || item.Material);
@@ -378,7 +461,7 @@ class SalesOrderAsyncResultService {
                         .where({ SalesOrder: docSalesOrder, SalesOrderItem: docSalesOrderItem })
                 );
 
-                if (updateResult && (typeof updateResult !== 'number' || updateResult > 0)) {
+                if (this.getAffectedRows(updateResult) > 0) {
                     updatedCount++;
                 } else {
                     console.log('[SalesOrderAsyncResultService.updateSDDocRel] 未找到记录，执行插入');
