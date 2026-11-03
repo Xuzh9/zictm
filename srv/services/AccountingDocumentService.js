@@ -8,10 +8,15 @@ const CommonUtils = require('../handlers/CommonUtils');
 // 会计凭证最大行数限制为 999，每行业务数据生成约 2 行会计凭证行项目
 // 因此每批最多处理 490 行业务数据（490 * 2 = 980 < 999）
 const MAX_LINES_PER_DOC = 490;
+
+// 需要将收付款单位替换为 BP 主数据"主体+平台"字段(YY1_FD_ZT_PT_bus)的非资金科目
+const ZT_PT_GL_ACCOUNT = '2221020000';
 class AccountingDocumentService {
     constructor() {
         this.zrfcLogid = null;
         this.commonUtils = new CommonUtils();
+        // 收付款单位 -> BP主数据"主体+平台"(YY1_FD_ZT_PT_bus) 的实例级缓存，避免同批重复查询
+        this.ztPtCache = new Map();
     }
 
     async initService(zrfcLogid, zrfcid, canum) {
@@ -244,6 +249,43 @@ class AccountingDocumentService {
         }
     }
 
+    /**
+     * 查询 BP 主数据获取"主体+平台"字段 (YY1_FD_ZT_PT_bus)
+     * @param {string} businessPartner - 业务伙伴/客户编号，如 SCNB000019
+     * @returns {Promise<string|null>} 主体+平台值；查不到或接口失败返回 null
+     */
+    async getZtPtByBusinessPartner(businessPartner) {
+        if (!businessPartner) return null;
+        if (this.ztPtCache.has(businessPartner)) {
+            return this.ztPtCache.get(businessPartner);
+        }
+        let ztPt = null;
+        try {
+            const result = await this.commonUtils.executeHttpRequestWithRetry(
+                { destinationName: this.commonUtils.getDestinationName() },
+                {
+                    method: 'GET',
+                    url: `/sap/opu/odata/sap/API_BUSINESS_PARTNER/A_BusinessPartner?$filter=BusinessPartner eq '${encodeURIComponent(businessPartner)}'&$select=BusinessPartner,YY1_FD_ZT_PT_bus&$format=json`,
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json',
+                        'sap-language': 'ZH'
+                    }
+                }
+            );
+            const entry = result.data && result.data.d && result.data.d.results && result.data.d.results[0];
+            if (entry && entry.YY1_FD_ZT_PT_bus) {
+                ztPt = String(entry.YY1_FD_ZT_PT_bus).trim();
+            }
+            console.log(`[AccountingDocumentService] 获取主体+平台: ${businessPartner} -> ${ztPt || '(未维护/未找到)'}`);
+        } catch (error) {
+            // 查询失败不阻断流程，降级用原收付款单位
+            console.warn('[AccountingDocumentService] 获取主体+平台失败:', error.message);
+        }
+        this.ztPtCache.set(businessPartner, ztPt);
+        return ztPt;
+    }
+
     async buildSoapRequest(businessDataList) {
         // 构建 SOAP 请求体 - 根据 SAP API Business Hub 官方文档格式
         const firstBusinessData = businessDataList[0];
@@ -258,6 +300,17 @@ class AccountingDocumentService {
         let itemNumber = 1; // 统一的行号（客户行和费用行配对使用）
         let debitCreditCode = ''; // 借贷方变量
         let amount = 0; // 金额变量
+
+        // 行级"主体+平台"解析：
+        // 非资金科目 = 2221020000 的行，用收付款单位查 BP 主数据 YY1_FD_ZT_PT_bus，
+        // 替换该行凭证行项目的"分配"(AssignmentReference)；查不到时降级用原收付款单位
+        for (const item of businessDataList) {
+            if (String(item.generalLedgerAccountNonCash || '') === ZT_PT_GL_ACCOUNT && item.receivingUnit) {
+                item._ztPt = await this.getZtPtByBusinessPartner(item.receivingUnit);
+            } else {
+                item._ztPt = null;
+            }
+        }
 
         // 第一次循环
         for (const item of businessDataList) {
@@ -341,7 +394,8 @@ class AccountingDocumentService {
                         profitCenter = await this.getProfitCenter(item.expenseResponsibleDepartment) || '';
                         assignmentReference = item.expenseResponsibleDepartment;
                     } else if (gl.startsWith('800')|| gl.startsWith('65') || gl.startsWith('2221')) {
-                        assignmentReference = item.receivingUnit;
+                        // 科目2221020000(2221开头)触发时用"主体+平台"
+                        assignmentReference = item._ztPt || item.receivingUnit;
                     }
                     
                     // 设置借贷方变量
@@ -413,7 +467,7 @@ class AccountingDocumentService {
                                 <AmountInTransactionCurrency currencyCode="${item.currency}">${amount}</AmountInTransactionCurrency>
                                 <DebitCreditCode>${debitCreditCode}</DebitCreditCode>
                                 <DocumentItemText>${item.itemRemark}</DocumentItemText>
-                                <AssignmentReference>${item.receivingUnit || ''}</AssignmentReference>
+                                <AssignmentReference>${item._ztPt || item.receivingUnit || ''}</AssignmentReference>
                             </Item>
                         `;
                     }
@@ -434,7 +488,7 @@ class AccountingDocumentService {
                             <AmountInTransactionCurrency currencyCode="${item.currency}">${amount}</AmountInTransactionCurrency>
                             <DebitCreditCode>${debitCreditCode}</DebitCreditCode>
                             <DocumentItemText>${item.itemRemark}</DocumentItemText>
-                            <AssignmentReference>${item.receivingUnit || ''}</AssignmentReference>
+                            <AssignmentReference>${item._ztPt || item.receivingUnit || ''}</AssignmentReference>
                          </Item>
                     `;
                     itemNumber += 1;
