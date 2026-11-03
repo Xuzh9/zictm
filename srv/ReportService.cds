@@ -156,6 +156,7 @@ service ReportService {
         PaymentReceipt.ourBankAccount,
         PaymentReceipt.generalLedgerAccountCash,
         PaymentReceipt.generalLedgerAccountNonCash,
+        PaymentReceipt.MajorExpenseCategory,
         PaymentReceipt.expenseItem,
         PaymentReceipt.itemRemark,
         PaymentReceipt.documentName,
