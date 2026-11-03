@@ -368,6 +368,10 @@ class DeliveryOrderCreateService {
 
         // 构建行项目
         const deliveryItems = [];
+        let skippedCount = 0;
+        // SD07 服务物料行没有 STO（无 RefDocItem），走 PIDeliveryRel/PISalesOrderRel 链取不到 SalesOrderItem，
+        // 需要回查对外销售订单行项目按物料号补全（懒加载，只有出现取不到行号的行时才查）
+        let salesOrderItemMap = null;
         for (const item of businessDataList) {
             // 服务类物料（保费 50199998/运费 50199999）不产生交货单行项目
             if (this.commonUtils.isServiceMaterial(item)) {
@@ -386,6 +390,17 @@ class DeliveryOrderCreateService {
                 referenceItem = relRow?.ExternalSalesOrderItem;
             } else if (zrfcid === 'SD07') {
                 referenceItem = item.SalesOrderItem;
+                if (!referenceItem) {
+                    // 关系表链取不到（典型：服务物料行不产生 STO），回查对外销售订单行项目按物料号补全
+                    if (salesOrderItemMap === null) {
+                        salesOrderItemMap = await this.getSalesOrderItemMap(sourceDocument);
+                    }
+                    const materialKey = this.normalizeMaterial(item.Material || item.Product || '');
+                    referenceItem = salesOrderItemMap.get(materialKey);
+                    if (referenceItem) {
+                        console.log(`[DeliveryOrderCreateService] 回查对外销售订单补全行号: Material=${item.Material || item.Product}, SalesOrderItem=${referenceItem}`);
+                    }
+                }
             } else if (zrfcid === 'SD10') {
                 referenceItem = item.PurchaseOrderItem1;    
             } else {
@@ -394,11 +409,25 @@ class DeliveryOrderCreateService {
             
             // (STO) 使用 5 位数，其他情况使用 6 位数
             const digitCount = (zrfcid === 'SD04' && canum === 60) || (zrfcid === 'SD11' && canum === 70) ? 5 : 6;
-            
+            const referenceDocumentItem = this.padLeft(referenceItem, digitCount, '0');
+
+            // 参考行号为空不能提交（SAP 会报"数据不一致/凭证不存在"）
+            if (!referenceDocumentItem) {
+                console.warn(`[DeliveryOrderCreateService] 行项目缺少参考行号，跳过: Material=${item.Material || item.Product}, PIOrder=${item.PIOrder}, PIOrderItem=${item.PIOrderItem}, SalesOrderItem=${item.SalesOrderItem}, PurchaseOrderItem1=${item.PurchaseOrderItem1}, DeliveryDocumentItem=${item.DeliveryDocumentItem}`);
+                skippedCount++;
+                continue;
+            }
+
             deliveryItems.push({
                 ReferenceSDDocument: sourceDocument,
-                ReferenceSDDocumentItem: this.padLeft(referenceItem, digitCount, '0')
+                ReferenceSDDocumentItem: referenceDocumentItem
             });
+        }
+
+        console.log(`[DeliveryOrderCreateService] 构建交货单行项目: ${deliveryItems.length} 条, 跳过: ${skippedCount} 条, 参考单据: ${sourceDocument}`);
+
+        if (deliveryItems.length === 0) {
+            throw new Error('未构建出任何交货单行项目，请检查业务数据与关系表（PISalesOrderRel/SDDocRel）是否已正确写入');
         }
 
         // 构建基本数据
@@ -600,6 +629,68 @@ class DeliveryOrderCreateService {
         
         // 格式：/Date(timestamp)/
         return `/Date(${dateObj.getTime()})/`;
+    }
+
+    /**
+     * 物料号归一化：去首尾空格、去前导零
+     * @param {string} material - 物料号
+     * @returns {string} 归一化后的物料号
+     */
+    normalizeMaterial(material) {
+        return String(material || '').trim().replace(/^0+/, '');
+    }
+
+    /**
+     * 回查对外销售订单行项目，返回 归一化物料号 -> SalesOrderItem 的映射
+     * 用于 SD07 服务物料行（无 STO、无 RefDocItem，走关系表链取不到行号）补全参考行号
+     * @param {string} salesOrderNumber - 对外销售订单号
+     * @returns {Promise<Map<string, string>>} 物料号到销售订单行号的映射
+     */
+    async getSalesOrderItemMap(salesOrderNumber) {
+        const itemMap = new Map();
+        if (!salesOrderNumber) return itemMap;
+
+        try {
+            const itemUrl = `/sap/opu/odata/sap/API_SALES_ORDER_SRV/A_SalesOrder('${salesOrderNumber}')/to_Item`;
+            console.log('[DeliveryOrderCreateService] 回查对外销售订单行项目 URL:', itemUrl);
+
+            const response = await this.commonUtils.executeHttpRequestWithRetry(
+                {
+                    destinationName: this.commonUtils.getDestinationName()
+                },
+                {
+                    method: 'GET',
+                    url: itemUrl,
+                    headers: {
+                        'Accept': 'application/json',
+                        'sap-language': 'ZH'
+                    },
+                    validateStatus: function (status) {
+                        return true;
+                    }
+                }
+            );
+
+            if (response.status < 200 || response.status >= 300) {
+                console.error(`[DeliveryOrderCreateService] 回查对外销售订单 ${salesOrderNumber} 行项目失败，状态码: ${response.status}，响应: ${JSON.stringify(response.data).substring(0, 500)}`);
+                return itemMap;
+            }
+
+            const data = typeof response.data === 'string' ? JSON.parse(response.data) : response.data;
+            const items = data?.d?.results || [];
+            items.forEach(item => {
+                const key = this.normalizeMaterial(item.Material || item.Product || '');
+                if (key && !itemMap.has(key)) {
+                    itemMap.set(key, item.SalesOrderItem);
+                }
+            });
+
+            console.log(`[DeliveryOrderCreateService] 回查对外销售订单 ${salesOrderNumber} 行项目 ${items.length} 条, 物料: ${items.map(i => i.Material || i.Product || '').join(',')}`);
+            return itemMap;
+        } catch (error) {
+            console.error('[DeliveryOrderCreateService] 回查对外销售订单行项目异常:', error.message);
+            return itemMap;
+        }
     }
 
     /**
