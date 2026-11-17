@@ -1,4 +1,5 @@
 const cds = require('@sap/cds');
+const { SELECT, UPDATE, INSERT } = cds.ql;
 const CommonUtils = require('../handlers/CommonUtils');
 
 class DeliveryOrderQueryService {
@@ -11,6 +12,30 @@ class DeliveryOrderQueryService {
         this.zrfcLogid = zrfcLogid;
         this.zrfcid = zrfcid;
         this.canum = canum;
+    }
+
+    /**
+     * 单据号归一化：NUMC(10)，去空格并补齐前导零
+     * @param {*} value - 原始单据号
+     * @returns {string} 归一化后的单据号
+     */
+    normalizeDocNo(value) {
+        const s = String(value ?? '').trim();
+        if (!s) return '';
+        return s.padStart(10, '0');
+    }
+
+    /**
+     * 行号归一化：去掉前导零后比较
+     * DeliveryActualInfo.RefDocItem 是 6 位（如 000010），PISalesOrderRel.PurchaseOrderItem1 是 5 位（如 00010），
+     * 两侧统一去前导零（000010 / 00010 / 10 → 10），避免位数差异导致匹配失败
+     * @param {*} value - 原始行号
+     * @returns {string} 归一化后的行号
+     */
+    normalizeDocItem(value) {
+        const s = String(value ?? '').trim();
+        if (!s) return '';
+        return s.replace(/^0+/, '') || '0';
     }
 
     async execute(inputData) {
@@ -30,17 +55,14 @@ class DeliveryOrderQueryService {
                 };
             }
 
-            // SD02 canum=70：仅当业务数据中存在 CBXN 行项目（退货收费项目类别）时才查询退货交货单，否则跳过
-            if (zrfcid === 'SD02' && canum === 70) {
-                const hasCbxn = await this.hasCbxnItem(zrfcLogid, zrfcid);
-                if (!hasCbxn) {
-                    console.log('[DeliveryOrderQueryService] SD02 70 业务数据无 CBXN 行项目，步骤跳过');
-                    return {
-                        code: 'S',
-                        message: 'SD02 70 业务数据无 CBXN 行项目，跳过退货交货单查询',
-                        objkey: ''
-                    };
-                }
+            // SD02：仅销售订单类型为 CBRE（退货订单）时才查询退货交货单，否则跳过
+            if (zrfcid === 'SD02' && salesOrderType !== 'CBRE') {
+                console.log(`[DeliveryOrderQueryService] SD02 销售订单类型 ${salesOrderType || '空'} 非 CBRE，步骤跳过`);
+                return {
+                    code: 'S',
+                    message: `SD02 销售订单类型 ${salesOrderType || '空'} 非 CBRE，跳过退货交货单查询`,
+                    objkey: ''
+                };
             }
 
             // 待查询单据号：
@@ -69,18 +91,20 @@ class DeliveryOrderQueryService {
                 }
             }
 
+            // 单据号为空说明上一步未生成交货单，直接跳过
             if (!queryDocument) {
+                console.log(`[DeliveryOrderQueryService] 未找到单据号，步骤跳过，zrfc_logid: ${zrfcLogid}`);
                 return {
-                    code: 'E',
-                    message: `未找到单据号，zrfc_logid: ${zrfcLogid}`,
+                    code: 'S',
+                    message: '未找到单据号，步骤跳过',
                     objkey: ''
                 };
             }
             console.log(`[DeliveryOrderQueryService] 待查询单据号: ${queryDocument}`);
 
-            // SD11 canum=60 / SD02 canum=70：单据号为参考销售订单号，按 ReferenceSDDocument 查询退货交货单行项目
+            // SD11 canum=60 / SD02 canum=31：单据号为参考销售订单号，按 ReferenceSDDocument 查询退货交货单行项目
             // 其他：按供应商交货单号查询内向交货单
-            const queryResult = ((zrfcid === 'SD11' && canum === 60) || (zrfcid === 'SD02' && canum === 70))
+            const queryResult = ((zrfcid === 'SD11' && canum === 60) || (zrfcid === 'SD02' && canum === 31))
                 ? await this.queryReturnsDeliveryByReference(queryDocument)
                 : await this.queryInboundDeliveryByReference(queryDocument);
 
@@ -158,46 +182,6 @@ class DeliveryOrderQueryService {
         } catch (error) {
             console.error('[DeliveryOrderQueryService.getSalesOrderType] 查询失败:', error);
             return null;
-        }
-    }
-
-    /**
-     * 判断业务表数据是否存在指定行项目类别（CBXN / RENV / RVNV 等）
-     * 业务表行项目类别字段名不统一：OutboundDelivery 为 SalesOrderItemType，
-     * SalesOrderCreate / SalesOrderChange 为 SalesOrderItemCategory
-     */
-    async hasCbxnItem(zrfcLogid, zrfcid) {
-        try {
-            const ProcessConfig = cds.entities['com.sap.zictm.ProcessConfig'];
-            const config = await cds.run(
-                SELECT.one.from(ProcessConfig).where({ zrfcid: zrfcid })
-            );
-            if (!config?.businessTable1) return false;
-
-            const entity = cds.entities[`com.sap.zictm.${config.businessTable1}`];
-            if (!entity) return false;
-
-            // 按业务表实际字段名取行项目类别字段
-            const elements = entity.elements || {};
-            const categoryField = elements['SalesOrderItemCategory'] ? 'SalesOrderItemCategory'
-                : elements['SalesOrderItemType'] ? 'SalesOrderItemType'
-                    : null;
-
-            if (!categoryField) {
-                console.warn(`[DeliveryOrderQueryService.hasCbxnItem] 业务表 ${config.businessTable1} 无行项目类别字段，跳过`);
-                return false;
-            }
-
-            const rows = await cds.run(
-                SELECT.one.from(entity)
-                    .columns([categoryField])
-                    .where({ zrfc_logid: zrfcLogid })
-                    .and({ [categoryField]: { in: ['CBXN', 'RENV', 'RNVN', 'RBPN', 'RBLN'] } })
-            );
-            return !!rows;
-        } catch (error) {
-            console.error('[DeliveryOrderQueryService.hasCbxnItem] 查询失败:', error);
-            return false;
         }
     }
 
@@ -433,10 +417,6 @@ class DeliveryOrderQueryService {
             return { result, deliveryItems: responseData?.d?.results || [] };
         };
 
-        // 取货物移动状态（过账状态）
-        const getGoodsMovementStatus = (items) =>
-            items[0]?.GoodsMovementStatus || items[0]?.OverallGoodsMovementStatus || '';
-
         for (let retryCount = 0; retryCount < maxRetries; retryCount++) {
             try {
                 const { result, deliveryItems } = await fetchItems();
@@ -459,35 +439,14 @@ class DeliveryOrderQueryService {
                     }
 
                     const returnsDeliveryDocument = deliveryItems[0]?.DeliveryDocument;
-                    let currentItems = deliveryItems;
-                    let goodsMovementStatus = getGoodsMovementStatus(currentItems);
 
-                    // 过账状态必须为 C（已过账），否则等 2 秒后重读，最多 10 次
-                    for (let checkCount = 1; checkCount <= 10 && goodsMovementStatus !== 'C'; checkCount++) {
-                        console.log(`退货交货单 ${returnsDeliveryDocument} 未过账（货物移动状态: ${goodsMovementStatus || '空'}），2 秒后重读（${checkCount}/10）`);
-                        await new Promise(resolve => setTimeout(resolve, 2000));
-                        const recheck = await fetchItems();
-                        if (recheck.deliveryItems.length > 0) {
-                            currentItems = recheck.deliveryItems;
-                            goodsMovementStatus = getGoodsMovementStatus(currentItems);
-                        }
-                    }
-
-                    if (goodsMovementStatus !== 'C') {
-                        return {
-                            code: 'E',
-                            message: `退货交货单 ${returnsDeliveryDocument} 未过账（货物移动状态: ${goodsMovementStatus || '空'}），重读 10 次后仍未过账，ReferenceSDDocument: ${referenceDocument}`,
-                            objkey: returnsDeliveryDocument || ''
-                        };
-                    }
-
-                    console.log(`退货交货单号: ${returnsDeliveryDocument}, 行项目数量: ${currentItems.length}, 货物移动状态: ${goodsMovementStatus}`);
+                    console.log(`退货交货单号: ${returnsDeliveryDocument}, 行项目数量: ${deliveryItems.length}`);
 
                     return {
                         code: 'S',
                         message: '查询成功',
                         objkey: returnsDeliveryDocument,
-                        deliveryItems: currentItems
+                        deliveryItems: deliveryItems
                     };
                 } else {
                     if (retryCount < maxRetries - 1) {
@@ -550,13 +509,11 @@ class DeliveryOrderQueryService {
                 return;
             }
 
-            // 收集所有需要查询的 RefDocNo 和 RefDocItem（过滤空值）
-            // 注意：PISalesOrderRel 的 PurchaseOrderItem 是5位，需要截取 RefDocItem 后5位来匹配
-            const refDocNoList = [...new Set(validBusinessData.map(item => item.RefDocNo).filter(v => v))];
-            const refDocItemList = [...new Set(validBusinessData.map(item => item.RefDocItem?.slice(-5)).filter(v => v))];
+            // 收集需要查询的 RefDocNo（行号在内存中按归一化后匹配，避免前导零格式差异导致漏匹配）
+            const refDocNoList = [...new Set(validBusinessData.map(item => this.normalizeDocNo(item.RefDocNo)).filter(v => v))];
 
-            if (refDocNoList.length === 0 || refDocItemList.length === 0) {
-                console.warn('[updatePIDeliveryRel] RefDocNo 或 RefDocItem 为空，跳过更新');
+            if (refDocNoList.length === 0) {
+                console.warn('[updatePIDeliveryRel] RefDocNo 为空，跳过更新');
                 return;
             }
 
@@ -575,8 +532,7 @@ class DeliveryOrderQueryService {
                 SELECT.from(PISalesOrderRel)
                     .columns(['PIOrder', 'PIOrderItem', 'PurchaseOrder1', 'PurchaseOrderItem1', 'PurchaseOrder2', 'PurchaseOrderItem2'])
                     .where({
-                        PurchaseOrder1: { in: refDocNoList },
-                        PurchaseOrderItem1: { in: refDocItemList }
+                        PurchaseOrder1: { in: refDocNoList }
                     })
             );
             
@@ -584,8 +540,7 @@ class DeliveryOrderQueryService {
                 SELECT.from(PISalesOrderRel)
                     .columns(['PIOrder', 'PIOrderItem', 'PurchaseOrder1', 'PurchaseOrderItem1', 'PurchaseOrder2', 'PurchaseOrderItem2'])
                     .where({
-                        PurchaseOrder2: { in: refDocNoList },
-                        PurchaseOrderItem2: { in: refDocItemList }
+                        PurchaseOrder2: { in: refDocNoList }
                     })
             );
             
@@ -593,17 +548,17 @@ class DeliveryOrderQueryService {
 
             console.log('[updatePIDeliveryRel] 找到 PISalesOrderRel 记录:', salesOrderRels.length, '条');
 
-            // 构建 PISalesOrderRel 映射
+            // 构建 PISalesOrderRel 映射（单号/行号两侧都归一化，避免前导零格式不一致导致匹配失败）
             const salesOrderRelMap = new Map();
             salesOrderRels.forEach(rel => {
                 // 通过 PurchaseOrder1/PurchaseOrderItem1 映射
                 if (rel.PurchaseOrder1 && rel.PurchaseOrderItem1) {
-                    const key = `${rel.PurchaseOrder1}-${rel.PurchaseOrderItem1}`;
+                    const key = `${this.normalizeDocNo(rel.PurchaseOrder1)}-${this.normalizeDocItem(rel.PurchaseOrderItem1)}`;
                     salesOrderRelMap.set(key, { PIOrder: rel.PIOrder, PIOrderItem: rel.PIOrderItem });
                 }
                 // 通过 PurchaseOrder2/PurchaseOrderItem2 映射（避免覆盖）
                 if (rel.PurchaseOrder2 && rel.PurchaseOrderItem2) {
-                    const key = `${rel.PurchaseOrder2}-${rel.PurchaseOrderItem2}`;
+                    const key = `${this.normalizeDocNo(rel.PurchaseOrder2)}-${this.normalizeDocItem(rel.PurchaseOrderItem2)}`;
                     if (!salesOrderRelMap.has(key)) {
                         salesOrderRelMap.set(key, { PIOrder: rel.PIOrder, PIOrderItem: rel.PIOrderItem });
                     }
@@ -617,7 +572,7 @@ class DeliveryOrderQueryService {
 
             // 使用 RefDocNo-RefDocItem 查找 salesOrderRelMap，建立 DeliveryDocument-DeliveryDocumentItem -> PI 信息的映射
             validBusinessData.forEach(item => {
-                const lookupKey = `${item.RefDocNo}-${item.RefDocItem?.slice(-5)}`;
+                const lookupKey = `${this.normalizeDocNo(item.RefDocNo)}-${this.normalizeDocItem(item.RefDocItem)}`;
                 const piInfo = salesOrderRelMap.get(lookupKey);
                 const mapKey = `${item.DeliveryDocument}-${item.DeliveryDocumentItem}`;
                 if (piInfo) {
@@ -686,13 +641,12 @@ class DeliveryOrderQueryService {
                 const key = `${piOrder}-${piOrderItem}-${businessData?.DeliveryDocument}-${businessData?.DeliveryDocumentItem}`;
                 const existingRel = existingRelMap.get(key);
 
-                // 找到对应的内向交货单
+                // 找到对应的内向交货单（参考单号/行号两侧归一化后比较）
                 let inboundDelivery = null;
                 for (const header of inboundDeliveryHeaders) {
                     const matchedItem = header.items.find(item => {
-                        const refDocNo = businessData?.RefDocNo;
-                        const refDocItem = businessData?.RefDocItem;
-                        return item.ReferenceSDDocument === refDocNo && item.ReferenceSDDocumentItem === refDocItem;
+                        return this.normalizeDocNo(item.ReferenceSDDocument) === this.normalizeDocNo(businessData?.RefDocNo)
+                            && this.normalizeDocItem(item.ReferenceSDDocumentItem) === this.normalizeDocItem(businessData?.RefDocItem);
                     });
                     if (matchedItem) {
                         inboundDelivery = { DeliveryDocument: header.DeliveryDocument, DeliveryDocumentItem: matchedItem.DeliveryDocumentItem };
@@ -700,21 +654,24 @@ class DeliveryOrderQueryService {
                     }
                 }
 
+                // 未匹配到内向交货单时不阻断写入：PI 与业务单据的关系仍必须落表，
+                // 仅不写 InboundDeliveryNo1/2（后续步骤可通过业务交货单号反查）
                 if (!inboundDelivery) {
-                    console.warn('[updatePIDeliveryRel] 未找到匹配的内向交货单，PIOrder:', piOrder, 'PIOrderItem:', piOrderItem);
-                    continue;
+                    console.warn('[updatePIDeliveryRel] 未找到匹配的内向交货单，仅写入 PI 与业务单据关系, PIOrder:', piOrder, 'PIOrderItem:', piOrderItem, 'RefDocNo:', businessData?.RefDocNo, 'RefDocItem:', businessData?.RefDocItem);
                 }
 
                 if (existingRel) {
                     // 更新
                     const updateData = {};
 
-                    if (zrfcid === 'SD10' && canum === '10') {
-                        updateData.InboundDeliveryNo2 = inboundDelivery.DeliveryDocument;
-                        updateData.InboundDeliveryNoItem2 = inboundDelivery.DeliveryDocumentItem;
-                    } else {
-                        updateData.InboundDeliveryNo1 = inboundDelivery.DeliveryDocument;
-                        updateData.InboundDeliveryNoItem1 = inboundDelivery.DeliveryDocumentItem;
+                    if (inboundDelivery) {
+                        if (zrfcid === 'SD10' && canum === '10') {
+                            updateData.InboundDeliveryNo2 = inboundDelivery.DeliveryDocument;
+                            updateData.InboundDeliveryNoItem2 = inboundDelivery.DeliveryDocumentItem;
+                        } else {
+                            updateData.InboundDeliveryNo1 = inboundDelivery.DeliveryDocument;
+                            updateData.InboundDeliveryNoItem1 = inboundDelivery.DeliveryDocumentItem;
+                        }
                     }
 
                     if (Object.keys(updateData).length > 0) {
@@ -743,12 +700,14 @@ class DeliveryOrderQueryService {
                         zrfc_logid: zrfcLogid
                     };
 
-                    if (zrfcid === 'SD10' && canum === '10') {
-                        insertData.InboundDeliveryNo2 = inboundDelivery.DeliveryDocument;
-                        insertData.InboundDeliveryNoItem2 = inboundDelivery.DeliveryDocumentItem;
-                    } else {
-                        insertData.InboundDeliveryNo1 = inboundDelivery.DeliveryDocument;
-                        insertData.InboundDeliveryNoItem1 = inboundDelivery.DeliveryDocumentItem;
+                    if (inboundDelivery) {
+                        if (zrfcid === 'SD10' && canum === '10') {
+                            insertData.InboundDeliveryNo2 = inboundDelivery.DeliveryDocument;
+                            insertData.InboundDeliveryNoItem2 = inboundDelivery.DeliveryDocumentItem;
+                        } else {
+                            insertData.InboundDeliveryNo1 = inboundDelivery.DeliveryDocument;
+                            insertData.InboundDeliveryNoItem1 = inboundDelivery.DeliveryDocumentItem;
+                        }
                     }
 
                     await cds.run(
@@ -768,14 +727,14 @@ class DeliveryOrderQueryService {
      * 更新数帝单据关系表 SDDocRel 的交货单号/行号（无记录则新增）
      * - SD04：公司间内向交货单。以业务表主键 SalesOrder + SalesOrderItem 为键，
      *   通过 SDDocRel 中已有的 InterCompanyPurchaseOrder 匹配内向交货单的 ReferenceSDDocument
-     * - SD11 canum=60 / SD02 canum=70：退货交货单。通过退货交货单行项目的 ReferenceSDDocumentItem（销售订单行号）匹配
+     * - SD11 canum=60 / SD02 canum=31：退货交货单。通过退货交货单行项目的 ReferenceSDDocumentItem（销售订单行号）匹配
      */
     async updateSDDocRel(zrfcLogid, deliveryItems, zrfcid, canum) {
         try {
             console.log('[updateSDDocRel] 开始更新 SDDocRel, zrfcLogid:', zrfcLogid, 'zrfcid:', zrfcid, 'canum:', canum, '交货单行项目数量:', deliveryItems?.length);
 
-            // 是否退货交货单匹配（仅 SD11 canum=60 / SD02 canum=70）
-            const isReturnsDelivery = (zrfcid === 'SD11' && canum === 60) || (zrfcid === 'SD02' && canum === 70);
+            // 是否退货交货单匹配（仅 SD11 canum=60 / SD02 canum=31）
+            const isReturnsDelivery = (zrfcid === 'SD11' && canum === 60) || (zrfcid === 'SD02' && canum === 31);
 
             // 业务表从 ProcessConfig 获取（SD04/SD11 为 OutboundDelivery，SD02 按其配置）
             const businessTable = await this.commonUtils.getBusinessTableName(zrfcid, true);
@@ -820,7 +779,7 @@ class DeliveryOrderQueryService {
             });
 
             // 3. 交货单行项目映射
-            // - SD11 canum=60 / SD02 canum=70：退货交货单按参考行号（销售订单行号）建立映射
+            // - SD11 canum=60 / SD02 canum=31：退货交货单按参考行号（销售订单行号）建立映射
             // - SD04：内向交货单按 ReferenceSDDocument（采购订单号）建立映射
             // 采购订单号/行号键归一化：单号 10 位补零，行号取后 5 位补零（与 SAP NUMC 口径一致）
             const normPoKey = (po, poItem) =>
@@ -856,7 +815,7 @@ class DeliveryOrderQueryService {
                 let setData;
 
                 if (isReturnsDelivery) {
-                    // SD11 60 / SD02 70：按参考销售订单行号匹配退货交货单行项目，回写对外（退货）交货单
+                    // SD11 60 / SD02 31：按参考销售订单行号匹配退货交货单行项目，回写对外（退货）交货单
                     const sapItem = outboundByRefItem.get(String(biz.SalesOrderItem || '').padStart(6, '0'));
                     if (!sapItem) {
                         console.warn('[updateSDDocRel] 未找到匹配的退货交货单行项目:', key);

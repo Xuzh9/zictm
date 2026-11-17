@@ -1,4 +1,5 @@
 const cds = require('@sap/cds');
+const { SELECT } = cds.ql;
 const CommonUtils = require('../handlers/CommonUtils');
 
 class SalesOrderHeaderUpdateService {

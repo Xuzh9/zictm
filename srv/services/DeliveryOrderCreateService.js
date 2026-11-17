@@ -43,6 +43,18 @@ class DeliveryOrderCreateService {
                 return returnResult;
             }
 
+            // 全部行项目均为服务类物料（保费/运费）时不调用创建 API，直接跳过整个步骤
+            const allServiceMaterial = businessDataList.every(item => this.commonUtils.isServiceMaterial(item));
+            if (allServiceMaterial) {
+                const returnResult = {
+                    code: 'S',
+                    message: '所有行项目均为服务类物料（保费/运费），跳过交货单创建',
+                    objkey: ''
+                };
+                console.log('[DeliveryOrderCreateService] 返回结果:', JSON.stringify(returnResult));
+                return returnResult;
+            }
+
             let sourceDocument;
             let salesOrderType;
             let mainRowDataListForDelivery = businessDataList;
@@ -56,7 +68,11 @@ class DeliveryOrderCreateService {
                 });
 
                 // 过滤出 ParentItem 为空或 '000000' 的业务数据（只创建主行，批次拆分行由 DeliveryOrderBatchSplitService 处理）
-                const mainRowDataList = businessDataList.filter(item => !item.ParentItem || item.ParentItem.trim() === '' || item.ParentItem === '000000');
+                // 同时跳过服务类物料（保费/运费）行，不参与关系表查询与交货单行构建
+                const mainRowDataList = businessDataList.filter(item =>
+                    (!item.ParentItem || item.ParentItem.trim() === '' || item.ParentItem === '000000')
+                    && !this.commonUtils.isServiceMaterial(item)
+                );
                 console.log('[DeliveryOrderCreateService] 过滤后主行数据条数:', mainRowDataList.length);
                 mainRowDataListForDelivery = mainRowDataList;
 

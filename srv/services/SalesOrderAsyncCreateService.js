@@ -267,6 +267,7 @@ class SalesOrderAsyncCreateService {
                     case 'CM' : unit = 'CMT'; break;
                     case 'M' : unit = 'MTR'; break;
                     case 'KM' : unit = 'KMT'; break;
+                    case 'PAA': unit = 'PR'; break;
                     default:
                         unit = baseUnit;
                         break;
@@ -388,27 +389,32 @@ class SalesOrderAsyncCreateService {
 
             const pricingElements = [];
 
-            if (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06' || zrfcid === 'SD12') {
-                const conditionTypes = ['ZB01', 'ZB02', 'ZB03', 'ZB04', 'ZC01', 'ZC02', 'ZP00'];
+            // 服务类行项目（CBLN/RBLN）不赋值定价条件
+            // 业务表字段名不统一：OutboundDelivery 用 SalesOrderItemType，SalesOrderCreate 用 SalesOrderItemCategory
+            const itemCategoryForPricing = item.SalesOrderItemCategory || item.SalesOrderItemType;
+            if (itemCategoryForPricing !== 'CBLN' && itemCategoryForPricing !== 'RBLN') {
+                if (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06' || zrfcid === 'SD12') {
+                    const conditionTypes = ['ZB01', 'ZB02', 'ZB03', 'ZB04', 'ZC01', 'ZC02', 'ZP00'];
 
-                for (const conditionType of conditionTypes) {
-                    const valueField = `${conditionType}_Value`;
-                    if (item[valueField]) {
-                        pricingElements.push({
-                            ConditionType: conditionType || "",
-                            ConditionRateAmount: parseFloat(item[valueField]) || 0,
-                            ConditionCurrency: item[`${conditionType}_CurrencyCode`] || item.ItemTransactionCurrency || "",
-                            ConditionQuantity: item[`${conditionType}_UnitOfMeasure`] || 1,
-                            ConditionQuantityISOUnit: unit || ""
-                        });
+                    for (const conditionType of conditionTypes) {
+                        const valueField = `${conditionType}_Value`;
+                        if (item[valueField]) {
+                            pricingElements.push({
+                                ConditionType: conditionType || "",
+                                ConditionRateAmount: parseFloat(item[valueField]) || 0,
+                                ConditionCurrency: item[`${conditionType}_CurrencyCode`] || item.ItemTransactionCurrency || "",
+                                ConditionQuantity: item[`${conditionType}_UnitOfMeasure`] || 1,
+                                ConditionQuantityISOUnit: unit || ""
+                            });
+                        }
                     }
+                } else {
+                    pricingElements.push({
+                        ConditionType: "ZP10",
+                        ConditionRateAmount: parseFloat(item.NetAmount) || 0,
+                        ConditionCurrency: item.ItemTransactionCurrency
+                    });
                 }
-            } else {
-                pricingElements.push({
-                    ConditionType: "ZP10",
-                    ConditionRateAmount: parseFloat(item.NetAmount) || 0,
-                    ConditionCurrency: item.ItemTransactionCurrency
-                });
             }
 
             if (item.SalesOrderItemCategory === 'CBXN') {
@@ -428,7 +434,8 @@ class SalesOrderAsyncCreateService {
                 Plant: plantValue || "",
                 // 客户物料编号：有值才传，避免传空值触发 SAP 必输字段校验 add by zengcf 20261003
                 ...(item.MaterialByCustomer ? { MaterialByCustomer: item.MaterialByCustomer } : {}),
-                [apiConfig.itemCategoryField]: item.SalesOrderItemCategory || itemCategory || "",
+                // 行项目类别：业务表字段名不统一，OutboundDelivery 用 SalesOrderItemType，SalesOrderCreate/SalesOrderChange 用 SalesOrderItemCategory
+                [apiConfig.itemCategoryField]: item.SalesOrderItemCategory || item.SalesOrderItemType || itemCategory || "",
                 YY1_FD_FNSKU_SDI: item.YY1_FD_FNSKU || "",
                 YY1_FD_SKU_SDI: item.YY1_FD_SKU || "",
                 YY1_FD_DZKB_SDI: item.YY1_FD_DZKB || "",
@@ -437,7 +444,7 @@ class SalesOrderAsyncCreateService {
             };
             
             // 库存地点字段（优先取配置表 lgort），取不到数据时不传该字段
-            if (salesOrderType !== 'CR' && salesOrderType !== 'DR') {
+            if (salesOrderType !== 'CR' && salesOrderType !== 'DR' && salesOrderType !== 'CBRE') {
                 const storageLocation = mptStepConfig?.lgort || item.StorageLocation || item.ReceivingStorageLocation;
                 if (storageLocation) {
                     itemData.StorageLocation = storageLocation;
@@ -449,7 +456,7 @@ class SalesOrderAsyncCreateService {
                 itemData.ReturnsInspectionCode = "0001";
                 itemData.CustRetItmFollowUpActivity = "0002";
                 itemData.ReturnsProductHasBeenReceived = true;
-                itemData.ReturnsRefundProcgMode = "I";
+                itemData.ReturnsRefundProcgMode = "R";
             }
             
             if (item.SalesOrderItemCategory === 'CBXN') {
@@ -518,7 +525,9 @@ class SalesOrderAsyncCreateService {
             YY1_FD_YSFS_SDH: mainData.YY1_FD_YSFS || "",                  
             YY1_FD_ZTMWZ_SDH: mainData.YY1_FD_ZTMWZ || "",              
             YY1_FD_ZH_SDH: mainData.YY1_FD_ZH || "",      
-            YY1_FD_SPLLHH_SDH: mainData.YY1_FD_SPLLHH || "",               
+            YY1_FD_SPLLHH_SDH: mainData.YY1_FD_SPLLHH || "",    
+            YY1_FD_SHDZ_SDH: mainData.YY1_FD_SHDZ || "",
+            YY1_FD_DDBZ_SDH: mainData.YY1_FD_DDBZ || "",           
             _Partner: partners,
             _Item: salesOrderItems
         };

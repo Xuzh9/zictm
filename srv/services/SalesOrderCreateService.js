@@ -345,31 +345,34 @@ class SalesOrderCreateService {
             // 构建定价元素
             const pricingElements = [];
             
-            if (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') {
-                // SD01/SD05/SD06: 根据 VALUE 字段动态构建定价元素
-                const conditionTypes = ['ZB01', 'ZB02', 'ZB03', 'ZB04', 'ZC01', 'ZC02', 'ZP00'];
-                
-                console.log(`[SalesOrderCreateService] 构建定价元素 - zrfcid: ${zrfcid}, item.ZP00_Value: ${item.ZP00_Value}`);
-                
-                for (const conditionType of conditionTypes) {
-                    const valueField = `${conditionType}_Value`;
-                    if (item[valueField]) {
-                        console.log(`[SalesOrderCreateService] 添加定价元素: ${conditionType}, 值: ${item[valueField]}`);
-                        pricingElements.push({
-                            ConditionType: conditionType,
-                            ConditionRateValue: String(item[valueField]),
-                            ConditionQuantity: String(item[`${conditionType}_UnitOfMeasure`]) || "1",
-                            ConditionCurrency: item[`${conditionType}_CurrencyCode`] || item.ItemTransactionCurrency
-                        });
+            // 服务类行项目（CBLN/RBLN）不赋值定价条件
+            if (item.SalesOrderItemCategory !== 'CBLN' && item.SalesOrderItemCategory !== 'RBLN') {
+                if (zrfcid === 'SD01' || zrfcid === 'SD05' || zrfcid === 'SD06') {
+                    // SD01/SD05/SD06: 根据 VALUE 字段动态构建定价元素
+                    const conditionTypes = ['ZB01', 'ZB02', 'ZB03', 'ZB04', 'ZC01', 'ZC02', 'ZP00'];
+                    
+                    console.log(`[SalesOrderCreateService] 构建定价元素 - zrfcid: ${zrfcid}, item.ZP00_Value: ${item.ZP00_Value}`);
+                    
+                    for (const conditionType of conditionTypes) {
+                        const valueField = `${conditionType}_Value`;
+                        if (item[valueField]) {
+                            console.log(`[SalesOrderCreateService] 添加定价元素: ${conditionType}, 值: ${item[valueField]}`);
+                            pricingElements.push({
+                                ConditionType: conditionType,
+                                ConditionRateValue: String(item[valueField]),
+                                ConditionQuantity: String(item[`${conditionType}_UnitOfMeasure`]) || "1",
+                                ConditionCurrency: item[`${conditionType}_CurrencyCode`] || item.ItemTransactionCurrency
+                            });
+                        }
                     }
+                } else {
+                    // 其他流程：使用默认的 ZP10 定价元素
+                    pricingElements.push({
+                        ConditionType: "ZP10",
+                        ConditionRateValue: String(item.NetAmount) || "0",
+                        ConditionCurrency: item.ItemTransactionCurrency
+                    });
                 }
-            } else {
-                // 其他流程：使用默认的 ZP10 定价元素
-                pricingElements.push({
-                    ConditionType: "ZP10",
-                    ConditionRateValue: String(item.NetAmount) || "0",
-                    ConditionCurrency: item.ItemTransactionCurrency
-                });
             }
             
             // 如果行项目类别是 CBXN，增加 ZKNP 定价条件
@@ -471,6 +474,8 @@ class SalesOrderCreateService {
             YY1_FD_ZTMWZ_SDH: mainData.YY1_FD_ZTMWZ || "",              
             YY1_FD_ZH_SDH: mainData.YY1_FD_ZH || "",      
             YY1_FD_SPLLHH_SDH: mainData.YY1_FD_SPLLHH || "",
+            YY1_FD_SHDZ_SDH: mainData.YY1_FD_SHDZ || "",
+            YY1_FD_DDBZ_SDH: mainData.YY1_FD_DDBZ || "",
             to_Partner: {
                 results: partners
             },

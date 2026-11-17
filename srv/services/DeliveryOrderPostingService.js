@@ -97,23 +97,11 @@ class DeliveryOrderPostingService {
                 return returnResult;
             }
 
-            // SD02 退货订单（CBRE）不需要交货单操作，直接跳过
-            if (zrfcid === 'SD02' && salesOrderType === 'CBRE') {
-                console.log('[DeliveryOrderPostingService] SD02 销售订单类型 CBRE，步骤跳过');
-                const returnResult = {
-                    code: 'S',
-                    message: 'SD02 销售订单类型 CBRE，跳过交货单过账',
-                    objkey: ''
-                };
-                console.log('[DeliveryOrderPostingService] 返回结果:', JSON.stringify(returnResult));
-                return returnResult;
-            }
-
-            // 检查交货单号是否存在
+            // 交货单号为空说明上一步未生成交货单，直接跳过
             if (!deliveryDocument) {
                 const returnResult = {
-                    code: 'E',
-                    message: '交货单号为空，无法执行过账',
+                    code: 'S',
+                    message: '交货单号为空，步骤跳过',
                     objkey: ''
                 };
                 console.log('[DeliveryOrderPostingService] 返回结果:', JSON.stringify(returnResult));
@@ -374,7 +362,7 @@ class DeliveryOrderPostingService {
                 csrfUrl: '/sap/opu/odata/sap/API_INBOUND_DELIVERY_SRV;v=0002/A_InbDeliveryHeader(\'{DeliveryDocument}\')',
                 postingUrl: '/sap/opu/odata/sap/API_INBOUND_DELIVERY_SRV;v=0002/PostGoodsReceipt?DeliveryDocument='
             };
-        } else if (((zrfcid === 'SD07' && canum === 100) || (zrfcid === 'SD10' && canum === 90)) && salesOrderType === 'CBRE') {
+        } else if (((zrfcid === 'SD07' && canum === 100) || (zrfcid === 'SD10' && canum === 90) || (zrfcid === 'SD02' && canum === 60) || (zrfcid === 'SD11' && canum === 63)) && salesOrderType === 'CBRE') {
             // 退货交货单过账API    
             return {
                 csrfUrl: '/sap/opu/odata/sap/API_CUSTOMER_RETURNS_DELIVERY_SRV;v=2/A_ReturnsDeliveryHeader(\'{DeliveryDocument}\')',

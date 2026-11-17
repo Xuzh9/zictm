@@ -104,26 +104,16 @@ class DeliveryOrderItemUpdateService {
                 return returnResult;
             }
 
-            // SD02 退货订单（CBRE）不需要交货单操作，直接跳过
-            if (zrfcid === 'SD02' && salesOrderType === 'CBRE') {
-                console.log('[DeliveryOrderItemUpdateService] SD02 销售订单类型 CBRE，步骤跳过');
+            // 交货单号只从上一步 objkey 获取，为空说明上一步未生成交货单，直接跳过
+            const deliveryDocument = previousObjkey || '';
+            if (!deliveryDocument) {
                 const returnResult = {
                     code: 'S',
-                    message: 'SD02 销售订单类型 CBRE，跳过交货单行项目修改',
+                    message: '交货单号为空，步骤跳过',
                     objkey: ''
                 };
                 console.log('[DeliveryOrderItemUpdateService] 返回结果:', JSON.stringify(returnResult));
                 return returnResult;
-            }
-
-            // 获取交货单号（从 objkey 或业务数据中获取）
-            const deliveryDocument = previousObjkey || businessDataList[0]?.DeliveryDocument || '';
-            if (!deliveryDocument) {
-                return {
-                    code: 'E',
-                    message: '未找到交货单号',
-                    objkey: ''
-                };
             }
             console.log('[DeliveryOrderItemUpdateService] 交货单号:', deliveryDocument);
 
@@ -140,7 +130,7 @@ class DeliveryOrderItemUpdateService {
                 apiPath = '/sap/opu/odata/sap/API_INBOUND_DELIVERY_SRV;v=0002';
                 itemEntity = 'A_InbDeliveryItem';
                 isInboundDelivery = true; // 设置为内向交货单
-            } else if (((zrfcid === 'SD07' && canum === 80)) && salesOrderType === 'CBRE') {
+            } else if (((zrfcid === 'SD07' && canum === 80) || (zrfcid === 'SD11' && canum === 62) || (zrfcid === 'SD02' && canum === 50)) && salesOrderType === 'CBRE') {
                 apiPath = '/sap/opu/odata/sap/API_CUSTOMER_RETURNS_DELIVERY_SRV;v=2';
                 itemEntity = 'A_ReturnsDeliveryItem';
             } else {
@@ -282,6 +272,12 @@ class DeliveryOrderItemUpdateService {
                         // SD11 90：取步骤配置表的库存地点 umlgo
                         if (mptStepConfig?.umlgo) {
                             updateData.StorageLocation = mptStepConfig.umlgo;
+                        }
+                    } else if ((zrfcid === 'SD11' && canum === 62) || (zrfcid === 'SD02' && canum === 50)) {
+                        // SD11 62 / SD02 50：优先取步骤配置表 lgort，取不到再取业务表库存地点/收货库存地点
+                        const storageLocation = mptStepConfig?.lgort || businessData.StorageLocation || businessData.ReceivingStorageLocation;
+                        if (storageLocation) {
+                            updateData.StorageLocation = storageLocation;
                         }
                     }
                 }

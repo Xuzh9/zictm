@@ -43,6 +43,8 @@ modules:
       buildpack: nodejs_buildpack
       disk-quota: 2048M
       memory: 512M
+    properties:
+      SESSION_TIMEOUT: 120
     requires:
       - name: srv-api
         group: destinations

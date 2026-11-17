@@ -44,6 +44,17 @@ class PurchaseOrderCreateService {
             const businessDataList = businessDataResult.businessData;
             console.log('[PurchaseOrderService] 业务数据条数:', businessDataList.length);
 
+            // 借贷项订单（CR/DR）不产生采购订单，直接跳过
+            const salesOrderType = businessDataList[0]?.SalesOrderType;
+            if (salesOrderType === 'CR' || salesOrderType === 'DR') {
+                console.log(`[PurchaseOrderService] 销售订单类型 ${salesOrderType} 为借贷项订单，步骤跳过`);
+                return {
+                    code: 'S',
+                    message: `销售订单类型 ${salesOrderType} 为借贷项订单，跳过采购订单创建`,
+                    objkey: ''
+                };
+            }
+
             // 根据 zdfjy 和 canum 查找 MPTStepConfig 配置
             const mptStepConfig = await this.commonUtils.getMPTStepConfig(zdfjy, canum);
 

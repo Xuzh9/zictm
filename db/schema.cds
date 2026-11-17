@@ -240,7 +240,7 @@ entity SalesOrderCreate {
     IncotermsLocation1            : String(40) @title: '国贸条款位置1';    // 国贸条款位置1
     CustomerTaxClassification1    : String(4) @title: '客户税分类';     // 客户税分类
     CustomerPaymentTerms          : String(8) @title: '付款条件';     // 付款条件
-    Remark                        : String(1000) @title: '销售订单抬头文本备注';   // 销售订单抬头文本备注
+    Remark                        : String(2000) @title: '销售订单抬头文本备注';   // 销售订单抬头文本备注
     YY1_FD_XMYQ                   : String(2) @title: '箱唛要求';     // 箱唛要求
     YY1_FD_DBFS                   : String(2) @title: '打包方式';     // 打包方式
     YY1_FD_FHYQ                   : String(2) @title: '发货要求';     // 发货要求
@@ -256,6 +256,8 @@ entity SalesOrderCreate {
     YY1_FD_ZH                     : String(20) @title: '账户(下单店铺)';    // 账户(下单店铺)
     YY1_FD_ZDFJY                  : String(10) @title: '多方交易ID';    // 多方交易ID
     YY1_FD_SPLLHH                 : String(20) @title: '审批联络函号';    // 审批联络函号
+    YY1_FD_SHDZ                   : String(255) @title: '收货地址';   // 收货地址
+    YY1_FD_DDBZ                   : String(255) @title: '订单备注';   // 订单备注
     YY1_FD_XMZL                   : String(2) @title: '箱唛资料';     // 箱唛资料
     SalesOrderItemCategory        : String(4) @title: '销售订单项目类别';     // 销售订单项目类别
     Material                      : String(40) @title: '物料号';    // 物料号
@@ -264,7 +266,7 @@ entity SalesOrderCreate {
     RequestedQuantityUnit         : String(3) @title: '单位';     // 单位
     ProductionPlant               : String(4) @title: '工厂';     // 工厂
     StorageLocation               : String(4) @title: '库存地点';          // 库存地点
-    ItemRemark                    : String(1000) @title: '销售订单行项目文本备注';   // 销售订单行项目文本备注
+    ItemRemark                    : String(2000) @title: '销售订单行项目文本备注';   // 销售订单行项目文本备注
     PurchaseOrderByShipToParty    : String(6) @title: '客户采购订单行项目';     // 客户采购订单行项目
     ProductTaxClassification1     : String(4) @title: '产品税分类';     // 产品税分类
     SalesDocumentRjcnReason       : String(4) @title: '销售订单拒绝原因';     // 销售订单拒绝原因

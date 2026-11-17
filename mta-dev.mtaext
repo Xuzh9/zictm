@@ -24,6 +24,8 @@ modules:
       - route: "zictm.btp.sunlu3d.cn"
       idle-routes:
       - idle-route: "zictm-idle.btp.sunlu3d.cn"
+      properties:
+        SESSION_TIMEOUT: 480
 resources:
   - name: zictm-auth
     parameters:

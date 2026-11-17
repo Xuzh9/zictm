@@ -1,4 +1,5 @@
 const cds = require('@sap/cds');
+const { SELECT } = cds.ql;
 const CommonUtils = require('../handlers/CommonUtils');
 
 class SalesOrderPricingUpdateService {
@@ -35,6 +36,17 @@ class SalesOrderPricingUpdateService {
                 return {
                     code: 'E',
                     message: `未找到业务数据，销售订单号: ${salesOrder}`,
+                    objkey: ''
+                };
+            }
+
+            // 借贷项订单（CR/DR）没有可更新的定价，直接跳过
+            const salesOrderType = businessDataList[0]?.SalesOrderType;
+            if (salesOrderType === 'CR' || salesOrderType === 'DR') {
+                console.log(`[SalesOrderPricingUpdateService] 销售订单类型 ${salesOrderType} 为借贷项订单，步骤跳过`);
+                return {
+                    code: 'S',
+                    message: `销售订单类型 ${salesOrderType} 为借贷项订单，跳过定价更新`,
                     objkey: ''
                 };
             }
@@ -180,9 +192,13 @@ class SalesOrderPricingUpdateService {
                             ConditionRateValue: Number(fieldValue).toFixed(2)
                         };
                         
-                        // 如果是 ZB01/ZB02/ZB03/ZB04/ZC01/ZC02/ZP00 等类型，添加额外字段
                         if (currencyField && businessData[currencyField]) {
                             updateData.ConditionCurrency = businessData[currencyField];
+                        }
+                        // 寄售/委外/退货寄售等行项目类别，ConditionCurrency 默认 CNY（与 PurchaseOrderCreateService 保持一致）
+                        const itemTypeOrCategory = businessData.SalesOrderItemType || businessData.SalesOrderItemCategory || '';
+                        if (['CBLN', 'CBXN', 'CRLN', 'CRXN', 'RBLN'].includes(itemTypeOrCategory)) {
+                            updateData.ConditionCurrency = 'CNY';
                         }
                         if (quantityField && businessData[quantityField]) {
                             updateData.ConditionQuantity = businessData[quantityField];

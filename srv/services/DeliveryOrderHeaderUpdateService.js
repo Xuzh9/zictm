@@ -51,10 +51,18 @@
                 const mainData = businessDataList[0];
 
                 // 使用通用工具类读取之前步骤的 objkey（交货单号）
+                // SD02 40：优先取步骤 30 的 objkey，30 没有时再取步骤 31（目前配置的是 30）
                 let deliveryDocument = objkey;
-                const previousObjkey = await this.commonUtils.getPreviousStepObjkey(zrfcLogid, zrfcid, readsteps, canum);
-                if (previousObjkey) {
-                    deliveryDocument = previousObjkey;
+                if (zrfcid === 'SD02' && canum === 40) {
+                    const step30Objkey = await this.commonUtils.getPreviousStepObjkey(zrfcLogid, zrfcid, '30', canum);
+                    const step31Objkey = await this.commonUtils.getPreviousStepObjkey(zrfcLogid, zrfcid, '31', canum);
+                    deliveryDocument = step30Objkey || step31Objkey || deliveryDocument;
+                    console.log(`[DeliveryOrderUpdateService] SD02 40 取交货单号 - 步骤30: ${step30Objkey || '空'}, 步骤31: ${step31Objkey || '空'}, 最终: ${deliveryDocument || '空'}`);
+                } else {
+                    const previousObjkey = await this.commonUtils.getPreviousStepObjkey(zrfcLogid, zrfcid, readsteps, canum);
+                    if (previousObjkey) {
+                        deliveryDocument = previousObjkey;
+                    }
                 }
                 // 补前导零至 10 位（SAP 交货单号标准长度）
                 if (deliveryDocument) {
@@ -100,23 +108,11 @@
                     return returnResult;
                 }
 
-                // SD02 退货订单（CBRE）不需要交货单操作，直接跳过
-                if (zrfcid === 'SD02' && salesOrderType === 'CBRE') {
-                    console.log('[DeliveryOrderHeaderUpdateService] SD02 销售订单类型 CBRE，步骤跳过');
-                    const returnResult = {
-                        code: 'S',
-                        message: 'SD02 销售订单类型 CBRE，跳过交货单抬头修改',
-                        objkey: ''
-                    };
-                    console.log('[DeliveryOrderHeaderUpdateService] 返回结果:', JSON.stringify(returnResult));
-                    return returnResult;
-                }
-
-                // 检查交货单号是否存在
+                // 检查交货单号是否存在（为空说明上一步未生成交货单，直接跳过本步骤）
                 if (!deliveryDocument) {
                     const returnResult = {
-                        code: 'E',
-                        message: '交货单号为空，无法执行修改',
+                        code: 'S',
+                        message: '交货单号为空，步骤跳过',
                         objkey: ''
                     };
                     console.log('[DeliveryOrderUpdateService] 返回结果:', JSON.stringify(returnResult));
@@ -335,7 +331,7 @@
                     csrfUrl: '/sap/opu/odata/sap/API_INBOUND_DELIVERY_SRV;v=0002/A_InbDeliveryHeader(\'{DeliveryDocument}\')',
                     updateUrl: "/sap/opu/odata/sap/API_INBOUND_DELIVERY_SRV;v=0002/A_InbDeliveryHeader('{DeliveryDocument}')"
                 };
-            } else if (( (zrfcid === 'SD07' && canum === 70) || (zrfcid === 'SD10' && canum === 70)) && salesOrderType === 'CBRE') {
+            } else if (( (zrfcid === 'SD07' && canum === 70) || (zrfcid === 'SD10' && canum === 70) || (zrfcid === 'SD02' && canum === 40) || (zrfcid === 'SD11' && canum === 61)) && salesOrderType === 'CBRE') {
                 //退货交货单 API
                 return {
                     csrfUrl: '/sap/opu/odata/sap/API_CUSTOMER_RETURNS_DELIVERY_SRV;v=2/A_ReturnsDeliveryHeader(\'{DeliveryDocument}\')',

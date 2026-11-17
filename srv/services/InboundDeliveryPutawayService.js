@@ -75,10 +75,11 @@
                     deliveryDocument = previousObjkey;
                 }
 
+                // 交货单号为空说明上一步未生成交货单，直接跳过
                 if (!deliveryDocument) {
                     const returnResult = {
-                        code: 'E',
-                        message: '未找到交货单号',
+                        code: 'S',
+                        message: '交货单号为空，步骤跳过',
                         objkey: ''
                     };
                     console.log('[InboundDeliveryPutawayService] 返回结果:', JSON.stringify(returnResult));

@@ -67,6 +67,18 @@ class MaterialDocumentService {
                 };
             }
 
+            // 幂等校验：过账前先按 ReferenceDocument 查询是否已有未冲销的物料凭证，有则跳过过账
+            const existingMaterialDocument = await this.findUnreversedMaterialDocument(materialDocData.ReferenceDocument);
+            if (existingMaterialDocument) {
+                const skipMessage = `参考凭证 ${materialDocData.ReferenceDocument} 已存在未冲销的物料凭证 ${existingMaterialDocument}，跳过过账`;
+                console.log(`[MaterialDocumentService] ${skipMessage}`);
+                return {
+                    code: 'S',
+                    message: skipMessage,
+                    objkey: existingMaterialDocument
+                };
+            }
+
             // 使用 SAP Cloud SDK 的 executeHttpRequest 方法获取 CSRF token
             const csrfResult = await this.commonUtils.executeHttpRequestWithRetry(
                 {
@@ -283,6 +295,90 @@ class MaterialDocumentService {
                 message: error.message || '获取业务数据失败',
                 businessData: []
             };
+        }
+    }
+
+    /**
+     * 按参考凭证查询是否已存在未冲销的物料凭证
+     * 冲销判定：冲销凭证本身（GoodsMovementCode = 06）、行项目全部标记 GoodsMovementIsCancelled、
+     * 或被其他行项目的 ReversedMaterialDocument 引用，均视为已冲销
+     * @param {string} referenceDocument - 参考凭证号
+     * @returns {Promise<string>} 已存在的未冲销物料凭证号（无则为空字符串）
+     */
+    async findUnreversedMaterialDocument(referenceDocument) {
+        const refDoc = String(referenceDocument ?? '').trim();
+        if (!refDoc) return '';
+
+        try {
+            const filter = encodeURIComponent(`ReferenceDocument eq '${refDoc.replace(/'/g, "''")}'`);
+            const url = '/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader'
+                + `?$filter=${filter}`
+                + '&$select=MaterialDocument,MaterialDocumentYear,GoodsMovementCode'
+                + '&$expand=to_MaterialDocumentItem($select=MaterialDocumentItem,GoodsMovementIsCancelled,ReversedMaterialDocument,ReversedMaterialYear,ReversedMaterialItem)';
+
+            const result = await this.commonUtils.executeHttpRequestWithRetry(
+                {
+                    destinationName: this.commonUtils.getDestinationName()
+                },
+                {
+                    method: 'GET',
+                    url: url,
+                    headers: {
+                        'Accept': 'application/json',
+                        'sap-language': 'ZH'
+                    },
+                    validateStatus: function (status) {
+                        return true;
+                    }
+                }
+            );
+
+            if (result.status < 200 || result.status >= 300) {
+                console.warn('[MaterialDocumentService] 参考凭证查询失败，跳过幂等校验:', result.status, JSON.stringify(result.data));
+                return '';
+            }
+
+            const responseData = typeof result.data === 'string' ? JSON.parse(result.data) : result.data;
+            const headers = responseData?.d?.results || [];
+
+            // 收集已被冲销的凭证（冲销凭证行项目上会带被冲销的原凭证号）
+            const reversedDocuments = new Set();
+            headers.forEach(header => {
+                const items = header.to_MaterialDocumentItem?.results || [];
+                items.forEach(item => {
+                    const reversedDoc = String(item.ReversedMaterialDocument || '').trim();
+                    if (reversedDoc) {
+                        reversedDocuments.add(`${reversedDoc}-${String(item.ReversedMaterialYear || '').trim()}`);
+                    }
+                });
+            });
+
+            for (const header of headers) {
+                const materialDocument = String(header.MaterialDocument || '').trim();
+                const materialDocumentYear = String(header.MaterialDocumentYear || '').trim();
+                if (!materialDocument) continue;
+
+                // 冲销凭证本身不视为有效过账凭证
+                if (String(header.GoodsMovementCode || '') === '06') continue;
+
+                // 已被冲销
+                if (reversedDocuments.has(`${materialDocument}-${materialDocumentYear}`)) continue;
+
+                // 行项目全部标记为已冲销/已取消
+                const items = header.to_MaterialDocumentItem?.results || [];
+                if (items.length > 0
+                    && items.every(item => String(item.GoodsMovementIsCancelled || '').trim().toUpperCase() === 'X')) {
+                    continue;
+                }
+
+                return `${materialDocument}${materialDocumentYear}`;
+            }
+
+            return '';
+        } catch (error) {
+            // 查询异常时不阻塞正常过账
+            console.warn('[MaterialDocumentService] 参考凭证幂等校验异常，继续过账:', error.message);
+            return '';
         }
     }
 

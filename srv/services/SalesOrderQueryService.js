@@ -20,6 +20,21 @@ class SalesOrderQueryService {
             this.zrfcLogid = zrfcLogid;
             this.zrfcid = zrfcid;
 
+            // 借贷项订单（CR/DR）不产生对外销售订单，直接跳过
+            const businessTable = await this.commonUtils.getBusinessTableName(zrfcid, true);
+            if (businessTable) {
+                const businessDataList = await this.commonUtils.getBusinessData(businessTable, zrfcLogid, 'zrfc_logid');
+                const salesOrderType = businessDataList?.[0]?.SalesOrderType;
+                if (salesOrderType === 'CR' || salesOrderType === 'DR') {
+                    console.log(`[SalesOrderQueryService] 销售订单类型 ${salesOrderType} 为借贷项订单，步骤跳过`);
+                    return {
+                        code: 'S',
+                        message: `销售订单类型 ${salesOrderType} 为借贷项订单，跳过销售订单查询`,
+                        objkey: ''
+                    };
+                }
+            }
+
             // 使用通用工具类读取之前步骤的 objkey
             let purchaseOrderByCustomer = objkey;
             const previousObjkey = await this.commonUtils.getPreviousStepObjkey(zrfcLogid, zrfcid, readsteps, canum);

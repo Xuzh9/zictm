@@ -1,5 +1,5 @@
 const cds = require('@sap/cds');
-const { UPDATE } = cds.ql;
+const { SELECT, UPDATE } = cds.ql;
 const CommonUtils = require('../handlers/CommonUtils');
 
 class SalesOrderAsyncResultService {
